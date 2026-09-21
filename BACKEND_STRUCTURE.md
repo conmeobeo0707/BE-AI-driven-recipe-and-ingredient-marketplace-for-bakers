@@ -214,11 +214,76 @@ POST   /api/v1/recipes/{id}/reports
 
 ## 8. Ảnh và video
 
-- Lưu file ở object storage; database lưu object key, loại file, dung lượng, chủ sở hữu và trạng thái xử lý.
+- Lưu file trên Cloudflare R2; database chỉ lưu object key, loại file, dung lượng, chủ sở hữu và trạng thái xử lý.
 - Kiểm tra kích thước, loại nội dung và quyền sử dụng file.
 - Không lưu toàn bộ video dưới dạng binary trong bảng công thức.
 - Video dài cần phương án phân phối như CDN/streaming và đo kiểm thực tế để đáp ứng yêu cầu buffering.
 - Job tóm tắt video chỉ được chạy với file người dùng có quyền truy cập.
+
+### Cloudflare R2
+
+Hệ thống dùng hai bucket với chung một R2 account, API token, `S3Client` và `S3Presigner`:
+
+```text
+baker-public
+├── avatars/
+├── recipes/
+├── products/
+└── completion-posts/
+
+baker-private
+├── recipe-drafts/
+├── moderation-reports/
+└── support-attachments/
+```
+- Trên đây chỉ là ví dụ, chỉnh sửa thêm về sau khi cần
+
+- Bucket public chứa nội dung mà bất kỳ người nào biết URL đều được phép xem. Development có thể dùng `r2.dev`; production dùng custom domain để có cache và các tính năng bảo vệ của Cloudflare.
+- Bucket private không bật public access. Backend kiểm tra quyền và tạo presigned GET URL có thời hạn khi người dùng cần xem file.
+- Prefix chỉ giúp tổ chức object key, không tạo ranh giới bảo mật. Không đặt file riêng tư dưới prefix `private/` của bucket public.
+- Một R2 API token có quyền `Object Read & Write` được giới hạn vào đúng hai bucket trên.
+- Backend tự tạo object key; không dùng trực tiếp tên file hoặc object key do client tự quyết định.
+- Không lưu presigned URL trong database vì URL sẽ hết hạn. Chỉ lưu object key, ví dụ `recipes/42/images/<uuid>.png`.
+
+Cấu hình môi trường:
+
+```properties
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_PUBLIC_BUCKET=baker-public
+R2_PRIVATE_BUCKET=baker-private
+R2_PUBLIC_URL=https://media.example.com
+```
+
+`R2_PUBLIC_URL` có thể để trống nếu chưa cấu hình public URL. Các secret chỉ nằm trong `.env` hoặc secret manager của môi trường triển khai; `.env.sample` không chứa giá trị thật.
+
+Khi gọi `R2StorageService`, feature phải chỉ rõ loại bucket:
+
+```java
+r2StorageService.upload(
+        R2BucketType.PUBLIC,
+        objectKey,
+        content,
+        contentType
+);
+
+URL privateUrl = r2StorageService.createDownloadUrl(
+        R2BucketType.PRIVATE,
+        objectKey
+);
+```
+
+Các thao tác được cung cấp gồm upload, delete, kiểm tra object tồn tại, tạo presigned upload/download URL và tạo URL public. Feature sở hữu nghiệp vụ phải quyết định bucket phù hợp và kiểm tra quyền trước khi gọi storage service.
+
+Free tier R2 được tính tổng trên account, không tính riêng cho từng bucket. Theo bảng giá tại thời điểm cập nhật tài liệu, Standard Storage có 10 GB-month, 1 triệu Class A operations và 10 triệu Class B operations miễn phí mỗi tháng; egress ra Internet miễn phí. Hạn mức này có thể thay đổi, vì vậy cần kiểm tra [Cloudflare R2 Pricing](https://developers.cloudflare.com/r2/pricing/) trước khi ước tính chi phí. Free tier không áp dụng cho Infrequent Access.
+
+Tài liệu vận hành tham khảo:
+
+- [R2 Authentication](https://developers.cloudflare.com/r2/api/tokens/)
+- [R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/)
+- [R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
+- [R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/)
 
 ## 9. Tích hợp AI theo từng giai đoạn
 
@@ -274,7 +339,7 @@ Chỉ thêm embedding/pgvector khi cần tìm kiếm ngữ nghĩa hoặc chatbot
 
 ## 10. Cấu hình và secret
 
-Repository hiện đọc `.env` qua `spring.config.import` và sử dụng các biến `NEON_HOSTNAME`, `NEON_DBNAME`, `NEON_USER`, `NEON_PASSWORD` cho PostgreSQL.
+Repository hiện đọc `.env` qua `spring.config.import`. PostgreSQL dùng `NEON_HOSTNAME`, `NEON_DBNAME`, `NEON_USER`, `NEON_PASSWORD`; Cloudflare R2 dùng account ID, access key, secret key, hai bucket và public URL được mô tả ở phần 8.
 
 - Dùng `.env.sample` làm mẫu; không commit `.env` hoặc thông tin truy cập thật.
 - API key AI, khóa storage và secret xác thực phải lấy từ cấu hình môi trường.
