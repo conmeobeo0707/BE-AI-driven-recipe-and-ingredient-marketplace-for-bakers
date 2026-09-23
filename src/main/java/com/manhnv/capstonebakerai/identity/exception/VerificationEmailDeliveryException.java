@@ -1,8 +1,10 @@
 package com.manhnv.capstonebakerai.identity.exception;
 
-public class VerificationEmailDeliveryException extends RuntimeException {
+import com.manhnv.capstonebakerai.common.exception.AppException;
 
+public class VerificationEmailDeliveryException extends AppException {
     public VerificationEmailDeliveryException(Throwable cause) {
-        super("Verification email could not be sent", cause);
+        super(IdentityErrorCode.VERIFICATION_EMAIL_DELIVERY_FAILED);
+        initCause(cause);
     }
 }

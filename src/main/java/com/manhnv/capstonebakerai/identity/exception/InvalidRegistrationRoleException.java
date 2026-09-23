@@ -1,8 +1,9 @@
 package com.manhnv.capstonebakerai.identity.exception;
 
-public class InvalidRegistrationRoleException extends RuntimeException {
+import com.manhnv.capstonebakerai.common.exception.AppException;
 
+public class InvalidRegistrationRoleException extends AppException {
     public InvalidRegistrationRoleException() {
-        super("Self-registration only supports LEARNER, STORE, or BAKER roles");
+        super(IdentityErrorCode.INVALID_REGISTRATION_ROLE);
     }
 }
