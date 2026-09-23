@@ -1,8 +1,9 @@
 package com.manhnv.capstonebakerai.identity.exception;
 
-public class InvalidVerificationCodeException extends RuntimeException {
+import com.manhnv.capstonebakerai.common.exception.AppException;
 
+public class InvalidVerificationCodeException extends AppException {
     public InvalidVerificationCodeException() {
-        super("Verification code is invalid or expired");
+        super(IdentityErrorCode.INVALID_VERIFICATION_CODE);
     }
 }

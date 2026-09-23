@@ -8,6 +8,7 @@ import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.service.EmailVerificationService;
 import com.manhnv.capstonebakerai.identity.service.RegistrationService;
 import jakarta.validation.Valid;
+import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,17 +27,17 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public RegisterUserResponse register(@Valid @RequestBody RegisterUserRequest request) {
-        return registrationService.register(request);
+    public ApiResponse<RegisterUserResponse> register(@Valid @RequestBody RegisterUserRequest request) {
+        return ApiResponse.success(registrationService.register(request));
     }
 
     @PostMapping("/verify-email")
-    public MessageResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        return emailVerificationService.verify(request.email(), request.code());
+    public ApiResponse<MessageResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return ApiResponse.success(emailVerificationService.verify(request.email(), request.code()));
     }
 
     @PostMapping("/resend-verification")
-    public MessageResponse resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
-        return emailVerificationService.resend(request.email());
+    public ApiResponse<MessageResponse> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        return ApiResponse.success(emailVerificationService.resend(request.email()));
     }
 }

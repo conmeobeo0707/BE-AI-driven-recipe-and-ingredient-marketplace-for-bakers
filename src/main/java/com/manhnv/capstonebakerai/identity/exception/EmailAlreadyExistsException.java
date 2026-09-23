@@ -1,8 +1,9 @@
 package com.manhnv.capstonebakerai.identity.exception;
 
-public class EmailAlreadyExistsException extends RuntimeException {
+import com.manhnv.capstonebakerai.common.exception.AppException;
 
+public class EmailAlreadyExistsException extends AppException {
     public EmailAlreadyExistsException() {
-        super("Email is already registered");
+        super(IdentityErrorCode.EMAIL_ALREADY_EXISTS);
     }
 }
