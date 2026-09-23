@@ -30,6 +30,9 @@ public class Payout {
     @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
+    @Column(name = "bank_transaction_id")
+    private String bankTransactionId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private PayoutStatus status;
@@ -40,6 +43,21 @@ public class Payout {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "reject_reason")
+    private String rejectReason;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @Column(name = "failed_at")
+    private LocalDateTime failedAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at")
