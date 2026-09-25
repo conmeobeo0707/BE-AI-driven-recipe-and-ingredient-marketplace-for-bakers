@@ -416,7 +416,7 @@ Logout dùng cùng cấu hình request, đổi URL thành `/api/v1/auth/logout`.
 
 ### Migration và kiểm thử
 
-`V11__link_refresh_token_rotation.sql` thêm `replaced_by_id` và khóa ngoại tự tham chiếu. Không sửa các migration đã áp dụng. Nếu database của team có V9, phải lấy đúng file V9 của team về trước khi chạy Flyway; không dùng repair để bỏ qua file bị thiếu.
+`V12__link_refresh_token_rotation.sql` thêm `replaced_by_id` và khóa ngoại tự tham chiếu. Không sửa các migration đã áp dụng. Nếu database của team có V9, phải lấy đúng file V9 của team về trước khi chạy Flyway; không dùng repair để bỏ qua file bị thiếu.
 
 Các token hiện hữu vẫn dùng được; liên kết chỉ được ghi cho những lần refresh sau khi triển khai bản mới. Không thể suy ra chuỗi của các lần refresh trước đó. Khi triển khai, dừng instance bản cũ để tránh nó tiếp tục rotate mà không ghi liên kết.
 
