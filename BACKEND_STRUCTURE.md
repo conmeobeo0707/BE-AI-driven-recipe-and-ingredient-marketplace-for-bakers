@@ -387,6 +387,43 @@ Thứ tự triển khai đề xuất:
 
 Tài liệu này không tự thay đổi package hoặc triển khai các chức năng trên. Khi nhóm thay đổi ranh giới module hoặc quy ước, cập nhật tài liệu trong cùng PR.
 
+## 13. Login, refresh và logout
+
+- Login trả access token trong `ApiResponse.data`; refresh token nằm trong cookie `refresh_token` có `HttpOnly` và path `/api/v1/auth`.
+- Access token có TTL 15 phút; refresh token có TTL 30 ngày tính từ mỗi lần phát hành. Khi triển khai HTTPS, đặt `REFRESH_COOKIE_SECURE=true`. Chỉ dùng `SameSite=None` khi cần gửi cookie cross-site và luôn đi kèm `Secure=true`.
+- Refresh khóa token trong database, kiểm tra hạn sử dụng và trạng thái user, revoke token cũ rồi tạo token mới trong cùng transaction. `replaced_by_id` liên kết token cũ với token mới.
+- Logout khóa và lần theo chuỗi token thay thế để revoke cả token mới nếu refresh vừa hoàn tất. Các phiên đăng nhập khác không bị revoke. Token không tồn tại hoặc đã logout vẫn trả success để thao tác có thể gọi lặp lại.
+- JWT access token đã phát vẫn có hiệu lực đến khi hết hạn. Client phải xóa access token khi logout và không cập nhật lại trạng thái đăng nhập từ response refresh đến muộn. Chỉ cho một refresh chạy tại một thời điểm; chặn refresh mới và chờ refresh đang chạy hoàn tất trước khi gọi logout.
+- Login/refresh/logout không kiểm tra Bearer token gửi kèm vì chúng xác thực bằng mật khẩu hoặc refresh cookie. Những API khác vẫn xác thực JWT. Lỗi xác thực/phân quyền của Security dùng `common/exception/SecurityExceptionHandler` và trả `ApiResponse` giống lỗi nghiệp vụ.
+
+### Header `X-Auth-Request: 1`
+
+Hai API POST `/api/v1/auth/refresh` và `/api/v1/auth/logout` bắt buộc header này. `X-Auth-Request` là tên do project quy định; `1` là giá trị cố định, không phải secret hay JWT.
+
+Cookie có thể được trình duyệt tự gửi kèm request. Vì vậy API dùng cookie cần chống CSRF: trang web khác không được lợi dụng trình duyệt của người dùng để gọi API ngoài ý muốn. Form HTML thông thường không đặt được custom header; JavaScript gọi cross-origin với header này phải qua CORS preflight. Backend chỉ cho phép `FRONTEND_ORIGIN` đã cấu hình. Không mở rộng CORS cho origin không tin cậy.
+
+Giữ header này khi CSRF mặc định của Spring đang tắt. Có thể thay bằng cơ chế CSRF chuẩn khác, nhưng không chỉ xóa kiểm tra header. `HttpOnly` ngăn JavaScript đọc cookie, không ngăn trình duyệt gửi cookie; `Secure` chỉ giới hạn cookie qua HTTPS.
+
+```javascript
+const response = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+  method: "POST",
+  credentials: "include",
+  headers: { "X-Auth-Request": "1" }
+});
+```
+
+Logout dùng cùng cấu hình request, đổi URL thành `/api/v1/auth/logout`. Không cần request body hoặc Authorization cho hai API này. Postman cần thêm header và lưu cookie từ response login.
+
+### Migration và kiểm thử
+
+`V12__link_refresh_token_rotation.sql` thêm `replaced_by_id` và khóa ngoại tự tham chiếu. Không sửa các migration đã áp dụng. Nếu database của team có V9, phải lấy đúng file V9 của team về trước khi chạy Flyway; không dùng repair để bỏ qua file bị thiếu.
+
+Các token hiện hữu vẫn dùng được; liên kết chỉ được ghi cho những lần refresh sau khi triển khai bản mới. Không thể suy ra chuỗi của các lần refresh trước đó. Khi triển khai, dừng instance bản cũ để tránh nó tiếp tục rotate mà không ghi liên kết.
+
+Chưa có job dọn token. Nếu bổ sung sau này, không xóa riêng một mắt xích trong chuỗi còn hoạt động: logout bằng token cũ cần chuỗi đó để tìm token hiện hành. Chính sách giới hạn thời gian tối đa của phiên và giới hạn tần suất login cần được chốt riêng.
+
+Test tập trung: `AuthenticationServiceTest` kiểm tra rotation, reuse, logout theo chuỗi và các điều kiện từ chối; `AuthSecurityTest` kiểm tra filter Security thật bằng MockMvc, cookie, header và CORS. Các test này không kết nối Neon; kiểm thử tranh chấp transaction thực tế cần PostgreSQL test riêng.
+
 ## Tài liệu tham khảo
 
 - [Spring Modulith — tổ chức module trong Spring Boot](https://docs.spring.io/spring-modulith/reference/fundamentals.html)
