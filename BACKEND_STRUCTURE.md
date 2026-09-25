@@ -424,6 +424,16 @@ Chưa có job dọn token. Nếu bổ sung sau này, không xóa riêng một m�
 
 Test tập trung: `AuthenticationServiceTest` kiểm tra rotation, reuse, logout theo chuỗi và các điều kiện từ chối; `AuthSecurityTest` kiểm tra filter Security thật bằng MockMvc, cookie, header và CORS. Các test này không kết nối Neon; kiểm thử tranh chấp transaction thực tế cần PostgreSQL test riêng.
 
+## 14. Quên mật khẩu
+
+Flow quên mật khẩu không yêu cầu đăng nhập hay `X-Auth-Request`. Email không tồn tại, tài khoản bị khóa hoặc yêu cầu lại trong vòng 1 phút đều nhận cùng một response để tránh lộ thông tin tài khoản. Mã 6 chữ số hết hạn sau 10 phút, chỉ lưu hash trong `password_reset_codes`; mỗi user có tối đa một mã hiện hành.
+
+1. `POST /api/v1/auth/forgot-password` với `{ "email": "user@example.com" }` tạo mã mới và phát event gửi email sau khi transaction commit.
+2. `POST /api/v1/auth/forgot-password/verify` với `{ "email": "user@example.com", "code": "012345" }` xác nhận mã hợp lệ để frontend mở form mật khẩu mới. Bước này chưa tiêu thụ mã.
+3. `POST /api/v1/auth/reset-password` với `{ "email": "user@example.com", "code": "012345", "newPassword": "..." }` kiểm tra lại mã, hash mật khẩu mới, xóa mã, revoke toàn bộ refresh token của tài khoản và xóa refresh cookie trên thiết bị đang gọi. Frontend xóa access token và chuyển về màn hình login.
+
+Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn 15 phút. `V14__create_password_reset_codes_table.sql` là migration mới; không sửa các migration cũ. Gmail SMTP hiện dùng cấu hình `app.mail.from`, `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` trong `.env`.
+
 ## Tài liệu tham khảo
 
 - [Spring Modulith — tổ chức module trong Spring Boot](https://docs.spring.io/spring-modulith/reference/fundamentals.html)

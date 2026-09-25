@@ -42,10 +42,13 @@ public class SecurityConfig {
             JwtAuthenticationConverter jwtAuthenticationConverter,
             SecurityExceptionHandler securityExceptionHandler
     ) throws Exception {
-        var cookieAuthEndpoints = new OrRequestMatcher(
+        var publicAuthEndpoints = new OrRequestMatcher(
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/login"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/refresh"),
-                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"));
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/forgot-password"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/forgot-password/verify"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/reset-password"));
         var bearerTokenResolver = new DefaultBearerTokenResolver();
         http
                 .cors(Customizer.withDefaults())
@@ -61,12 +64,15 @@ public class SecurityConfig {
                                 "/api/v1/auth/resend-verification",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
-                                "/api/v1/auth/logout"
+                                "/api/v1/auth/logout",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/forgot-password/verify",
+                                "/api/v1/auth/reset-password"
                         ).permitAll()
                         .anyRequest().authenticated())
                         .oauth2ResourceServer(oauth2 -> oauth2
-                                // These endpoints authenticate with credentials/cookies, not the old access token.
-                                .bearerTokenResolver(request -> cookieAuthEndpoints.matches(request)
+                                // Public auth endpoints work without the old access token.
+                                .bearerTokenResolver(request -> publicAuthEndpoints.matches(request)
                                         ? null : bearerTokenResolver.resolve(request))
                                 .authenticationEntryPoint(securityExceptionHandler)
                                 .accessDeniedHandler(securityExceptionHandler)

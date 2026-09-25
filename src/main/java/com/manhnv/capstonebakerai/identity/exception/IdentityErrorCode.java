@@ -16,7 +16,8 @@ public enum IdentityErrorCode implements ErrorCode {
     INVALID_REFRESH_TOKEN("Refresh token is invalid or expired", HttpStatus.UNAUTHORIZED),
     INVALID_AUTH_REQUEST("Authentication request header is missing", HttpStatus.FORBIDDEN),
     EMAIL_NOT_VERIFIED("Email has not been verified", HttpStatus.FORBIDDEN),
-    ACCOUNT_DISABLED("Account is disabled", HttpStatus.FORBIDDEN);
+    ACCOUNT_DISABLED("Account is disabled", HttpStatus.FORBIDDEN),
+    INVALID_PASSWORD_RESET_CODE("Password reset code is invalid or expired", HttpStatus.BAD_REQUEST);
 
     private final String message;
     private final HttpStatus httpStatus;
