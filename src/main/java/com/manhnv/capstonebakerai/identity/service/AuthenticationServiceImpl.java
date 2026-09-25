@@ -66,7 +66,7 @@ public class AuthenticationServiceImpl implements AuthenticationService{
             throw new AppException(IdentityErrorCode.INVALID_CREDENTIALS);
         }
         checkUserCanLogin(user);
-        return issueTokenPair(user);
+        return issueTokenPair(user, null);
     }
 
     @Override
@@ -87,8 +87,7 @@ public class AuthenticationServiceImpl implements AuthenticationService{
         checkUserCanLogin(user);
 
         oldToken.setRevokedAt(LocalDateTime.now(ZoneOffset.UTC));
-        refreshTokenRepository.save(oldToken);
-        return issueTokenPair(user);
+        return issueTokenPair(user, oldToken);
     }
 
     @Override
@@ -99,11 +98,18 @@ public class AuthenticationServiceImpl implements AuthenticationService{
         }
         String tokenHash = hashToken(rawRefreshToken);
 
-        refreshTokenRepository.findByTokenHashForUpdate(tokenHash)
-                .filter(token -> token.getRevokedAt() == null)
-                .ifPresent(token -> {
-                    token.setRevokedAt(LocalDateTime.now(ZoneOffset.UTC));
-                });
+        RefreshToken token = refreshTokenRepository.findByTokenHashForUpdate(tokenHash).orElse(null);
+        LocalDateTime revokedAt = LocalDateTime.now(ZoneOffset.UTC);
+        // Always lock from ancestor to descendant. A concurrent rotation either finishes
+        // before this lock (and is followed), or sees the revocation and cannot refresh.
+        while (token != null) {
+            if (token.getRevokedAt() == null) {
+                token.setRevokedAt(revokedAt);
+            }
+            token = token.getReplacedById() == null ? null
+                    : refreshTokenRepository.findByIdForUpdate(token.getReplacedById())
+                            .orElseThrow(() -> new IllegalStateException("Broken refresh token rotation chain"));
+        }
 
         return new MessageResponse("Logged out successfully");
     }
@@ -118,7 +124,7 @@ public class AuthenticationServiceImpl implements AuthenticationService{
         }
     }
 
-    private AuthenticationResult issueTokenPair(User user) {
+    private AuthenticationResult issueTokenPair(User user, RefreshToken previousToken) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(accessTokenTtl);
 
@@ -143,7 +149,11 @@ public class AuthenticationServiceImpl implements AuthenticationService{
         refreshToken.setUser(user);
         refreshToken.setTokenHash(hashToken(rawRefreshToken));
         refreshToken.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(refreshTokenTtl));
-        refreshTokenRepository.save(refreshToken);
+        // Insert the successor before updating the predecessor's foreign key.
+        refreshTokenRepository.saveAndFlush(refreshToken);
+        if (previousToken != null) {
+            previousToken.setReplacedById(refreshToken.getRefreshTokenId());
+        }
 
         LoginResponse response = new LoginResponse(
                 accessToken,

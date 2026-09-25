@@ -43,6 +43,10 @@ public class RefreshToken {
     @Column(name = "revoked_at")
     private LocalDateTime revokedAt;
 
+    // Keep the rotation chain so logout can revoke a token issued by an in-flight refresh.
+    @Column(name = "replaced_by_id")
+    private UUID replacedById;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

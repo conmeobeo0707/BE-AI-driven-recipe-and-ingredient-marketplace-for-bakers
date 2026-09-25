@@ -1,5 +1,7 @@
 package com.manhnv.capstonebakerai.identity.service;
 
+import com.manhnv.capstonebakerai.baker.entity.Baker;
+import com.manhnv.capstonebakerai.baker.repository.BakerRepository;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserRequest;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserResponse;
 import com.manhnv.capstonebakerai.identity.entity.User;
@@ -30,6 +32,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             EnumSet.of(Role.LEARNER, Role.STORE, Role.BAKER);
 
     private final UserRepository userRepository;
+    private final BakerRepository bakerRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -59,6 +62,12 @@ public class RegistrationServiceImpl implements RegistrationService {
             savedUser = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException exception) {
             throw new EmailAlreadyExistsException();
+        }
+
+        if (savedUser.getRole() == Role.BAKER) {
+            Baker baker = new Baker();
+            baker.setUser(savedUser);
+            bakerRepository.save(baker);
         }
 
         eventPublisher.publishEvent(new UserRegisteredEvent(savedUser.getUserId()));
