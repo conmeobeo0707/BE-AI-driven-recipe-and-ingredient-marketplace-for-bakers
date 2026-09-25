@@ -6,6 +6,7 @@ import com.manhnv.capstonebakerai.identity.dto.*;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.service.AuthenticationService;
 import com.manhnv.capstonebakerai.identity.service.EmailVerificationService;
+import com.manhnv.capstonebakerai.identity.service.PasswordResetService;
 import com.manhnv.capstonebakerai.identity.service.RegistrationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
@@ -36,6 +37,7 @@ public class AuthController {
     private final RegistrationService registrationService;
     private final EmailVerificationService emailVerificationService;
     private final AuthenticationService authenticationService;
+    private final PasswordResetService passwordResetService;
 
     @Value("${app.jwt.refresh-token-ttl}")
     private Duration refreshTokenTtl;
@@ -67,6 +69,26 @@ public class AuthController {
     @PostMapping("/resend-verification")
     public ApiResponse<MessageResponse> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
         return ApiResponse.success(emailVerificationService.resend(request.email()));
+    }
+
+    @PostMapping("/forgot-password")
+    public ApiResponse<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return ApiResponse.success(passwordResetService.requestCode(request.email()));
+    }
+
+    @PostMapping("/forgot-password/verify")
+    public ApiResponse<MessageResponse> verifyPasswordResetCode(
+            @Valid @RequestBody VerifyPasswordResetCodeRequest request) {
+        return ApiResponse.success(passwordResetService.verifyCode(request.email(), request.code()));
+    }
+
+    @PostMapping("/reset-password")
+    public ApiResponse<MessageResponse> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request, HttpServletResponse response) {
+        MessageResponse result = passwordResetService.resetPassword(
+                request.email(), request.code(), request.newPassword());
+        clearRefreshCookie(response);
+        return ApiResponse.success(result);
     }
 
     @PostMapping("/login")
