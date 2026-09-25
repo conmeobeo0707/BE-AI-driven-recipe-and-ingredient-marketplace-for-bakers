@@ -2,6 +2,11 @@ package com.manhnv.capstonebakerai.identity.service;
 
 import com.manhnv.capstonebakerai.baker.entity.Baker;
 import com.manhnv.capstonebakerai.baker.repository.BakerRepository;
+import com.manhnv.capstonebakerai.learner.entity.Learner;
+import com.manhnv.capstonebakerai.learner.repository.LearnerRepository;
+import com.manhnv.capstonebakerai.store.entity.Store;
+import com.manhnv.capstonebakerai.store.enums.StoreStatus;
+import com.manhnv.capstonebakerai.store.repository.StoreRepository;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserRequest;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserResponse;
 import com.manhnv.capstonebakerai.identity.entity.User;
@@ -33,6 +38,8 @@ public class RegistrationServiceImpl implements RegistrationService {
 
     private final UserRepository userRepository;
     private final BakerRepository bakerRepository;
+    private final LearnerRepository learnerRepository;
+    private final StoreRepository storeRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -68,6 +75,18 @@ public class RegistrationServiceImpl implements RegistrationService {
             Baker baker = new Baker();
             baker.setUser(savedUser);
             bakerRepository.save(baker);
+        } else if (savedUser.getRole() == Role.LEARNER) {
+            Learner learner = new Learner();
+            learner.setUser(savedUser);
+            learner.setSkillLevel(savedUser.getSkillLevel());
+            learner.setCreatedAt(savedUser.getCreatedAt());
+            learnerRepository.save(learner);
+        } else if (savedUser.getRole() == Role.STORE) {
+            Store store = new Store();
+            store.setUser(savedUser);
+            store.setStatus(StoreStatus.CLOSED); //mac dinh khi tao se la CLOSED
+            store.setCreatedAt(savedUser.getCreatedAt());
+            storeRepository.save(store);
         }
 
         eventPublisher.publishEvent(new UserRegisteredEvent(savedUser.getUserId()));

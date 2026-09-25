@@ -434,6 +434,16 @@ Flow quên mật khẩu không yêu cầu đăng nhập hay `X-Auth-Request`. Em
 
 Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn 15 phút. `V14__create_password_reset_codes_table.sql` là migration mới; không sửa các migration cũ. Gmail SMTP hiện dùng cấu hình `app.mail.from`, `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` trong `.env`.
 
+## 15. Hồ sơ Store và Learner khi đăng ký
+
+`RegistrationServiceImpl` tạo user và hồ sơ theo role trong cùng transaction: BAKER → `bakers`, STORE → `stores`, LEARNER → `learners`. Nếu lưu hồ sơ thất bại, transaction rollback cả user. Event xác minh email vẫn dùng flow hiện có.
+
+- Store: ID UUID, liên kết user duy nhất, revenue/rating = 0, is_verified = false, status = CLOSED, description/logo_url = null. `created_at` dùng thời điểm đăng ký UTC (timestamp).
+- Learner: ID UUID, liên kết user duy nhất, skill_level lấy từ request đăng ký (có thể null), created_at giống user.
+- V15 tạo hai bảng và bổ sung hồ sơ cho user STORE/LEARNER hiện hữu. Chưa áp dụng migration lên Neon trong quá trình chỉnh code.
+- `users.skill_level` vẫn được giữ để tương thích API hiện tại; lúc đăng ký Learner, hai giá trị giống nhau. Khi thêm chức năng cập nhật skill level, cần thống nhất nơi lưu chính hoặc cập nhật đồng bộ.
+- API register và response giữ nguyên. Các trường vận hành của Store không được lấy từ request đăng ký. StoreBank, wallet và liên kết product không nằm trong thay đổi này.
+
 ## Tài liệu tham khảo
 
 - [Spring Modulith — tổ chức module trong Spring Boot](https://docs.spring.io/spring-modulith/reference/fundamentals.html)
