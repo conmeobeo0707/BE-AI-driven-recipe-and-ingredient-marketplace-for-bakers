@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -31,4 +33,10 @@ public class Learner {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "learner_hobby",
+            joinColumns = @JoinColumn(name = "learner_id"),
+            inverseJoinColumns = @JoinColumn(name = "hobby_id"))
+    private Set<Hobby> hobbies = new HashSet<>();
 }
