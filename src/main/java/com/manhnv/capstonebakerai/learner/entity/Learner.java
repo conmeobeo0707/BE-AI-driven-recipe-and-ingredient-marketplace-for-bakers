@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -30,9 +29,6 @@ public class Learner {
     @Enumerated(EnumType.STRING)
     @Column(name = "skill_level", length = 20)
     private SkillLevel skillLevel;
-
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "learner_hobby",

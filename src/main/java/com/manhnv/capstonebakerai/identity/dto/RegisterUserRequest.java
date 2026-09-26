@@ -1,7 +1,6 @@
 package com.manhnv.capstonebakerai.identity.dto;
 
 import com.manhnv.capstonebakerai.identity.enums.Role;
-import com.manhnv.capstonebakerai.identity.enums.SkillLevel;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -34,8 +33,6 @@ public record RegisterUserRequest(
         String bod,
 
         @Size(max = 20, message = "Gender must not exceed 20 characters")
-        String gender,
-
-        SkillLevel skillLevel
+        String gender
 ) {
 }

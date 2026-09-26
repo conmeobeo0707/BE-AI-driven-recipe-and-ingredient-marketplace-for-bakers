@@ -439,9 +439,9 @@ Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn
 `RegistrationServiceImpl` tạo user và hồ sơ theo role trong cùng transaction: BAKER → `bakers`, STORE → `stores`, LEARNER → `learners`. Nếu lưu hồ sơ thất bại, transaction rollback cả user. Event xác minh email vẫn dùng flow hiện có.
 
 - Store: ID UUID, liên kết user duy nhất, revenue/rating = 0, is_verified = false, status = CLOSED, description/logo_url = null. `created_at` dùng thời điểm đăng ký UTC (timestamp).
-- Learner: ID UUID, liên kết user duy nhất, skill_level lấy từ request đăng ký (có thể null), created_at giống user.
+- Learner: ID UUID, liên kết user duy nhất; skill_level ban đầu là null, Hobby chưa được chọn. Người dùng bổ sung cả hai qua profile sau khi đăng ký.
 - V15 tạo hai bảng và bổ sung hồ sơ cho user STORE/LEARNER hiện hữu. Chưa áp dụng migration lên Neon trong quá trình chỉnh code.
-- `users.skill_level` vẫn được giữ để tương thích API hiện tại; lúc đăng ký Learner, hai giá trị giống nhau. Khi thêm chức năng cập nhật skill level, cần thống nhất nơi lưu chính hoặc cập nhật đồng bộ.
+- V17 chuyển skill_level còn thiếu từ users sang learners cho dữ liệu cũ, sau đó xóa users.skill_level và learners.created_at. API đăng ký không nhận skillLevel hoặc Hobby; các API profile Learner sẽ quản lý hai thông tin này.
 - API register và response giữ nguyên. Các trường vận hành của Store không được lấy từ request đăng ký. StoreBank, wallet và liên kết product không nằm trong thay đổi này.
 
 ## Tài liệu tham khảo

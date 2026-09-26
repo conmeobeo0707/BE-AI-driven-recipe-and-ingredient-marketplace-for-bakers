@@ -1,7 +1,6 @@
 package com.manhnv.capstonebakerai.identity.entity;
 
 import com.manhnv.capstonebakerai.identity.enums.Role;
-import com.manhnv.capstonebakerai.identity.enums.SkillLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -73,7 +72,4 @@ public class User {
     @Column(length = 20)
     private String gender;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "skill_level", length = 20)
-    private SkillLevel skillLevel;
 }

@@ -78,8 +78,6 @@ public class RegistrationServiceImpl implements RegistrationService {
         } else if (savedUser.getRole() == Role.LEARNER) {
             Learner learner = new Learner();
             learner.setUser(savedUser);
-            learner.setSkillLevel(savedUser.getSkillLevel());
-            learner.setCreatedAt(savedUser.getCreatedAt());
             learnerRepository.save(learner);
         } else if (savedUser.getRole() == Role.STORE) {
             Store store = new Store();
