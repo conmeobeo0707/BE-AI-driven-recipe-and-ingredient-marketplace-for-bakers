@@ -1,12 +1,7 @@
 package com.manhnv.capstonebakerai.identity.service;
 
-import com.manhnv.capstonebakerai.baker.entity.Baker;
-import com.manhnv.capstonebakerai.baker.repository.BakerRepository;
-import com.manhnv.capstonebakerai.learner.entity.Learner;
-import com.manhnv.capstonebakerai.learner.repository.LearnerRepository;
-import com.manhnv.capstonebakerai.store.entity.Store;
-import com.manhnv.capstonebakerai.store.enums.StoreStatus;
-import com.manhnv.capstonebakerai.store.repository.StoreRepository;
+import com.manhnv.capstonebakerai.customer.entity.Customer;
+import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserRequest;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserResponse;
 import com.manhnv.capstonebakerai.identity.entity.User;
@@ -25,21 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class RegistrationServiceImpl implements RegistrationService {
 
-    private static final Set<Role> SELF_REGISTRATION_ROLES =
-            EnumSet.of(Role.LEARNER, Role.STORE, Role.BAKER);
-
     private final UserRepository userRepository;
-    private final BakerRepository bakerRepository;
-    private final LearnerRepository learnerRepository;
-    private final StoreRepository storeRepository;
+    private final CustomerRepository customerRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -47,7 +35,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional
     public RegisterUserResponse register(RegisterUserRequest request) {
-        if (!SELF_REGISTRATION_ROLES.contains(request.role())) {
+        if (request.role() != Role.CUSTOMER) {
             throw new InvalidRegistrationRoleException();
         }
 
@@ -62,7 +50,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                 passwordEncoder.encode(request.password()),
                 LocalDateTime.now(ZoneOffset.UTC)
         );
-        user.setName(request.name().trim());
+        user.setFullName(request.fullName().trim());
 
         User savedUser;
         try {
@@ -71,21 +59,13 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new EmailAlreadyExistsException();
         }
 
-        if (savedUser.getRole() == Role.BAKER) {
-            Baker baker = new Baker();
-            baker.setUser(savedUser);
-            bakerRepository.save(baker);
-        } else if (savedUser.getRole() == Role.LEARNER) {
-            Learner learner = new Learner();
-            learner.setUser(savedUser);
-            learnerRepository.save(learner);
-        } else if (savedUser.getRole() == Role.STORE) {
-            Store store = new Store();
-            store.setUser(savedUser);
-            store.setStatus(StoreStatus.CLOSED); //mac dinh khi tao se la CLOSED
-            store.setCreatedAt(savedUser.getCreatedAt());
-            storeRepository.save(store);
-        }
+        Customer customer = new Customer();
+        customer.setUser(savedUser);
+        customer.setHobbyId(null);
+        customer.setSkillLevel(null);
+        customer.setConfirmed(false);
+        savedUser.setCustomer(customer);
+        customerRepository.saveAndFlush(customer);
 
         eventPublisher.publishEvent(new UserRegisteredEvent(savedUser.getUserId()));
         return userMapper.toRegisterResponse(savedUser);

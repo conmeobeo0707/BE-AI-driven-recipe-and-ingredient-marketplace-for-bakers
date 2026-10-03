@@ -1,9 +1,9 @@
 package com.manhnv.capstonebakerai.identity.enums;
 
 public enum Role {
-    LEARNER,
-    STORE,
-    BAKER,
+    ADMIN,
+    MANAGER,
     STAFF,
-    ADMIN
+    BAKER_STAFF,
+    CUSTOMER
 }

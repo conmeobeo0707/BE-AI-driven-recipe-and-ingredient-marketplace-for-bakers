@@ -13,11 +13,12 @@ import java.time.LocalDateTime;
 public interface UserMapper {
 
     @Mapping(target = "userId", ignore = true)
+    @Mapping(target = "customer", ignore = true)
     @Mapping(target = "password", source = "encodedPassword")
     @Mapping(target = "email", source = "normalizedEmail")
-    @Mapping(target = "isActive", constant = "true")
-    @Mapping(target = "isConfirmed", constant = "false")
-    @Mapping(target = "avatarUrl", ignore = true)
+    @Mapping(target = "fullName", source = "request.fullName")
+    @Mapping(target = "bod", source = "request.dateOfBirth")
+    @Mapping(target = "status", constant = "ACTIVE")
     @Mapping(target = "createdAt", source = "registeredAt")
     @Mapping(target = "updatedAt", source = "registeredAt")
     User toEntity(
@@ -27,5 +28,7 @@ public interface UserMapper {
             LocalDateTime registeredAt
     );
 
+    @Mapping(target = "id", source = "userId")
+    @Mapping(target = "dateOfBirth", source = "bod")
     RegisterUserResponse toRegisterResponse(User user);
 }

@@ -434,15 +434,35 @@ Flow quên mật khẩu không yêu cầu đăng nhập hay `X-Auth-Request`. Em
 
 Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn 15 phút. `V14__create_password_reset_codes_table.sql` là migration mới; không sửa các migration cũ. Gmail SMTP hiện dùng cấu hình `app.mail.from`, `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` trong `.env`.
 
-## 15. Hồ sơ Store và Learner khi đăng ký
+## 15. Đăng ký theo schema User/Customer V19
 
-`RegistrationServiceImpl` tạo user và hồ sơ theo role trong cùng transaction: BAKER → `bakers`, STORE → `stores`, LEARNER → `learners`. Nếu lưu hồ sơ thất bại, transaction rollback cả user. Event xác minh email vẫn dùng flow hiện có.
+`POST /api/v1/auth/register` chỉ cho phép CUSTOMER tự đăng ký. ADMIN, MANAGER, STAFF và BAKER_STAFF được tạo qua nghiệp vụ nội bộ riêng. Register hash mật khẩu, chuẩn hóa email/tên, lưu User và Customer trong cùng transaction, rồi phát event xác minh email. Listener gửi email sau khi transaction commit; không tạo Baker, Learner hoặc Store. Nếu lưu Customer thất bại, transaction rollback cả User và không phát event.
 
-- Store: ID UUID, liên kết user duy nhất, revenue/rating = 0, is_verified = false, status = CLOSED, description/logo_url = null. `created_at` dùng thời điểm đăng ký UTC (timestamp).
-- Learner: ID UUID, liên kết user duy nhất; skill_level ban đầu là null, Hobby chưa được chọn. Người dùng bổ sung cả hai qua profile sau khi đăng ký.
-- V15 tạo hai bảng và bổ sung hồ sơ cho user STORE/LEARNER hiện hữu. Chưa áp dụng migration lên Neon trong quá trình chỉnh code.
-- V17 chuyển skill_level còn thiếu từ users sang learners cho dữ liệu cũ, sau đó xóa users.skill_level và learners.created_at. API đăng ký không nhận skillLevel hoặc Hobby; các API profile Learner sẽ quản lý hai thông tin này.
-- API register và response giữ nguyên. Các trường vận hành của Store không được lấy từ request đăng ký. StoreBank, wallet và liên kết product không nằm trong thay đổi này.
+```json
+{
+  "fullName": "Customer Name",
+  "email": "customer@example.com",
+  "password": "Password123",
+  "role": "CUSTOMER",
+  "phone": "0900000000",
+  "address": "Address",
+  "dateOfBirth": "2000-01-02",
+  "gender": "FEMALE"
+}
+```
+
+- Response dùng id (UUID), fullName, email, role, phone, address, dateOfBirth, gender, status và createdAt; không trả mật khẩu/hash. role_id được bỏ theo quyết định hiện tại.
+- Cột DB: id, full_name, password_hash, date_of_birth. Java property fullName thống nhất với request/response và ánh xạ đến full_name; các property userId/password/bod được giữ để các service auth hiện tại tiếp tục biên dịch. MapStruct ánh xạ request/response sang tên mới.
+- Status mới: ACTIVE/BLOCKED/INACTIVE. Register tạo User với status=ACTIVE và Customer với skill_level=null, is_confirmed=false; chưa tạo hobby. Getter tương thích getIsActive() trả true chỉ khi status=ACTIVE; users không còn cột is_active.
+- Module customer chỉ bổ sung entity Customer và CustomerRepository để register lưu hồ sơ. Không thêm endpoint/service profile, skill level hay hobby. Request/response đăng ký giữ nguyên như trên.
+- users giữ updated_at nhưng bỏ is_confirmed. Trạng thái xác minh email chuyển sang customers.is_confirmed. User có quan hệ một-một với Customer; getIsConfirmed()/setIsConfirmed() tương thích đọc/ghi Customer để các service login/verify email hiện tại tiếp tục hoạt động. Theo quyết định hiện tại, ADMIN/MANAGER/STAFF/BAKER_STAFF không cần xác minh email; vẫn phải có status=ACTIVE mới được login. Không sửa controller hoặc service của login/logout/refresh/verify/reset trong nhánh này.
+- V19 xóa dữ liệu và bảng Baker/Learner/Hobby/liên kết Hobby cũ, tạo customers, hobbies và customer_hobbies theo ERD mới; giữ bảng Store và các bảng token. Các role công khai cũ LEARNER/BAKER/STORE chuyển thành CUSTOMER, ADMIN/STAFF giữ nguyên. V19 tạo Customer cho tất cả CUSTOMER hiện có và chuyển trạng thái xác minh email cũ sang Customer trước khi xóa users.is_confirmed. Skill level và hobby cũ không được chuyển sang schema mới.
+- ID của User, Customer và Hobby đều là UUID theo lựa chọn hiện tại. customers.user_id là khóa ngoại duy nhất đến users.id. customers.hobby_id (UUID, nullable) tham chiếu hobbies.id; register để null và không yêu cầu hobbyId trong request. Entity Customer lưu UUID hobbyId, database kiểm tra khóa ngoại. Xóa hobby sẽ đặt hobby_id về null (ON DELETE SET NULL). customers không có created_at.
+- hobbies có id, name (unique), description và is_active. customer_hobbies có customer_id (UUID), hobby_id (UUID) và created_at UTC; khóa chính ghép (customer_id, hobby_id), hai khóa ngoại đến customers.id và hobbies.id. Xóa Customer hoặc Hobby sẽ xóa các liên kết tương ứng (ON DELETE CASCADE). Chưa thêm entity/API CRUD hobby vì register không sử dụng hobby.
+- Neon đã có V16–V18. Sau khi merge nhánh profile-management, nhánh register đã có V16–V17 nhưng vẫn thiếu V18. Trước khi migrate, bổ sung V18 gốc đã apply và bảo đảm V16–V17 khớp bản đã apply; không tái tạo nội dung hoặc repair checksum để bỏ qua file thiếu. V19 chưa được chạy trong tác vụ chỉnh code này.
+
+Kiểm thử cục bộ, không kết nối Neon:
+`mvn -Dtest=RegistrationServiceTest clean test`
 
 ## Tài liệu tham khảo
 

@@ -7,9 +7,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public record RegisterUserRequest(
-        @NotBlank(message = "Name is required")
-        @Size(max = 100, message = "Name must not exceed 100 characters")
-        String name,
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must not exceed 100 characters")
+        String fullName,
 
         @NotBlank(message = "Email is required")
         @Email(message = "Email is invalid")
@@ -30,7 +30,7 @@ public record RegisterUserRequest(
         String address,
 
         @Size(max = 10, message = "Date of birth must not exceed 10 characters")
-        String bod,
+        String dateOfBirth,
 
         @Size(max = 20, message = "Gender must not exceed 20 characters")
         String gender

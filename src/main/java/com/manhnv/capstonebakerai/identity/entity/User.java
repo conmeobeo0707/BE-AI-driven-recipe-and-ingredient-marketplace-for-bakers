@@ -1,14 +1,20 @@
 package com.manhnv.capstonebakerai.identity.entity;
 
+import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.identity.enums.Role;
+import com.manhnv.capstonebakerai.identity.enums.UserStatus;
 import jakarta.persistence.Column;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -29,17 +35,21 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "user_id", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID userId;
 
-    @Column(nullable = false, length = 100)
-    private String name;
+    @Column(name = "full_name", nullable = false, length = 100)
+    private String fullName;
 
     @Column(nullable = false, length = 255)
     private String email;
 
-    @Column(nullable = false, length = 255)
+    @Column(name = "password_hash", nullable = false, length = 255)
     private String password;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -51,14 +61,8 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive;
-
-    @Column(name = "is_confirmed", nullable = false)
-    private Boolean isConfirmed;
-
-    @Column(name = "avatar_url", length = 1024)
-    private String avatarUrl;
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.MERGE)
+    private Customer customer;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
@@ -66,10 +70,32 @@ public class User {
     @Column(length = 255)
     private String address;
 
-    @Column(length = 10)
+    @Column(name = "date_of_birth", length = 10)
     private String bod;
 
     @Column(length = 20)
     private String gender;
 
+    // Compatibility for existing auth/reset services; status is the stored source of truth.
+    @Transient
+    public Boolean getIsActive() {
+        return status == UserStatus.ACTIVE;
+    }
+
+    // Existing auth services access Customer's email confirmation through these methods.
+    @Transient
+    public Boolean getIsConfirmed() {
+        if (role == Role.CUSTOMER) {
+            return customer != null && customer.isConfirmed();
+        }
+        // Internal staff accounts do not use customer email verification.
+        return role != null;
+    }
+
+    public void setIsConfirmed(Boolean confirmed) {
+        if (role != Role.CUSTOMER || customer == null) {
+            throw new IllegalStateException("Email confirmation requires a Customer profile");
+        }
+        customer.setConfirmed(Boolean.TRUE.equals(confirmed));
+    }
 }
