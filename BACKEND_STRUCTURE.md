@@ -426,13 +426,13 @@ Test tập trung: `AuthenticationServiceTest` kiểm tra rotation, reuse, logout
 
 ## 14. Quên mật khẩu
 
-Flow quên mật khẩu không yêu cầu đăng nhập hay `X-Auth-Request`. Email không tồn tại, tài khoản bị khóa hoặc yêu cầu lại trong vòng 1 phút đều nhận cùng một response để tránh lộ thông tin tài khoản. Mã 6 chữ số hết hạn sau 10 phút, chỉ lưu hash trong `password_reset_codes`; mỗi user có tối đa một mã hiện hành.
+Flow quên mật khẩu không yêu cầu đăng nhập hay `X-Auth-Request`. Email không tồn tại, tài khoản bị khóa hoặc yêu cầu lại trong vòng 1 phút đều nhận cùng một response để tránh lộ thông tin tài khoản. Mã 6 chữ số hết hạn sau 10 phút, chỉ lưu hash trong `verification_code` với purpose=PASSWORD_RESET; mỗi user có tối đa một mã hiện hành cho purpose này.
 
 1. `POST /api/v1/auth/forgot-password` với `{ "email": "user@example.com" }` tạo mã mới và phát event gửi email sau khi transaction commit.
 2. `POST /api/v1/auth/forgot-password/verify` với `{ "email": "user@example.com", "code": "012345" }` xác nhận mã hợp lệ để frontend mở form mật khẩu mới. Bước này chưa tiêu thụ mã.
 3. `POST /api/v1/auth/reset-password` với `{ "email": "user@example.com", "code": "012345", "newPassword": "..." }` kiểm tra lại mã, hash mật khẩu mới, xóa mã, revoke toàn bộ refresh token của tài khoản và xóa refresh cookie trên thiết bị đang gọi. Frontend xóa access token và chuyển về màn hình login.
 
-Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn 15 phút. `V14__create_password_reset_codes_table.sql` là migration mới; không sửa các migration cũ. Gmail SMTP hiện dùng cấu hình `app.mail.from`, `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` trong `.env`.
+Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn 15 phút. V14 tạo bảng password reset cũ; V20 chuyển mã sang bảng verification_code dùng chung rồi xóa bảng cũ. Không sửa các migration cũ. Gmail SMTP hiện dùng cấu hình `app.mail.from`, `GMAIL_USERNAME`, `GMAIL_APP_PASSWORD` trong `.env`.
 
 ## 15. Đăng ký theo schema User/Customer V19
 
@@ -455,14 +455,29 @@ Access JWT đã phát trước đó vẫn có thể dùng đến khi hết hạn
 - Cột DB: id, full_name, password_hash, date_of_birth. Java property fullName thống nhất với request/response và ánh xạ đến full_name; các property userId/password/bod được giữ để các service auth hiện tại tiếp tục biên dịch. MapStruct ánh xạ request/response sang tên mới.
 - Status mới: ACTIVE/BLOCKED/INACTIVE. Register tạo User với status=ACTIVE và Customer với skill_level=null, is_confirmed=false; chưa tạo hobby. Getter tương thích getIsActive() trả true chỉ khi status=ACTIVE; users không còn cột is_active.
 - Module customer chỉ bổ sung entity Customer và CustomerRepository để register lưu hồ sơ. Không thêm endpoint/service profile, skill level hay hobby. Request/response đăng ký giữ nguyên như trên.
-- users giữ updated_at nhưng bỏ is_confirmed. Trạng thái xác minh email chuyển sang customers.is_confirmed. User có quan hệ một-một với Customer; getIsConfirmed()/setIsConfirmed() tương thích đọc/ghi Customer để các service login/verify email hiện tại tiếp tục hoạt động. Theo quyết định hiện tại, ADMIN/MANAGER/STAFF/BAKER_STAFF không cần xác minh email; vẫn phải có status=ACTIVE mới được login. Không sửa controller hoặc service của login/logout/refresh/verify/reset trong nhánh này.
+- users giữ updated_at nhưng bỏ is_confirmed. Trạng thái xác minh email chuyển sang customers.is_confirmed. User có quan hệ một-một với Customer; getIsConfirmed()/setIsConfirmed() tương thích đọc/ghi Customer để các service login/verify email hiện tại tiếp tục hoạt động. Theo quyết định hiện tại, ADMIN/MANAGER/STAFF/BAKER_STAFF không cần xác minh email; vẫn phải có status=ACTIVE mới được login. V20 đổi nơi lưu mã của verify/reset sang bảng dùng chung; các endpoint và request/response giữ nguyên.
 - V19 xóa dữ liệu và bảng Baker/Learner/Hobby/liên kết Hobby cũ, tạo customers, hobbies và customer_hobbies theo ERD mới; giữ bảng Store và các bảng token. Các role công khai cũ LEARNER/BAKER/STORE chuyển thành CUSTOMER, ADMIN/STAFF giữ nguyên. V19 tạo Customer cho tất cả CUSTOMER hiện có và chuyển trạng thái xác minh email cũ sang Customer trước khi xóa users.is_confirmed. Skill level và hobby cũ không được chuyển sang schema mới.
 - ID của User, Customer và Hobby đều là UUID theo lựa chọn hiện tại. customers.user_id là khóa ngoại duy nhất đến users.id. customers.hobby_id (UUID, nullable) tham chiếu hobbies.id; register để null và không yêu cầu hobbyId trong request. Entity Customer lưu UUID hobbyId, database kiểm tra khóa ngoại. Xóa hobby sẽ đặt hobby_id về null (ON DELETE SET NULL). customers không có created_at.
 - hobbies có id, name (unique), description và is_active. customer_hobbies có customer_id (UUID), hobby_id (UUID) và created_at UTC; khóa chính ghép (customer_id, hobby_id), hai khóa ngoại đến customers.id và hobbies.id. Xóa Customer hoặc Hobby sẽ xóa các liên kết tương ứng (ON DELETE CASCADE). Chưa thêm entity/API CRUD hobby vì register không sử dụng hobby.
-- Neon đã có V16–V18. Sau khi merge nhánh profile-management, nhánh register đã có V16–V17 nhưng vẫn thiếu V18. Trước khi migrate, bổ sung V18 gốc đã apply và bảo đảm V16–V17 khớp bản đã apply; không tái tạo nội dung hoặc repair checksum để bỏ qua file thiếu. V19 chưa được chạy trong tác vụ chỉnh code này.
+- Nhánh hiện có V1–V20, gồm V18 đã bổ sung. Trước khi migrate, bảo đảm các file migration cũ khớp bản đã apply trên database; không sửa checksum để bỏ qua sai khác. Tác vụ chỉnh code không áp dụng migration lên Neon.
+
+## 16. Mã xác minh dùng chung và bỏ Store (V20)
+
+`VerificationCode` và `VerificationCodeRepository` dùng chung cho xác minh email và quên mật khẩu. Bảng `verification_code` có verification_code_id (UUID), user_id, purpose, code_hash, expires_at và created_at. Enum Java `VerificationPurpose` được lưu bằng STRING, với CHECK constraint cho hai giá trị:
+
+| Purpose | Nghiệp vụ |
+| --- | --- |
+| EMAIL_VERIFICATION | Gửi/resend mã khi đăng ký và xác minh email Customer |
+| PASSWORD_RESET | Gửi, kiểm tra mã và đặt lại mật khẩu |
+
+Unique constraint `(user_id, purpose)` cho phép mỗi user có đồng thời một mã của mỗi loại. Quan hệ VerificationCode → User là ManyToOne. Mọi truy vấn đều lọc purpose; xác minh/xóa mã của một loại không tác động mã loại còn lại. Mã vẫn là 6 chữ số, chỉ lưu hash và timestamp UTC. Cooldown quên mật khẩu chỉ tính trên mã PASSWORD_RESET; reset thành công vẫn thu hồi refresh token như trước.
+
+V20 đổi tên các cột email cũ thành code_hash/expires_at, gán EMAIL_VERIFICATION cho dữ liệu hiện có, chuyển các hash/timestamp từ password_reset_codes sang purpose=PASSWORD_RESET rồi xóa bảng password_reset_codes. ID của các mã reset được tạo lại bằng UUID để tránh trùng với ID mã email. Migration cũng xóa bảng stores (bao gồm dữ liệu); Store entity/repository/enum đã bị bỏ. Các phần Store trong sơ đồ định hướng phía trên là cấu trúc cũ, không còn thuộc schema hiện tại.
+
+Không chạy DROP CASCADE để tự xóa các đối tượng phụ thuộc ngoài dự kiến. Các migration V1–V19 giữ nguyên; V20 là migration mới.
 
 Kiểm thử cục bộ, không kết nối Neon:
-`mvn -Dtest=RegistrationServiceTest clean test`
+`mvn -Dtest=VerificationCodePurposeTest clean test`
 
 ## Tài liệu tham khảo
 
