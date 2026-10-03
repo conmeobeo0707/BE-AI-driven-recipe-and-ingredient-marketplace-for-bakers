@@ -3,6 +3,7 @@ package com.manhnv.capstonebakerai.identity.service;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
 import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
 import com.manhnv.capstonebakerai.identity.exception.InvalidVerificationCodeException;
 import com.manhnv.capstonebakerai.identity.exception.VerificationEmailDeliveryException;
 import com.manhnv.capstonebakerai.identity.repository.VerificationCodeRepository;
@@ -65,12 +66,13 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
 
         VerificationCode verification = verificationCodeRepository
-                .findByUserUserId(user.getUserId())
+                .findByUserUserIdAndPurpose(user.getUserId(), VerificationPurpose.EMAIL_VERIFICATION)
                 .orElseGet(VerificationCode::new);
         verification.setUser(user);
-        verification.setEmailVerificationToken(passwordEncoder.encode(code));
+        verification.setPurpose(VerificationPurpose.EMAIL_VERIFICATION);
+        verification.setCodeHash(passwordEncoder.encode(code));
         verification.setCreatedAt(now);
-        verification.setEmailVerificationTokenExpiryTime(now.plus(codeExpiration));
+        verification.setExpiresAt(now.plus(codeExpiration));
         verificationCodeRepository.saveAndFlush(verification);
 
         SimpleMailMessage message = new SimpleMailMessage();
@@ -98,12 +100,12 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
 
         VerificationCode verification = verificationCodeRepository
-                .findByUserUserId(user.getUserId())
+                .findByUserUserIdAndPurpose(user.getUserId(), VerificationPurpose.EMAIL_VERIFICATION)
                 .orElseThrow(InvalidVerificationCodeException::new);
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        if (verification.getEmailVerificationTokenExpiryTime().isBefore(now)
-                || !passwordEncoder.matches(code, verification.getEmailVerificationToken())) {
+        if (!verification.getExpiresAt().isAfter(now)
+                || !passwordEncoder.matches(code, verification.getCodeHash())) {
             throw new InvalidVerificationCodeException();
         }
 

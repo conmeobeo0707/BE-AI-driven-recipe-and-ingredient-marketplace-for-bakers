@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum IdentityErrorCode implements ErrorCode {
     EMAIL_ALREADY_EXISTS("Email is already registered", HttpStatus.CONFLICT),
-    INVALID_REGISTRATION_ROLE("Self-registration only supports LEARNER, STORE, or BAKER roles", HttpStatus.BAD_REQUEST),
+    INVALID_REGISTRATION_ROLE("Self-registration only supports CUSTOMER role", HttpStatus.BAD_REQUEST),
     INVALID_VERIFICATION_CODE("Verification code is invalid or expired", HttpStatus.BAD_REQUEST),
     VERIFICATION_EMAIL_DELIVERY_FAILED("Verification email could not be sent", HttpStatus.BAD_GATEWAY),
     INVALID_CREDENTIALS("Invalid email or password", HttpStatus.UNAUTHORIZED),

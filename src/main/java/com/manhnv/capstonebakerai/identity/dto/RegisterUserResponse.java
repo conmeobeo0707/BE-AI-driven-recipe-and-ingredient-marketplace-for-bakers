@@ -1,25 +1,21 @@
 package com.manhnv.capstonebakerai.identity.dto;
 
 import com.manhnv.capstonebakerai.identity.enums.Role;
-import com.manhnv.capstonebakerai.identity.enums.SkillLevel;
+import com.manhnv.capstonebakerai.identity.enums.UserStatus;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record RegisterUserResponse(
-        UUID userId,
-        String name,
+        UUID id,
+        String fullName,
         String email,
         Role role,
         String phone,
-        Boolean isActive,
-        Boolean isConfirmed,
-        String avatarUrl,
+        UserStatus status,
         String address,
-        String bod,
+        String dateOfBirth,
         String gender,
-        SkillLevel skillLevel,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime createdAt
 ) {
 }

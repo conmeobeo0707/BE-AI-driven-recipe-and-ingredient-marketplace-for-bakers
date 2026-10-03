@@ -2,11 +2,12 @@ package com.manhnv.capstonebakerai.identity.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
-import com.manhnv.capstonebakerai.identity.entity.PasswordResetCode;
+import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
 import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
 import com.manhnv.capstonebakerai.identity.event.PasswordResetRequestedEvent;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
-import com.manhnv.capstonebakerai.identity.repository.PasswordResetCodeRepository;
+import com.manhnv.capstonebakerai.identity.repository.VerificationCodeRepository;
 import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
 import com.manhnv.capstonebakerai.identity.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
             "If an active account exists, a password reset code has been sent");
 
     private final UserRepository userRepository;
-    private final PasswordResetCodeRepository codeRepository;
+    private final VerificationCodeRepository codeRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -50,14 +51,16 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         }
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        PasswordResetCode resetCode = codeRepository.findByUserUserId(user.getUserId())
-                .orElseGet(PasswordResetCode::new);
+        VerificationCode resetCode = codeRepository
+                .findByUserUserIdAndPurpose(user.getUserId(), VerificationPurpose.PASSWORD_RESET)
+                .orElseGet(VerificationCode::new);
         if (resetCode.getCreatedAt() != null && resetCode.getCreatedAt().plus(resendCooldown).isAfter(now)) {
             return REQUEST_RESPONSE;
         }
 
         String code = "%06d".formatted(SECURE_RANDOM.nextInt(1_000_000));
         resetCode.setUser(user);
+        resetCode.setPurpose(VerificationPurpose.PASSWORD_RESET);
         resetCode.setCodeHash(passwordEncoder.encode(code));
         resetCode.setCreatedAt(now);
         resetCode.setExpiresAt(now.plus(codeExpiration));
@@ -72,7 +75,8 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         User user = userRepository.findByEmailIgnoreCase(normalize(email))
                 .filter(account -> Boolean.TRUE.equals(account.getIsActive()))
                 .orElseThrow(this::invalidCode);
-        PasswordResetCode resetCode = codeRepository.findByUserIdForUpdate(user.getUserId())
+        VerificationCode resetCode = codeRepository
+                .findByUserIdAndPurposeForUpdate(user.getUserId(), VerificationPurpose.PASSWORD_RESET)
                 .orElseThrow(this::invalidCode);
         checkCode(resetCode, code);
         return new MessageResponse("Code verified. Submit the code again with a new password");
@@ -84,7 +88,8 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         User user = userRepository.findByEmailIgnoreCaseForUpdate(normalize(email))
                 .filter(account -> Boolean.TRUE.equals(account.getIsActive()))
                 .orElseThrow(this::invalidCode);
-        PasswordResetCode resetCode = codeRepository.findByUserIdForUpdate(user.getUserId())
+        VerificationCode resetCode = codeRepository
+                .findByUserIdAndPurposeForUpdate(user.getUserId(), VerificationPurpose.PASSWORD_RESET)
                 .orElseThrow(this::invalidCode);
         checkCode(resetCode, code);
 
@@ -96,7 +101,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         return new MessageResponse("Password reset successfully. Please log in again");
     }
 
-    private void checkCode(PasswordResetCode resetCode, String code) {
+    private void checkCode(VerificationCode resetCode, String code) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         if (!resetCode.getExpiresAt().isAfter(now)) {
             throw invalidCode();

@@ -1,5 +1,6 @@
-package com.manhnv.capstonebakerai.identity.entity;
+package com.manhnv.capstonebakerai.customer.entity;
 
+import com.manhnv.capstonebakerai.identity.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -13,31 +14,30 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "password_reset_codes")
+@Table(name = "customers")
 @Getter
 @Setter
 @NoArgsConstructor
-public class PasswordResetCode {
+public class Customer {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "password_reset_code_id", nullable = false, updatable = false)
-    private UUID passwordResetCodeId;
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(name = "code_hash", nullable = false, length = 255)
-    private String codeHash;
+    @Column(name = "hobby_id")
+    private UUID hobbyId;
 
-    @Column(name = "expires_at", nullable = false)
-    private LocalDateTime expiresAt;
+    @Column(name = "skill_level", length = 20)
+    private String skillLevel;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
+    @Column(name = "is_confirmed", nullable = false)
+    private boolean isConfirmed;
 }
