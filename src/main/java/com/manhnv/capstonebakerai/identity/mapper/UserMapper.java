@@ -14,6 +14,7 @@ public interface UserMapper {
 
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "customer", ignore = true)
+    @Mapping(target = "avatarUrl", ignore = true)
     @Mapping(target = "password", source = "encodedPassword")
     @Mapping(target = "email", source = "normalizedEmail")
     @Mapping(target = "fullName", source = "request.fullName")

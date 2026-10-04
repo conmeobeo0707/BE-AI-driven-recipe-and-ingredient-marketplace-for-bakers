@@ -1,12 +1,15 @@
 package com.manhnv.capstonebakerai.identity.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.identity.dto.AuthenticationResult;
 import com.manhnv.capstonebakerai.identity.dto.LoginRequest;
 import com.manhnv.capstonebakerai.identity.dto.LoginResponse;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.RefreshToken;
 import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.identity.enums.Role;
+import com.manhnv.capstonebakerai.identity.enums.UserStatus;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
 import com.manhnv.capstonebakerai.identity.repository.UserRepository;
@@ -115,12 +118,15 @@ public class AuthenticationServiceImpl implements AuthenticationService{
     }
 
     private void checkUserCanLogin(User user) {
-        if (!Boolean.TRUE.equals(user.getIsConfirmed())) {
-            throw new AppException(IdentityErrorCode.EMAIL_NOT_VERIFIED);
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AppException(IdentityErrorCode.ACCOUNT_DISABLED);
         }
 
-        if (!Boolean.TRUE.equals(user.getIsActive())) {
-            throw new AppException(IdentityErrorCode.ACCOUNT_DISABLED);
+        if (user.getRole() == Role.CUSTOMER) {
+            Customer customer = user.getCustomer();
+            if (customer == null || !customer.isConfirmed()) {
+                throw new AppException(IdentityErrorCode.EMAIL_NOT_VERIFIED);
+            }
         }
     }
 
