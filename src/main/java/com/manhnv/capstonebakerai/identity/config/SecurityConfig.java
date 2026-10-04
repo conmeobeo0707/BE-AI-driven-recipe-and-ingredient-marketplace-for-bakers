@@ -69,6 +69,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password/verify",
                                 "/api/v1/auth/reset-password"
                         ).permitAll()
+                        .requestMatchers(
+                                "/api/v1/admin/accounts",
+                                "/api/v1/admin/accounts/**"
+                        ).hasRole("ADMIN")
                         .anyRequest().authenticated())
                         .oauth2ResourceServer(oauth2 -> oauth2
                                 // Public auth endpoints work without the old access token.
