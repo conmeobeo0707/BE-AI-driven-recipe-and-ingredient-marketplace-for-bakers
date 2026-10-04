@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
 import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.identity.enums.UserStatus;
 import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
 import com.manhnv.capstonebakerai.identity.event.PasswordResetRequestedEvent;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
@@ -46,7 +47,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Transactional
     public MessageResponse requestCode(String email) {
         User user = userRepository.findByEmailIgnoreCaseForUpdate(normalize(email)).orElse(null);
-        if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
+        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
             return REQUEST_RESPONSE;
         }
 
@@ -73,7 +74,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Transactional
     public MessageResponse verifyCode(String email, String code) {
         User user = userRepository.findByEmailIgnoreCase(normalize(email))
-                .filter(account -> Boolean.TRUE.equals(account.getIsActive()))
+                .filter(account -> account.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(this::invalidCode);
         VerificationCode resetCode = codeRepository
                 .findByUserIdAndPurposeForUpdate(user.getUserId(), VerificationPurpose.PASSWORD_RESET)
@@ -86,7 +87,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Transactional
     public MessageResponse resetPassword(String email, String code, String newPassword) {
         User user = userRepository.findByEmailIgnoreCaseForUpdate(normalize(email))
-                .filter(account -> Boolean.TRUE.equals(account.getIsActive()))
+                .filter(account -> account.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(this::invalidCode);
         VerificationCode resetCode = codeRepository
                 .findByUserIdAndPurposeForUpdate(user.getUserId(), VerificationPurpose.PASSWORD_RESET)

@@ -76,19 +76,14 @@ public class User {
     @Column(length = 20)
     private String gender;
 
-    // Compatibility for existing auth/reset services; status is the stored source of truth.
-    @Transient
-    public Boolean getIsActive() {
-        return status == UserStatus.ACTIVE;
-    }
+    @Column(name = "avatar_url", length = 2048)
+    private String avatarUrl;
 
-    // Existing auth services access Customer's email confirmation through these methods.
     @Transient
     public Boolean getIsConfirmed() {
         if (role == Role.CUSTOMER) {
             return customer != null && customer.isConfirmed();
         }
-        // Internal staff accounts do not use customer email verification.
         return role != null;
     }
 
