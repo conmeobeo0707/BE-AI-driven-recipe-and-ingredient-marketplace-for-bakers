@@ -86,7 +86,6 @@ Các tên entity trong bảng là ví dụ định hướng, chưa phải ERD đ
 ### Phân biệt nguyên liệu và sản phẩm
 
 - `Ingredient`: nguyên liệu chuẩn, ví dụ “Bột mì đa dụng”.
-- `RecipeIngredient`: công thức cần nguyên liệu nào, số lượng và đơn vị, ví dụ 250 g bột mì đa dụng.
 - `Product`: mặt hàng cụ thể của cửa hàng, ví dụ bột mì nhãn X, gói 1 kg.
 
 Việc tách này giúp tìm công thức theo nguyên liệu và ghép sản phẩm cửa hàng với nhu cầu của công thức. Không so khớp chỉ bằng tên sản phẩm tự do nếu đã có liên kết với nguyên liệu chuẩn.

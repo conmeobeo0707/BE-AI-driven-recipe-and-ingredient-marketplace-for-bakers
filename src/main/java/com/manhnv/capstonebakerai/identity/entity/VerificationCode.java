@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "verification_code", uniqueConstraints =
+@Table(name = "verification_codes", uniqueConstraints =
         @UniqueConstraint(name = "uk_verification_code_user_purpose", columnNames = {"user_id", "purpose"}))
 @Getter
 @Setter
