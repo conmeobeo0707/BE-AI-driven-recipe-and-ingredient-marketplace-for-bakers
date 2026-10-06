@@ -69,19 +69,30 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password/verify",
                                 "/api/v1/auth/reset-password"
                         ).permitAll()
+                        // Swagger / OpenAPI cho phép public
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/swagger-ui/index.html",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs.yaml",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
                         .requestMatchers(
                                 "/api/v1/admin/accounts",
                                 "/api/v1/admin/accounts/**"
                         ).hasRole("ADMIN")
                         .anyRequest().authenticated())
-                        .oauth2ResourceServer(oauth2 -> oauth2
-                                // Public auth endpoints work without the old access token.
-                                .bearerTokenResolver(request -> publicAuthEndpoints.matches(request)
-                                        ? null : bearerTokenResolver.resolve(request))
-                                .authenticationEntryPoint(securityExceptionHandler)
-                                .accessDeniedHandler(securityExceptionHandler)
-                                .jwt(jwt -> jwt
-                                        .jwtAuthenticationConverter(jwtAuthenticationConverter)));
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        // Public auth endpoints work without the old access token.
+                        .bearerTokenResolver(request -> publicAuthEndpoints.matches(request)
+                                ? null : bearerTokenResolver.resolve(request))
+                        .authenticationEntryPoint(securityExceptionHandler)
+                        .accessDeniedHandler(securityExceptionHandler)
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(jwtAuthenticationConverter)));
 
         return http.build();
     }
