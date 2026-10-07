@@ -1,7 +1,6 @@
 package com.manhnv.capstonebakerai.payment.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
-import com.manhnv.capstonebakerai.payment.dto.response.WalletResponse;
 import com.manhnv.capstonebakerai.payment.entity.Wallet;
 import com.manhnv.capstonebakerai.payment.exception.WalletErrorCode;
 import com.manhnv.capstonebakerai.payment.mapper.WalletMapper;
