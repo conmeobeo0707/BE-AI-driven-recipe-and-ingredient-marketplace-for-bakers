@@ -1,10 +1,10 @@
 CREATE TABLE stores (
     store_id UUID PRIMARY KEY,
     user_id UUID NOT NULL UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
-    revenue NUMERIC(19, 2) NOT NULL DEFAULT 0,
-    rating NUMERIC(3, 2) NOT NULL DEFAULT 0,
+    revenue NUMERIC(19, 2) NOT NULMERIC(3, 2) NOT NULL DEFAULT 0,
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
-    description TEXT,
+    descriptiL DEFAULT 0,
+    rating NUon TEXT,
     logo_url VARCHAR(2048),
     status VARCHAR(20) NOT NULL DEFAULT 'CLOSED',
     created_at TIMESTAMP NOT NULL,
