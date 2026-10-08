@@ -8,20 +8,23 @@ import com.manhnv.capstonebakerai.identity.dto.UpdateStaffAccountRequest;
 import com.manhnv.capstonebakerai.identity.entity.User;
 import com.manhnv.capstonebakerai.identity.enums.Role;
 import com.manhnv.capstonebakerai.identity.enums.UserStatus;
+import com.manhnv.capstonebakerai.identity.event.StaffAccountCreatedEvent;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
 import com.manhnv.capstonebakerai.identity.repository.UserRepository;
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.SQLException;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -30,10 +33,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AdminAccountServiceImpl implements  AdminAccountService{
 
-    private static final Set<Role> MANAGED_ROLES = Set.of(Role.ADMIN, Role.STAFF, Role.BAKER_STAFF);
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final Set<Role> MANAGED_ROLES = Set.of(Role.STAFF, Role.MANAGER, Role.BAKER_STAFF);
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -46,11 +51,14 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
             throw new AppException(IdentityErrorCode.EMAIL_ALREADY_EXISTS);
         }
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        byte[] randomBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        String generatedPassword = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
 
         User user = User.builder()
                 .fullName(request.fullName().trim())
                 .email(email)
-                .password(passwordEncoder.encode(request.password()))
+                .password(passwordEncoder.encode(generatedPassword))
                 .role(request.role())
                 .status(UserStatus.ACTIVE)
                 .phone(request.phone())
@@ -62,9 +70,9 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
                 .updatedAt(now)
                 .build();
 
+        User savedUser;
         try {
-            User savedUser = userRepository.saveAndFlush(user);
-            return toResponse(savedUser);
+            savedUser = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException exception) {
             if (exception.getMostSpecificCause() instanceof SQLException sqlException
                     && "23505".equals(sqlException.getSQLState())) {
@@ -74,6 +82,13 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
             }
             throw exception;
         }
+        eventPublisher.publishEvent(new StaffAccountCreatedEvent(
+                savedUser.getUserId(),
+                savedUser.getEmail(),
+                savedUser.getFullName(),
+                savedUser.getRole()
+        ));
+        return toResponse(savedUser);
     }
 
     @Override
@@ -93,6 +108,7 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
     }
 
     @Override
+    @Transactional
     public StaffAccountResponse update(UUID id, UpdateStaffAccountRequest request) {
         validateRole(request.role());
 
