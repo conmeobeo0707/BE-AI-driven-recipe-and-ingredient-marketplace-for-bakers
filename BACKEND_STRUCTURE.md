@@ -480,6 +480,25 @@ Không chạy DROP CASCADE để tự xóa các đối tượng phụ thuộc ng
 Kiểm thử cục bộ, không kết nối Neon:
 `mvn -Dtest=VerificationCodePurposeTest clean test`
 
+## 17. Admin tạo tài khoản nhân viên
+
+`POST /api/v1/admin/accounts` chỉ cho ADMIN gọi, hỗ trợ tạo STAFF, MANAGER và BAKER_STAFF. Không hỗ trợ tạo ADMIN hoặc CUSTOMER qua API này. Request không có password; backend dùng SecureRandom sinh mật khẩu ngẫu nhiên cho từng tài khoản, chỉ lưu BCrypt hash trong users.password_hash. Mật khẩu không được trả về response, đưa vào event, ghi log hoặc gửi email. Tài khoản có status=ACTIVE và không tạo hồ sơ Customer.
+
+```json
+{
+  "fullName": "Baker Staff Name",
+  "email": "bakerstaff@example.com",
+  "role": "BAKER_STAFF",
+  "phone": "0901234567"
+}
+```
+
+Sau khi lưu User, service phát StaffAccountCreatedEvent. StaffAccountMailListener xử lý bất đồng bộ sau khi transaction commit, gửi email thông báo gồm họ tên, email đăng nhập, role và hướng dẫn dùng chức năng Quên mật khẩu để nhận mã 6 chữ số và tự đặt mật khẩu. Email không chứa link hoặc mật khẩu. Transaction rollback không gửi email. Lỗi SMTP được ghi log theo user ID; tài khoản đã tạo không bị rollback và nhân viên vẫn có thể dùng flow quên mật khẩu. HTTP 201 xác nhận tạo tài khoản, không bảo đảm email đã được giao; hiện chưa có retry tự động.
+
+Nhân viên mở màn hình đăng nhập của hệ thống và chọn Quên mật khẩu, nhập email để gọi POST /api/v1/auth/forgot-password, nhận mã qua email, kiểm tra mã bằng POST /api/v1/auth/forgot-password/verify nếu frontend sử dụng bước này, rồi đặt mật khẩu bằng POST /api/v1/auth/reset-password. Không cần cấu hình URL thiết lập mật khẩu trong backend. Flow reset hiện có kiểm tra mã, hash mật khẩu mới, xóa mã đã dùng và revoke refresh token. Sau đó nhân viên đăng nhập bằng mật khẩu tự đặt; ADMIN không biết mật khẩu đó.
+
+API lấy danh sách trả List của ba role, không paging. Khi cập nhật role hoặc status, service thu hồi refresh token trong cùng transaction. Access JWT đã cấp vẫn có thể dùng tới lúc hết hạn.
+
 ## Tài liệu tham khảo
 
 - [Spring Modulith — tổ chức module trong Spring Boot](https://docs.spring.io/spring-modulith/reference/fundamentals.html)

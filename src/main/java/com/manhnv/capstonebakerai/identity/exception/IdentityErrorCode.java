@@ -18,8 +18,8 @@ public enum IdentityErrorCode implements ErrorCode {
     EMAIL_NOT_VERIFIED("Email has not been verified", HttpStatus.FORBIDDEN),
     ACCOUNT_DISABLED("Account is disabled", HttpStatus.FORBIDDEN),
     INVALID_PASSWORD_RESET_CODE("Password reset code is invalid or expired", HttpStatus.BAD_REQUEST),
-    ACCOUNT_NOT_FOUND("Staff or manager account was not found", HttpStatus.NOT_FOUND),
-    INVALID_STAFF_ROLE("Only STAFF and MANAGER roles are supported", HttpStatus.BAD_REQUEST);
+    ACCOUNT_NOT_FOUND("Staff, manager or baker staff account was not found", HttpStatus.NOT_FOUND),
+    INVALID_STAFF_ROLE("Only STAFF, MANAGER and BAKER_STAFF roles are supported", HttpStatus.BAD_REQUEST);
 
     private final String message;
     private final HttpStatus httpStatus;

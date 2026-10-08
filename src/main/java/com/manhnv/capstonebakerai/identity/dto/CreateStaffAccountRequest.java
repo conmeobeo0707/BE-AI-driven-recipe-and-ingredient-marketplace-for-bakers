@@ -16,10 +16,6 @@ public record CreateStaffAccountRequest(
         @Size(max = 255)
         String email,
 
-        @NotBlank
-        @Size(min = 8, max = 72)
-        String password,
-
         @NotNull
         Role role,
 
