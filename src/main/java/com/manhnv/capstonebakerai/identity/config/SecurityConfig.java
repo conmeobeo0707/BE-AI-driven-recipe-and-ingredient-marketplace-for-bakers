@@ -69,6 +69,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password/verify",
                                 "/api/v1/auth/reset-password"
                         ).permitAll()
+                        .requestMatchers(
+                                "/api/v1/notifications/**"
+                        ).permitAll()
                         // Swagger / OpenAPI cho phép public
                         .requestMatchers(
                                 "/swagger-ui.html",
