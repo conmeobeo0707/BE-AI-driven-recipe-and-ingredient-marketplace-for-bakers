@@ -24,14 +24,15 @@ public class Product {
     private String sku;
     @Column(nullable = false, length = 255)
     private String name;
+    @Column(columnDefinition = "text")
     private String description;
     @Column(name = "category_id")
     private UUID categoryId;
-    @Column(name = "img_url")
+    @Column(name = "img_url", columnDefinition = "text")
     private String imgUrl;
     @Column(name = "discount_percent", precision = 5, scale = 2)
     private BigDecimal discountPercent = BigDecimal.ZERO;
-    @Column(name = "storage_guide")
+    @Column(name = "storage_guide", columnDefinition = "text")
     private String storageGuide;
     @Column(name = "min_stock", precision = 10, scale = 2)
     private BigDecimal minStock = BigDecimal.ZERO;
@@ -43,6 +44,7 @@ public class Product {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "product_status_enum")
     private ProductStatus status = ProductStatus.ACTIVE;
+    @Column(length = 255)
     private String brand;
     @Column(name = "is_combo", nullable = false)
     private boolean combo;

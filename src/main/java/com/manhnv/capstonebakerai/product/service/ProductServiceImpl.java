@@ -9,6 +9,7 @@ import com.manhnv.capstonebakerai.product.repository.*;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,6 +65,14 @@ public class ProductServiceImpl implements ProductService {
 
     @Override @Transactional(readOnly = true)
     public Page<ProductResponse> list(UUID categoryId, String brand, Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged() || pageable.getPageNumber() < 0
+                || pageable.getPageSize() < 1 || pageable.getPageSize() > 100)
+            throw invalid("Page must be non-negative and page size cannot exceed 100");
+        if (brand != null && brand.length() > 255) throw invalid("Brand filter cannot exceed 255 characters");
+        Set<String> sortableFields = Set.of("productId", "sku", "name", "brand", "status", "createdAt", "updatedAt", "stockQuantity");
+        for (Sort.Order order : pageable.getSort()) {
+            if (!sortableFields.contains(order.getProperty())) throw invalid("Unsupported product sort field");
+        }
         Specification<Product> spec = (root, query, cb) -> cb.conjunction();
         if (categoryId != null)
             spec = spec.and((root, query, cb) -> cb.equal(root.get("categoryId"), categoryId));
@@ -84,13 +93,45 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductUnitResponse> manageUnits(UUID productId, List<ProductUnitRequest> requests) {
         getEntity(productId);
         if (requests == null || requests.isEmpty()) throw invalid("At least one product unit is required");
-        long baseCount = requests.stream().filter(r -> r != null && Boolean.TRUE.equals(r.base())).count();
-        if (!requests.isEmpty() && baseCount != 1) throw invalid("Exactly one unit must be the base unit");
+        List<ProductUnit> existingUnits = units.findByProductId(productId);
         Set<UUID> seen = new HashSet<>();
-        UUID updatedBy = null;
+        Map<UUID, ProductUnitRequest> updatesById = new HashMap<>();
         for (ProductUnitRequest request : requests) {
             validateUnit(request);
-            if (request.unitId() != null && !seen.add(request.unitId())) throw invalid("Duplicate unit id");
+            if (request.unitId() != null) {
+                if (!seen.add(request.unitId())) throw invalid("Duplicate unit id");
+                if (units.findByUnitIdAndProductId(request.unitId(), productId).isEmpty())
+                    throw new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product");
+                updatesById.put(request.unitId(), request);
+            }
+        }
+        List<String> resultingNames = new ArrayList<>();
+        long baseCount = 0;
+        for (ProductUnit existing : existingUnits) {
+            ProductUnitRequest update = updatesById.get(existing.getUnitId());
+            if (update == null) {
+                resultingNames.add(existing.getUnitName());
+                if (existing.getStatus() == UnitStatus.ACTIVE && existing.isBase()) baseCount++;
+            } else if (update.status() == UnitStatus.ACTIVE || update.status() == null) {
+                resultingNames.add(update.unitName().trim());
+                if (Boolean.TRUE.equals(update.base())) baseCount++;
+            } else {
+                resultingNames.add(update.unitName().trim());
+            }
+        }
+        for (ProductUnitRequest request : requests) {
+            if (request.unitId() == null) {
+                resultingNames.add(request.unitName().trim());
+                if ((request.status() == null || request.status() == UnitStatus.ACTIVE) && Boolean.TRUE.equals(request.base())) baseCount++;
+            }
+        }
+        Set<String> uniqueNames = new HashSet<>();
+        for (String name : resultingNames) {
+            if (!uniqueNames.add(name.toLowerCase(Locale.ROOT))) throw invalid("Unit names must be unique within a product");
+        }
+        if (baseCount != 1) throw invalid("Exactly one active unit must be the base unit");
+        UUID updatedBy = null;
+        for (ProductUnitRequest request : requests) {
             if (Boolean.TRUE.equals(request.base()) && request.conversionFactor().compareTo(BigDecimal.ONE) != 0)
                 throw invalid("Base unit conversion_factor must be 1");
             ProductUnit unit = request.unitId() == null ? new ProductUnit()
@@ -253,7 +294,8 @@ public class ProductServiceImpl implements ProductService {
     private void validateUnit(ProductUnitRequest r) {
         if (r == null || r.unitName() == null || r.unitName().isBlank() || r.conversionFactor() == null
                 || r.conversionFactor().signum() <= 0 || !fits(r.conversionFactor(), 10, 2)
-                || r.sellingPrice() == null || r.sellingPrice().signum() < 0 || !fits(r.sellingPrice(), 15, 2))
+                || r.base() == null || r.sellingPrice() == null || r.sellingPrice().signum() < 0
+                || !fits(r.sellingPrice(), 15, 2) || r.unitName().trim().length() > 100)
             throw invalid("Unit name, positive conversion factor, and non-negative selling price are required");
     }
     private AppException invalid(String message) { return new AppException(ProductErrorCode.INVALID_REQUEST, message); }

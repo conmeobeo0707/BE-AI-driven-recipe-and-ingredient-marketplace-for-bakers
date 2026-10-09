@@ -2,6 +2,8 @@ package com.manhnv.capstonebakerai.product.controller;
 
 import com.manhnv.capstonebakerai.product.dtos.*;
 import com.manhnv.capstonebakerai.product.service.ProductService;
+import com.manhnv.capstonebakerai.common.response.ApiResponse;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -16,31 +18,31 @@ public class ProductController {
     private final ProductService service;
     public ProductController(ProductService service) { this.service = service; }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
-    public ProductResponse create(@RequestBody ProductUpsertRequest request) { return service.create(request); }
+    public ApiResponse<ProductResponse> create(@Valid @RequestBody ProductUpsertRequest request) { return ApiResponse.success(service.create(request)); }
     @PutMapping("/{productId}")
-    public ProductResponse update(@PathVariable UUID productId, @RequestBody ProductUpsertRequest request) { return service.update(productId, request); }
+    public ApiResponse<ProductResponse> update(@PathVariable UUID productId, @Valid @RequestBody ProductUpsertRequest request) { return ApiResponse.success(service.update(productId, request)); }
     @GetMapping("/{productId}")
-    public ProductResponse get(@PathVariable UUID productId) { return service.get(productId); }
+    public ApiResponse<ProductResponse> get(@PathVariable UUID productId) { return ApiResponse.success(service.get(productId)); }
     @GetMapping
-    public Page<ProductResponse> list(@RequestParam(required = false) UUID categoryId,
-            @RequestParam(required = false) String brand, Pageable pageable) { return service.list(categoryId, brand, pageable); }
-    @DeleteMapping("/{productId}") @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deactivate(@PathVariable UUID productId) { service.deactivate(productId); }
+    public ApiResponse<Page<ProductResponse>> list(@RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) String brand, Pageable pageable) { return ApiResponse.success(service.list(categoryId, brand, pageable)); }
+    @DeleteMapping("/{productId}")
+    public ApiResponse<Void> deactivate(@PathVariable UUID productId) { service.deactivate(productId); return ApiResponse.success(null); }
     @PutMapping("/{productId}/units")
-    public List<ProductUnitResponse> manageUnits(@PathVariable UUID productId,
-            @RequestBody List<ProductUnitRequest> units) { return service.manageUnits(productId, units); }
+    public ApiResponse<List<ProductUnitResponse>> manageUnits(@PathVariable UUID productId,
+            @Valid @RequestBody List<@Valid ProductUnitRequest> units) { return ApiResponse.success(service.manageUnits(productId, units)); }
     @PatchMapping("/{productId}/units/{unitId}/price")
-    public ProductUnitResponse updateSellingPrice(@PathVariable UUID productId, @PathVariable UUID unitId,
-            @RequestBody SellingPriceRequest request) {
-        return service.updateSellingPrice(productId, unitId, request.sellingPrice());
+    public ApiResponse<ProductUnitResponse> updateSellingPrice(@PathVariable UUID productId, @PathVariable UUID unitId,
+            @Valid @RequestBody SellingPriceRequest request) {
+        return ApiResponse.success(service.updateSellingPrice(productId, unitId, request.sellingPrice()));
     }
     @GetMapping("/{productId}/units/{unitId}/price-history")
-    public List<UnitPriceHistoryResponse> unitPriceHistory(@PathVariable UUID productId, @PathVariable UUID unitId) {
-        return service.getUnitPriceHistory(productId, unitId);
+    public ApiResponse<List<UnitPriceHistoryResponse>> unitPriceHistory(@PathVariable UUID productId, @PathVariable UUID unitId) {
+        return ApiResponse.success(service.getUnitPriceHistory(productId, unitId));
     }
     @PutMapping("/{productId}/combo-items")
-    public List<ComboItemRequest> setComboItems(@PathVariable UUID productId,
-            @RequestBody List<ComboItemRequest> items) { return service.setComboItems(productId, items); }
+    public ApiResponse<List<ComboItemRequest>> setComboItems(@PathVariable UUID productId,
+            @Valid @RequestBody List<@Valid ComboItemRequest> items) { return ApiResponse.success(service.setComboItems(productId, items)); }
     @GetMapping("/{productId}/combo-stock")
-    public BigDecimal comboStock(@PathVariable UUID productId) { return service.calculateComboStock(productId); }
+    public ApiResponse<BigDecimal> comboStock(@PathVariable UUID productId) { return ApiResponse.success(service.calculateComboStock(productId)); }
 }
