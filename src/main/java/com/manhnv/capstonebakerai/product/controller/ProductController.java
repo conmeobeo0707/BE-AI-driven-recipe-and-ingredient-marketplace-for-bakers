@@ -28,14 +28,6 @@ public class ProductController {
             @RequestParam(required = false) String brand, Pageable pageable) { return ApiResponse.success(service.list(categoryId, brand, pageable)); }
     @DeleteMapping("/{productId}")
     public ApiResponse<Void> deactivate(@PathVariable UUID productId) { service.deactivate(productId); return ApiResponse.success(null); }
-    @PutMapping("/{productId}/units")
-    public ApiResponse<List<ProductUnitResponse>> manageUnits(@PathVariable UUID productId,
-            @Valid @RequestBody List<@Valid ProductUnitRequest> units) { return ApiResponse.success(service.manageUnits(productId, units)); }
-    @PatchMapping("/{productId}/units/{unitId}/price")
-    public ApiResponse<ProductUnitResponse> updateSellingPrice(@PathVariable UUID productId, @PathVariable UUID unitId,
-            @Valid @RequestBody SellingPriceRequest request) {
-        return ApiResponse.success(service.updateSellingPrice(productId, unitId, request.sellingPrice()));
-    }
     @GetMapping("/{productId}/units/{unitId}/price-history")
     public ApiResponse<List<UnitPriceHistoryResponse>> unitPriceHistory(@PathVariable UUID productId, @PathVariable UUID unitId) {
         return ApiResponse.success(service.getUnitPriceHistory(productId, unitId));

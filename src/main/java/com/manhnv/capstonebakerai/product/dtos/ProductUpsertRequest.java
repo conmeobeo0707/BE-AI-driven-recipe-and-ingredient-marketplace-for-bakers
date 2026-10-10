@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public record ProductUpsertRequest(
@@ -21,4 +22,5 @@ public record ProductUpsertRequest(
         @DecimalMin("0.00") @Digits(integer = 8, fraction = 2) BigDecimal maxStock,
         ProductStatus status,
         @Size(max = 255) String brand,
-        Boolean combo) { }
+        Boolean combo,
+        @jakarta.validation.Valid List<@jakarta.validation.Valid ProductUnitRequest> units) { }

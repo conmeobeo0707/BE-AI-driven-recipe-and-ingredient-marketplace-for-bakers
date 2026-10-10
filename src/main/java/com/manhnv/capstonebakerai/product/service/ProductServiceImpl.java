@@ -40,12 +40,18 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public ProductResponse create(ProductUpsertRequest request) {
         validateProductRequest(request);
+        if (request.units() == null || request.units().isEmpty())
+            throw invalid("At least one product unit is required when creating a product");
+        if (request.units().stream().anyMatch(unit -> unit != null && unit.unitId() != null))
+            throw invalid("Unit IDs must not be provided when creating a product");
         if (products.existsBySkuIgnoreCase(request.sku().trim()))
             throw new AppException(ProductErrorCode.DUPLICATE_SKU);
         validateCategory(request.categoryId());
         Product product = new Product();
         apply(product, request, true);
-        return toResponse(products.save(product));
+        Product savedProduct = products.save(product);
+        synchronizeUnits(savedProduct.getProductId(), request.units());
+        return toResponse(savedProduct);
     }
 
     @Override
@@ -57,7 +63,12 @@ public class ProductServiceImpl implements ProductService {
             throw new AppException(ProductErrorCode.DUPLICATE_SKU);
         validateCategory(request.categoryId());
         apply(product, request, false);
-        return toResponse(products.save(product));
+        Product updatedProduct = products.save(product);
+        if (request.units() != null) {
+            if (request.units().isEmpty()) throw invalid("The unit list cannot be empty");
+            synchronizeUnits(productId, request.units());
+        }
+        return toResponse(updatedProduct);
     }
 
     @Override @Transactional(readOnly = true)
@@ -89,54 +100,37 @@ public class ProductServiceImpl implements ProductService {
         products.save(product);
     }
 
-    @Override
-    public List<ProductUnitResponse> manageUnits(UUID productId, List<ProductUnitRequest> requests) {
+    private void synchronizeUnits(UUID productId, List<ProductUnitRequest> requests) {
         getEntity(productId);
         if (requests == null || requests.isEmpty()) throw invalid("At least one product unit is required");
         List<ProductUnit> existingUnits = units.findByProductId(productId);
         Set<UUID> seen = new HashSet<>();
-        Map<UUID, ProductUnitRequest> updatesById = new HashMap<>();
+        Set<String> requestedNames = new HashSet<>();
+        long activeBaseCount = 0;
         for (ProductUnitRequest request : requests) {
             validateUnit(request);
             if (request.unitId() != null) {
                 if (!seen.add(request.unitId())) throw invalid("Duplicate unit id");
                 if (units.findByUnitIdAndProductId(request.unitId(), productId).isEmpty())
                     throw new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product");
-                updatesById.put(request.unitId(), request);
             }
-        }
-        List<String> resultingNames = new ArrayList<>();
-        long baseCount = 0;
-        for (ProductUnit existing : existingUnits) {
-            ProductUnitRequest update = updatesById.get(existing.getUnitId());
-            if (update == null) {
-                resultingNames.add(existing.getUnitName());
-                if (existing.getStatus() == UnitStatus.ACTIVE && existing.isBase()) baseCount++;
-            } else if (update.status() == UnitStatus.ACTIVE || update.status() == null) {
-                resultingNames.add(update.unitName().trim());
-                if (Boolean.TRUE.equals(update.base())) baseCount++;
-            } else {
-                resultingNames.add(update.unitName().trim());
+            boolean active = request.status() == null || request.status() == UnitStatus.ACTIVE;
+            if (!requestedNames.add(request.unitName().trim().toLowerCase(Locale.ROOT)))
+                throw invalid("Unit names must be unique within a product");
+            if (active) {
+                if (Boolean.TRUE.equals(request.base())) activeBaseCount++;
             }
+            if (active && Boolean.TRUE.equals(request.base())
+                    && request.conversionFactor().compareTo(BigDecimal.ONE) != 0)
+                throw invalid("Base unit conversion_factor must be 1");
         }
-        for (ProductUnitRequest request : requests) {
-            if (request.unitId() == null) {
-                resultingNames.add(request.unitName().trim());
-                if ((request.status() == null || request.status() == UnitStatus.ACTIVE) && Boolean.TRUE.equals(request.base())) baseCount++;
-            }
-        }
-        Set<String> uniqueNames = new HashSet<>();
-        for (String name : resultingNames) {
-            if (!uniqueNames.add(name.toLowerCase(Locale.ROOT))) throw invalid("Unit names must be unique within a product");
-        }
-        if (baseCount != 1) throw invalid("Exactly one active unit must be the base unit");
+        if (activeBaseCount != 1) throw invalid("Exactly one active unit must be the base unit");
+
+        Map<UUID, ProductUnit> existingById = new HashMap<>();
+        existingUnits.forEach(unit -> existingById.put(unit.getUnitId(), unit));
         UUID updatedBy = null;
         for (ProductUnitRequest request : requests) {
-            if (Boolean.TRUE.equals(request.base()) && request.conversionFactor().compareTo(BigDecimal.ONE) != 0)
-                throw invalid("Base unit conversion_factor must be 1");
-            ProductUnit unit = request.unitId() == null ? new ProductUnit()
-                    : units.findByUnitIdAndProductId(request.unitId(), productId)
-                    .orElseThrow(() -> new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product"));
+            ProductUnit unit = request.unitId() == null ? new ProductUnit() : existingById.get(request.unitId());
             boolean priceChanged = unit.getUnitId() == null || unit.getSellingPrice() == null
                     || unit.getSellingPrice().compareTo(request.sellingPrice()) != 0;
             unit.setProductId(productId);
@@ -156,25 +150,13 @@ public class ProductServiceImpl implements ProductService {
                 priceHistory.save(history);
             }
         }
-        return units.findByProductId(productId).stream().map(this::toUnitResponse).toList();
-    }
-
-    @Override
-    public ProductUnitResponse updateSellingPrice(UUID productId, UUID unitId, BigDecimal sellingPrice) {
-        if (sellingPrice == null || sellingPrice.signum() < 0 || !fits(sellingPrice, 15, 2))
-            throw invalid("Selling price must be non-negative and fit DECIMAL(15,2)");
-        ProductUnit unit = units.findByUnitIdAndProductId(unitId, productId)
-                .orElseThrow(() -> new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product"));
-        if (unit.getSellingPrice().compareTo(sellingPrice) != 0) {
-            unit.setSellingPrice(sellingPrice);
-            units.save(unit);
-            UnitPriceHistory history = new UnitPriceHistory();
-            history.setUnitId(unitId);
-            history.setUpdatedBy(SecurityUtils.getCurrentUserId());
-            history.setSellingPrice(sellingPrice);
-            priceHistory.save(history);
+        for (ProductUnit existing : existingUnits) {
+            if (!seen.contains(existing.getUnitId())) {
+                existing.setStatus(UnitStatus.INACTIVE);
+                existing.setBase(false);
+                units.save(existing);
+            }
         }
-        return toUnitResponse(unit);
     }
 
     @Override @Transactional(readOnly = true)
