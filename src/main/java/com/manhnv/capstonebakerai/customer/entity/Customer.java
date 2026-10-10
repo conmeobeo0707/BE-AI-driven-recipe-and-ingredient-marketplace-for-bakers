@@ -1,8 +1,11 @@
 package com.manhnv.capstonebakerai.customer.entity;
 
-import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.customer.enums.SkillLevel;
+import com.manhnv.capstonebakerai.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -35,8 +38,9 @@ public class Customer {
     @Column(name = "hobby_id")
     private UUID hobbyId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "skill_level", length = 20)
-    private String skillLevel;
+    private SkillLevel skillLevel;
 
     @Column(name = "is_confirmed", nullable = false)
     private boolean isConfirmed;

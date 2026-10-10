@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.identity.entity;
 
 import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
+import com.manhnv.capstonebakerai.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

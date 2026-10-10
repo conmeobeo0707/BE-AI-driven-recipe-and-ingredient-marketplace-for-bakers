@@ -1,13 +1,15 @@
 package com.manhnv.capstonebakerai.identity.service;
 
+import com.manhnv.capstonebakerai.customer.entity.Customer;
+import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
-import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
 import com.manhnv.capstonebakerai.identity.exception.InvalidVerificationCodeException;
 import com.manhnv.capstonebakerai.identity.exception.VerificationEmailDeliveryException;
 import com.manhnv.capstonebakerai.identity.repository.VerificationCodeRepository;
-import com.manhnv.capstonebakerai.identity.repository.UserRepository;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
@@ -31,6 +33,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
@@ -39,6 +42,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
     public EmailVerificationServiceImpl(
             UserRepository userRepository,
+            CustomerRepository customerRepository,
             VerificationCodeRepository verificationCodeRepository,
             PasswordEncoder passwordEncoder,
             JavaMailSender mailSender,
@@ -46,6 +50,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             @Value("${app.verification-code-expiration}") Duration codeExpiration
     ) {
         this.userRepository = userRepository;
+        this.customerRepository = customerRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailSender = mailSender;
@@ -56,9 +61,14 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendRegistrationCode(UUID userId) {
-        userRepository.findById(userId)
-                .filter(user -> !Boolean.TRUE.equals(user.getIsConfirmed()))
-                .ifPresent(this::sendVerificationCode);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        customerRepository.findByUserId(userId)
+                .filter(customer -> !customer.isConfirmed())
+                .ifPresent(customer -> sendVerificationCode(user));
     }
 
     private void sendVerificationCode(User user) {
@@ -95,7 +105,10 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         User user = userRepository.findByEmailIgnoreCase(normalize(email))
                 .orElseThrow(InvalidVerificationCodeException::new);
 
-        if (Boolean.TRUE.equals(user.getIsConfirmed())) {
+        Customer customer = customerRepository.findByUserId(user.getUserId())
+                .orElseThrow(InvalidVerificationCodeException::new);
+
+        if (customer.isConfirmed()) {
             return new MessageResponse("Email is already verified");
         }
 
@@ -109,8 +122,9 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             throw new InvalidVerificationCodeException();
         }
 
-        user.setIsConfirmed(true);
+        customer.setConfirmed(true);
         user.setUpdatedAt(now);
+        customerRepository.save(customer);
         userRepository.save(user);
         verificationCodeRepository.delete(verification);
         return new MessageResponse("Email verified successfully");
@@ -124,10 +138,9 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
         if (optionalUser.isPresent()) {
             User user = optionalUser.get();
-
-            if (!Boolean.TRUE.equals(user.getIsConfirmed())) {
-                sendVerificationCode(user);
-            }
+            customerRepository.findByUserId(user.getUserId())
+                    .filter(customer -> !customer.isConfirmed())
+                    .ifPresent(customer -> sendVerificationCode(user));
         }
 
         return new MessageResponse(

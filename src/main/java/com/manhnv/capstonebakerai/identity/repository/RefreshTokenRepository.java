@@ -1,7 +1,7 @@
 package com.manhnv.capstonebakerai.identity.repository;
 
 import com.manhnv.capstonebakerai.identity.entity.RefreshToken;
-import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.user.entity.User;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;

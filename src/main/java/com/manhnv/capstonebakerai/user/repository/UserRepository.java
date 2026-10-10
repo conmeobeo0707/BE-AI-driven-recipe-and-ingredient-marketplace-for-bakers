@@ -1,7 +1,7 @@
-package com.manhnv.capstonebakerai.identity.repository;
+package com.manhnv.capstonebakerai.user.repository;
 
-import com.manhnv.capstonebakerai.identity.entity.User;
-import com.manhnv.capstonebakerai.identity.enums.Role;
+import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;

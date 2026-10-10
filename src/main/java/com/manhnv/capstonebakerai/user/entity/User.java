@@ -1,20 +1,15 @@
-package com.manhnv.capstonebakerai.identity.entity;
+package com.manhnv.capstonebakerai.user.entity;
 
-import com.manhnv.capstonebakerai.customer.entity.Customer;
-import com.manhnv.capstonebakerai.identity.enums.Role;
-import com.manhnv.capstonebakerai.identity.enums.UserStatus;
+import com.manhnv.capstonebakerai.user.enums.Role;
+import com.manhnv.capstonebakerai.user.enums.UserStatus;
 import jakarta.persistence.Column;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -61,9 +56,6 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.MERGE)
-    private Customer customer;
-
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -78,19 +70,4 @@ public class User {
 
     @Column(name = "avatar_url", length = 2048)
     private String avatarUrl;
-
-    @Transient
-    public Boolean getIsConfirmed() {
-        if (role == Role.CUSTOMER) {
-            return customer != null && customer.isConfirmed();
-        }
-        return role != null;
-    }
-
-    public void setIsConfirmed(Boolean confirmed) {
-        if (role != Role.CUSTOMER || customer == null) {
-            throw new IllegalStateException("Email confirmation requires a Customer profile");
-        }
-        customer.setConfirmed(Boolean.TRUE.equals(confirmed));
-    }
 }
