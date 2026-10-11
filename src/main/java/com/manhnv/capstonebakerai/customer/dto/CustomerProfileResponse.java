@@ -9,7 +9,6 @@ import java.util.UUID;
 public record CustomerProfileResponse(
         UUID customerId,
         SkillLevel skillLevel,
-        UUID primaryHobbyId,
         boolean emailVerified,
         List<HobbyResponse> hobbies
 ) {

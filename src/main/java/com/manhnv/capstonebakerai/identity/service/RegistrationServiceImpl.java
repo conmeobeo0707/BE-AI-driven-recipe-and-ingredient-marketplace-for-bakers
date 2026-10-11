@@ -61,7 +61,6 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         Customer customer = new Customer();
         customer.setUser(savedUser);
-        customer.setHobbyId(null);
         customer.setSkillLevel(null);
         customer.setConfirmed(false);
         customerRepository.saveAndFlush(customer);

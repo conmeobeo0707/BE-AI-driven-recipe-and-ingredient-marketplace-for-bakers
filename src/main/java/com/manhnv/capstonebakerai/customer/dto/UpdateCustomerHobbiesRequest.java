@@ -7,8 +7,6 @@ import java.util.UUID;
 
 public record UpdateCustomerHobbiesRequest(
         @NotNull
-        Set<UUID> hobbyIds,
-
-        UUID primaryHobbyId
+        Set<UUID> hobbyIds
 ) {
 }

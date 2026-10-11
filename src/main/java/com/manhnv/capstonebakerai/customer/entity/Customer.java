@@ -35,9 +35,6 @@ public class Customer {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(name = "hobby_id")
-    private UUID hobbyId;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "skill_level", length = 20)
     private SkillLevel skillLevel;

@@ -54,17 +54,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         Customer customer = findCustomer(userId);
         Set<UUID> hobbyIds = request.hobbyIds();
 
-        if (request.primaryHobbyId() != null && !hobbyIds.contains(request.primaryHobbyId())) {
-            throw new AppException(CustomerErrorCode.INVALID_HOBBY_SELECTION);
-        }
-
         List<HobbyResponse> hobbies = hobbyService.getActiveByIds(hobbyIds);
         if (hobbies.size() != hobbyIds.size()) {
             throw new AppException(CustomerErrorCode.INVALID_HOBBY_SELECTION);
         }
-
-        customer.setHobbyId(request.primaryHobbyId());
-        customerRepository.save(customer);
 
         customerHobbyRepository.deleteAllByCustomerId(customer.getId());
         List<CustomerHobby> customerHobbies = hobbyIds.stream()
@@ -92,7 +85,6 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         return new CustomerProfileResponse(
                 customer.getId(),
                 customer.getSkillLevel(),
-                customer.getHobbyId(),
                 customer.isConfirmed(),
                 hobbies
         );
