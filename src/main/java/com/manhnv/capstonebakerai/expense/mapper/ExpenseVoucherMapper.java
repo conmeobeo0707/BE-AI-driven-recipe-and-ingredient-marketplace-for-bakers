@@ -5,7 +5,7 @@ import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper
+@Mapper(componentModel = "spring")
 public interface ExpenseVoucherMapper {
     @Mapping(source = "expenseCategory.id", target = "expenseCategoryId")
     @Mapping(source = "expenseCategory.name", target = "expenseCategoryName")

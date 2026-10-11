@@ -5,7 +5,7 @@ import com.manhnv.capstonebakerai.payment.entity.TopUpTransaction;
 import org.mapstruct.Mapper;
 
 
-@Mapper
+@Mapper(componentModel = "spring")
 public interface TopUpTransactionMapper {
     TopUpTransactionResponse toResponse(TopUpTransaction topUpTransaction);
 }

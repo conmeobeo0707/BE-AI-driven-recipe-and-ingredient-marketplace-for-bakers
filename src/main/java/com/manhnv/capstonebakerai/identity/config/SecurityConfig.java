@@ -74,6 +74,9 @@ public class SecurityConfig {
                                 "/v3/api-docs.yaml",
                                 "/v3/api-docs.yaml/**"
                         ).permitAll()
+                        .requestMatchers(
+                                "/api/v1/notifications/**"
+                        ).permitAll()
                         // Swagger / OpenAPI cho phép public
                         .requestMatchers(
                                 "/swagger-ui.html",
