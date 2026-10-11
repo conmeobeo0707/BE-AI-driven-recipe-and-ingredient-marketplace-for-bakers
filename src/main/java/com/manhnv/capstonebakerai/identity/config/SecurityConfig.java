@@ -67,7 +67,12 @@ public class SecurityConfig {
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/forgot-password/verify",
-                                "/api/v1/auth/reset-password"
+                                "/api/v1/auth/reset-password",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml",
+                                "/v3/api-docs.yaml/**"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/v1/notifications/**"
@@ -87,6 +92,24 @@ public class SecurityConfig {
                                 "/api/v1/admin/accounts",
                                 "/api/v1/admin/accounts/**"
                         ).hasRole("ADMIN")
+                        .requestMatchers(
+                                "/api/v1/users/me",
+                                "/api/v1/users/me/**"
+                        )
+                        .authenticated()
+                        .requestMatchers(
+                                "/api/v1/customers/me",
+                                "/api/v1/customers/me/**"
+                        )
+                        .hasRole("CUSTOMER")
+                        .requestMatchers(
+                                "/api/v1/admin/hobbies",
+                                "/api/v1/admin/hobbies/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.GET, "/api/v1/hobbies"
+                        )
+                        .hasAnyRole("CUSTOMER", "ADMIN")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         // Public auth endpoints work without the old access token.

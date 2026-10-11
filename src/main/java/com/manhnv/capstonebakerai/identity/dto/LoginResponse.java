@@ -1,6 +1,6 @@
 package com.manhnv.capstonebakerai.identity.dto;
 
-import com.manhnv.capstonebakerai.identity.enums.Role;
+import com.manhnv.capstonebakerai.user.enums.Role;
 
 import java.util.UUID;
 

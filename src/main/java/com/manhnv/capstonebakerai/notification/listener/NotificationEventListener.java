@@ -1,7 +1,7 @@
 package com.manhnv.capstonebakerai.notification.listener;
 
-import com.manhnv.capstonebakerai.identity.repository.UserRepository;
 import com.manhnv.capstonebakerai.notification.service.NotificationService;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

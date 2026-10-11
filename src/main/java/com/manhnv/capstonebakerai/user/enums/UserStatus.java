@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.identity.enums;
+package com.manhnv.capstonebakerai.user.enums;
 
 public enum UserStatus {
     ACTIVE,

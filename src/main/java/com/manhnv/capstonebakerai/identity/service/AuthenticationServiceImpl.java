@@ -2,17 +2,18 @@ package com.manhnv.capstonebakerai.identity.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.customer.entity.Customer;
+import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.identity.dto.AuthenticationResult;
 import com.manhnv.capstonebakerai.identity.dto.LoginRequest;
 import com.manhnv.capstonebakerai.identity.dto.LoginResponse;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.RefreshToken;
-import com.manhnv.capstonebakerai.identity.entity.User;
-import com.manhnv.capstonebakerai.identity.enums.Role;
-import com.manhnv.capstonebakerai.identity.enums.UserStatus;
+import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.enums.Role;
+import com.manhnv.capstonebakerai.user.enums.UserStatus;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
-import com.manhnv.capstonebakerai.identity.repository.UserRepository;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -46,6 +47,7 @@ public class AuthenticationServiceImpl implements AuthenticationService{
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
+    private final CustomerRepository customerRepository;
 
     @Value("${app.jwt.issuer}")
     private String issuer;
@@ -123,8 +125,12 @@ public class AuthenticationServiceImpl implements AuthenticationService{
         }
 
         if (user.getRole() == Role.CUSTOMER) {
-            Customer customer = user.getCustomer();
-            if (customer == null || !customer.isConfirmed()) {
+            Customer customer = customerRepository.findByUserId(user.getUserId())
+                    .orElseThrow(() -> new AppException(
+                            IdentityErrorCode.EMAIL_NOT_VERIFIED
+                    ));
+
+            if (!customer.isConfirmed()) {
                 throw new AppException(IdentityErrorCode.EMAIL_NOT_VERIFIED);
             }
         }
