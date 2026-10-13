@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum IdentityErrorCode implements ErrorCode {
     EMAIL_ALREADY_EXISTS("Email is already registered", HttpStatus.CONFLICT),
-    INVALID_REGISTRATION_ROLE("Self-registration only supports CUSTOMER role", HttpStatus.BAD_REQUEST),
     INVALID_VERIFICATION_CODE("Verification code is invalid or expired", HttpStatus.BAD_REQUEST),
     VERIFICATION_EMAIL_DELIVERY_FAILED("Verification email could not be sent", HttpStatus.BAD_GATEWAY),
     INVALID_CREDENTIALS("Invalid email or password", HttpStatus.UNAUTHORIZED),
@@ -17,9 +16,7 @@ public enum IdentityErrorCode implements ErrorCode {
     INVALID_AUTH_REQUEST("Authentication request header is missing", HttpStatus.FORBIDDEN),
     EMAIL_NOT_VERIFIED("Email has not been verified", HttpStatus.FORBIDDEN),
     ACCOUNT_DISABLED("Account is disabled", HttpStatus.FORBIDDEN),
-    INVALID_PASSWORD_RESET_CODE("Password reset code is invalid or expired", HttpStatus.BAD_REQUEST),
-    ACCOUNT_NOT_FOUND("Staff, manager or baker staff account was not found", HttpStatus.NOT_FOUND),
-    INVALID_STAFF_ROLE("Only STAFF, MANAGER and BAKER_STAFF roles are supported", HttpStatus.BAD_REQUEST);
+    INVALID_PASSWORD_RESET_CODE("Password reset code is invalid or expired", HttpStatus.BAD_REQUEST);
 
     private final String message;
     private final HttpStatus httpStatus;

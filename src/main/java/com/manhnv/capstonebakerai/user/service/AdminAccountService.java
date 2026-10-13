@@ -1,9 +1,9 @@
-package com.manhnv.capstonebakerai.identity.service;
+package com.manhnv.capstonebakerai.user.service;
 
-import com.manhnv.capstonebakerai.identity.dto.CreateStaffAccountRequest;
-import com.manhnv.capstonebakerai.identity.dto.StaffAccountResponse;
-import com.manhnv.capstonebakerai.identity.dto.UpdateAccountStatusRequest;
-import com.manhnv.capstonebakerai.identity.dto.UpdateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.dto.CreateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.dto.StaffAccountResponse;
+import com.manhnv.capstonebakerai.user.dto.UpdateAccountStatusRequest;
+import com.manhnv.capstonebakerai.user.dto.UpdateStaffAccountRequest;
 
 import java.util.List;
 import java.util.UUID;
