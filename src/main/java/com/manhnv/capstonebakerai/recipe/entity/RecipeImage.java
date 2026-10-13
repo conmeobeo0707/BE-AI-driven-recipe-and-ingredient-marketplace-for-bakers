@@ -1,0 +1,33 @@
+package com.manhnv.capstonebakerai.recipe.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "recipe_image")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class RecipeImage {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "recipe_id", nullable = false)
+    private Recipe recipe;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "media_id", nullable = false)
+    private Media media;
+
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder;
+}
