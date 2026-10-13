@@ -6,15 +6,13 @@ import java.util.UUID;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 public interface StocktakeNoteRepository extends JpaRepository<StocktakeNote, UUID> {
     boolean existsByCode(String code);
     boolean existsByStatus(StocktakeStatus status);
-    @Query("select n from StocktakeNote n where (:status is null or n.status=:status)")
-    Page<StocktakeNote> search(@Param("status") StocktakeStatus status, Pageable pageable);
+    Page<StocktakeNote> findByStatus(StocktakeStatus status, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select n from StocktakeNote n where n.noteId=:id")
-    java.util.Optional<StocktakeNote> lockById(@Param("id") UUID id);
+    java.util.Optional<StocktakeNote> lockById(@org.springframework.data.repository.query.Param("id") UUID id);
 }

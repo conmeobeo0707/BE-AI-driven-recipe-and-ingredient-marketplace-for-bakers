@@ -5,6 +5,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.UUID;
+import java.util.Collection;
+import java.util.Map;
+import java.math.BigDecimal;
 
 public interface ProductService {
     ProductResponse create(ProductUpsertRequest request);
@@ -15,4 +18,10 @@ public interface ProductService {
     List<UnitPriceHistoryResponse> getUnitPriceHistory(UUID productId, UUID unitId);
     List<ComboItemRequest> setComboItems(UUID productId, List<ComboItemRequest> items);
     java.math.BigDecimal calculateComboStock(UUID productId);
+    List<InventoryProduct> lockInventoryProducts(Collection<UUID> productIds);
+    InventoryProduct getInventoryProduct(UUID productId);
+    InventoryUnit getActiveInventoryUnit(UUID productId, UUID unitId);
+    InventoryUnit getActiveBaseInventoryUnit(UUID productId);
+    void adjustInventoryStock(Map<UUID, BigDecimal> stockDeltas);
+    List<ProductResponse> listLowStockProducts();
 }

@@ -2,8 +2,8 @@ package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
-import com.manhnv.capstonebakerai.product.entities.Product;
-import com.manhnv.capstonebakerai.product.entities.ProductUnit;
+import com.manhnv.capstonebakerai.product.dtos.InventoryProduct;
+import com.manhnv.capstonebakerai.product.dtos.InventoryUnit;
 import com.manhnv.capstonebakerai.warehouse.dto.*;
 import com.manhnv.capstonebakerai.warehouse.entity.*;
 import com.manhnv.capstonebakerai.warehouse.enums.*;
@@ -27,63 +27,68 @@ public class StockInService {
         this.notes=notes; this.items=items; this.lots=lots; this.suppliers=suppliers; this.support=support;
     }
     @Transactional(readOnly = true)
-    public Page<StockInNote> list(NoteStatus status, Pageable pageable) { return notes.search(status, pageable); }
+    public Page<StockInNote> list(NoteStatus status, Pageable pageable) {
+        return status==null?notes.findAll(pageable):notes.findByStatus(status,pageable);
+    }
     @Transactional(readOnly = true)
-    public StockInDetailResponse get(UUID id) {
-        StockInNote note=notes.findById(id).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stock-in note not found"));
-        return new StockInDetailResponse(note,items.findByNoteIdOrderByItemId(id));
+    public StockInDetailResponse get(UUID noteId) {
+        StockInNote stockInNote=notes.findById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stock-in note not found"));
+        return new StockInDetailResponse(stockInNote,items.findByNoteIdOrderByItemId(noteId));
     }
     @Transactional
-    public StockInNote create(StockInCreateRequest req) {
-        if (!suppliers.existsById(req.supplierId())) throw new AppException(WarehouseErrorCode.NOT_FOUND, "Supplier not found");
-        var ids=req.items().stream().map(StockInItemRequest::productId).distinct().toList();
-        Map<UUID,Product> productMap=new HashMap<>(); support.lockProducts(ids).forEach(p->productMap.put(p.getProductId(),p));
-        BigDecimal total=BigDecimal.ZERO; List<StockInItem> pendingItems=new ArrayList<>();
-        StockInNote n=new StockInNote(); n.setCode(WarehouseSupport.code("SIN")); n.setSupplierId(req.supplierId());
-        n.setReceiptDate(req.receiptDate()==null?LocalDateTime.now():req.receiptDate()); n.setNote(req.note());
-        for (var r:req.items()) {
-            Product p=productMap.get(r.productId()); if(p==null)throw new AppException(WarehouseErrorCode.NOT_FOUND,"Product not found");
-            if(p.isCombo())throw WarehouseSupport.error("Inventory movements are not supported for combo products");
-            ProductUnit u=support.unit(r.productId(),r.unitId());
-            BigDecimal line=WarehouseSupport.money(r.quantity().multiply(r.unitPrice()));
-            if(line.precision()-line.scale()>13)throw WarehouseSupport.error("Stock-in line total exceeds the database precision limit");
-            total=total.add(line);
-            StockInItem i=new StockInItem(); i.setNoteId(n.getNoteId()); i.setProductId(p.getProductId()); i.setUnitId(u.getUnitId());
-            i.setQuantity(r.quantity()); i.setConversionFactor(u.getConversionFactor()); i.setUnitPrice(r.unitPrice()); i.setTotalPrice(line); i.setExpiryDate(r.expiryDate());
-            // Persist item rows after the note ID has been generated.
-            pendingItems.add(i);
+    public StockInNote create(StockInCreateRequest request) {
+        if (!suppliers.existsById(request.supplierId())) throw new AppException(WarehouseErrorCode.NOT_FOUND, "Supplier not found");
+        List<UUID> productIds=request.items().stream().map(StockInItemRequest::productId).distinct().toList();
+        Map<UUID,InventoryProduct> productsById=new HashMap<>();
+        support.lockProducts(productIds).forEach(product->productsById.put(product.productId(),product));
+        BigDecimal totalAmount=BigDecimal.ZERO; List<StockInItem> pendingItems=new ArrayList<>();
+        StockInNote stockInNote=new StockInNote(); stockInNote.setCode(WarehouseSupport.code("SIN")); stockInNote.setSupplierId(request.supplierId());
+        stockInNote.setReceiptDate(request.receiptDate()==null?LocalDateTime.now():request.receiptDate()); stockInNote.setNote(request.note());
+        for (StockInItemRequest itemRequest:request.items()) {
+            InventoryProduct inventoryProduct=productsById.get(itemRequest.productId());
+            if(inventoryProduct==null)throw new AppException(WarehouseErrorCode.NOT_FOUND,"Product not found");
+            InventoryUnit inventoryUnit=support.unit(itemRequest.productId(),itemRequest.unitId());
+            BigDecimal lineTotal=WarehouseSupport.money(itemRequest.quantity().multiply(itemRequest.unitPrice()));
+            if(lineTotal.precision()-lineTotal.scale()>13)throw WarehouseSupport.error("Stock-in line total exceeds the database precision limit");
+            totalAmount=totalAmount.add(lineTotal);
+            StockInItem stockInItem=new StockInItem(); stockInItem.setProductId(inventoryProduct.productId()); stockInItem.setUnitId(inventoryUnit.unitId());
+            stockInItem.setQuantity(itemRequest.quantity()); stockInItem.setConversionFactor(inventoryUnit.conversionFactor());
+            stockInItem.setUnitPrice(itemRequest.unitPrice()); stockInItem.setTotalPrice(lineTotal); stockInItem.setExpiryDate(itemRequest.expiryDate());
+            pendingItems.add(stockInItem);
         }
-        total=WarehouseSupport.money(total); BigDecimal paid=req.paidAmount()==null?BigDecimal.ZERO:WarehouseSupport.money(req.paidAmount());
-        if(paid.compareTo(total)>0) throw WarehouseSupport.error("Paid amount cannot exceed total amount");
-        n.setTotalAmount(total); n.setPaidAmount(paid); n.setDebtAmount(total.subtract(paid));
-        n.setPaymentStatus(paid.signum()==0?PaymentStatus.UNPAID:paid.compareTo(total)==0?PaymentStatus.PAID:PaymentStatus.PARTIAL);
-        n.setStatus(NoteStatus.PENDING);
-        StockInNote saved=notes.save(n);
-        pendingItems.forEach(i->i.setNoteId(saved.getNoteId())); items.saveAll(pendingItems);
-        return saved;
+        totalAmount=WarehouseSupport.money(totalAmount); BigDecimal paidAmount=request.paidAmount()==null?BigDecimal.ZERO:WarehouseSupport.money(request.paidAmount());
+        if(paidAmount.compareTo(totalAmount)>0) throw WarehouseSupport.error("Paid amount cannot exceed total amount");
+        stockInNote.setTotalAmount(totalAmount); stockInNote.setPaidAmount(paidAmount); stockInNote.setDebtAmount(totalAmount.subtract(paidAmount));
+        stockInNote.setPaymentStatus(paidAmount.signum()==0?PaymentStatus.UNPAID:paidAmount.compareTo(totalAmount)==0?PaymentStatus.PAID:PaymentStatus.PARTIAL);
+        stockInNote.setStatus(NoteStatus.PENDING);
+        StockInNote savedNote=notes.save(stockInNote);
+        pendingItems.forEach(stockInItem->stockInItem.setNoteId(savedNote.getNoteId())); items.saveAll(pendingItems);
+        return savedNote;
     }
     @Transactional
-    public StockInNote complete(UUID id) {
-        StockInNote n=notes.lockById(id).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stock-in note not found"));
-        if(n.getStatus()!=NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT,"Only PENDING stock-in notes can be completed");
-        List<StockInItem> lines=items.findByNoteIdOrderByItemId(id);
-        var ids=lines.stream().map(StockInItem::getProductId).distinct().toList();
-        Map<UUID,Product> productMap=new HashMap<>(); support.lockProducts(ids).forEach(p->productMap.put(p.getProductId(),p));
-        for(StockInItem i:lines) {
-            BigDecimal baseQty=i.getQuantity().multiply(i.getConversionFactor()).setScale(2, java.math.RoundingMode.HALF_UP);
-            if(baseQty.signum()<=0||baseQty.precision()-baseQty.scale()>8)throw WarehouseSupport.error("Converted stock quantity exceeds the database precision limit");
-            BigDecimal cost=WarehouseSupport.money(i.getUnitPrice().divide(i.getConversionFactor(), 8, java.math.RoundingMode.HALF_UP));
-            StockLot lot=new StockLot(); lot.setProductId(i.getProductId()); lot.setStockInNoteId(id); lot.setLotCode("LOT-"+UUID.randomUUID().toString().substring(0,12).toUpperCase(Locale.ROOT));
-            lot.setInitialQuantity(baseQty); lot.setCurrentQuantity(baseQty); lot.setUnitCost(cost); lot.setExpiryDate(i.getExpiryDate());
-            lot.setStatus(i.getExpiryDate()!=null&&i.getExpiryDate().isBefore(LocalDate.now())?LotStatus.EXPIRED:LotStatus.STORAGE); lots.save(lot);
-            Product p=productMap.get(i.getProductId()); if(p.getStockQuantity()==null)p.setStockQuantity(BigDecimal.ZERO); p.setStockQuantity(p.getStockQuantity().add(baseQty));
+    public StockInNote complete(UUID noteId) {
+        StockInNote stockInNote=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stock-in note not found"));
+        if(stockInNote.getStatus()!=NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT,"Only PENDING stock-in notes can be completed");
+        List<StockInItem> stockInItems=items.findByNoteIdOrderByItemId(noteId);
+        List<UUID> productIds=stockInItems.stream().map(StockInItem::getProductId).distinct().toList();
+        support.lockProducts(productIds);
+        Map<UUID,BigDecimal> stockDeltas=new HashMap<>();
+        for(StockInItem stockInItem:stockInItems) {
+            BigDecimal baseQuantity=stockInItem.getQuantity().multiply(stockInItem.getConversionFactor()).setScale(2, java.math.RoundingMode.HALF_UP);
+            if(baseQuantity.signum()<=0||baseQuantity.precision()-baseQuantity.scale()>8)throw WarehouseSupport.error("Converted stock quantity exceeds the database precision limit");
+            BigDecimal baseUnitCost=WarehouseSupport.money(stockInItem.getUnitPrice().divide(stockInItem.getConversionFactor(), 8, java.math.RoundingMode.HALF_UP));
+            StockLot stockLot=new StockLot(); stockLot.setProductId(stockInItem.getProductId()); stockLot.setStockInNoteId(noteId); stockLot.setLotCode("LOT-"+UUID.randomUUID().toString().substring(0,12).toUpperCase(Locale.ROOT));
+            stockLot.setInitialQuantity(baseQuantity); stockLot.setCurrentQuantity(baseQuantity); stockLot.setUnitCost(baseUnitCost); stockLot.setExpiryDate(stockInItem.getExpiryDate());
+            stockLot.setStatus(stockInItem.getExpiryDate()!=null&&stockInItem.getExpiryDate().isBefore(LocalDate.now())?LotStatus.EXPIRED:LotStatus.STORAGE); lots.save(stockLot);
+            stockDeltas.merge(stockInItem.getProductId(),baseQuantity,BigDecimal::add);
         }
-        n.setStatus(NoteStatus.COMPLETED); n.setUpdatedAt(LocalDateTime.now()); return notes.save(n);
+        support.adjustStock(stockDeltas);
+        stockInNote.setStatus(NoteStatus.COMPLETED); stockInNote.setUpdatedAt(LocalDateTime.now()); return notes.save(stockInNote);
     }
     @Transactional
-    public StockInNote cancel(UUID id) {
-        StockInNote n=notes.lockById(id).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stock-in note not found"));
-        if(n.getStatus()!=NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT,"Only PENDING stock-in notes can be cancelled");
-        n.setStatus(NoteStatus.CANCELLED); n.setUpdatedAt(LocalDateTime.now()); return notes.save(n);
+    public StockInNote cancel(UUID noteId) {
+        StockInNote stockInNote=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stock-in note not found"));
+        if(stockInNote.getStatus()!=NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT,"Only PENDING stock-in notes can be cancelled");
+        stockInNote.setStatus(NoteStatus.CANCELLED); stockInNote.setUpdatedAt(LocalDateTime.now()); return notes.save(stockInNote);
     }
 }

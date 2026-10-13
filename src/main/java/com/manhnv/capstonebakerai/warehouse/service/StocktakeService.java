@@ -2,7 +2,6 @@ package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
-import com.manhnv.capstonebakerai.product.entities.Product;
 import com.manhnv.capstonebakerai.warehouse.dto.*;
 import com.manhnv.capstonebakerai.warehouse.entity.*;
 import com.manhnv.capstonebakerai.warehouse.enums.*;
@@ -22,60 +21,85 @@ public class StocktakeService {
     private final StockLotRepository lots; private final WarehouseSupport support;
     public StocktakeService(StocktakeNoteRepository notes,StocktakeItemRepository items,StockLotRepository lots,WarehouseSupport support){this.notes=notes;this.items=items;this.lots=lots;this.support=support;}
     @Transactional(readOnly = true)
-    public Page<StocktakeNote> list(StocktakeStatus status, Pageable pageable) { return notes.search(status,pageable); }
+    public Page<StocktakeNote> list(StocktakeStatus status, Pageable pageable) {
+        return status==null?notes.findAll(pageable):notes.findByStatus(status,pageable);
+    }
     @Transactional(readOnly = true)
-    public StocktakeDetailResponse get(UUID id) {
-        StocktakeNote note=notes.findById(id).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
-        return new StocktakeDetailResponse(note,items.findByNoteIdOrderByItemId(id));
+    public StocktakeDetailResponse get(UUID noteId) {
+        StocktakeNote stocktakeNote=notes.findById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
+        return detail(stocktakeNote,items.findByNoteIdOrderByItemId(noteId));
     }
     @Transactional
-    public StocktakeNote create(StocktakeCreateRequest req) {
-        List<UUID> lotIds=req.lotIds().stream().distinct().sorted().toList();
-        if(lotIds.size()!=req.lotIds().size()) throw WarehouseSupport.error("Duplicate lotIds are not allowed");
-        List<StockLot> found=lots.findByLotIdIn(lotIds); if(found.size()!=lotIds.size()) throw new AppException(WarehouseErrorCode.NOT_FOUND,"One or more lots were not found");
-        List<UUID> productIds=found.stream().map(StockLot::getProductId).distinct().toList(); support.lockProducts(productIds);
-        List<StockLot> locked=lots.lockByLotIds(lotIds);
+    public StocktakeDetailResponse create(StocktakeCreateRequest request) {
+        List<UUID> productIds=request.productIds().stream().distinct().sorted().toList();
+        if(productIds.size()!=request.productIds().size()) throw WarehouseSupport.error("Duplicate productIds are not allowed");
+        support.lockProducts(productIds);
+        List<StockLot> foundLots=lots.findByProductIdInAndStatusInOrderByProductIdAscExpiryDateAscCreatedAtAsc(
+                productIds,List.of(LotStatus.STORAGE,LotStatus.EXPIRED,LotStatus.EMPTY));
+        Map<UUID,List<StockLot>> lotsByProduct=new HashMap<>();
+        foundLots.forEach(stockLot->lotsByProduct.computeIfAbsent(stockLot.getProductId(),productId->new ArrayList<>()).add(stockLot));
+        for(UUID productId:productIds) if(!lotsByProduct.containsKey(productId))
+            throw WarehouseSupport.error("Product has no stock lots to count: "+productId);
+        List<UUID> lotIds=foundLots.stream().map(StockLot::getLotId).toList();
+        List<StockLot> lockedLots=lots.lockByLotIds(lotIds);
         support.ensureLotsNotInDraftStocktake(lotIds);
-        StocktakeNote n=new StocktakeNote(); n.setCode(WarehouseSupport.code("STK")); n.setStocktakeDate(LocalDateTime.now()); n.setCreatedBy(SecurityUtils.getCurrentUserId()); n.setHandleBy(req.handleBy()); n.setStatus(StocktakeStatus.DRAFT);
-        StocktakeNote saved=notes.save(n); List<StocktakeItem> rows=new ArrayList<>();
-        for(StockLot lot:locked) {
-            if(lot.getStatus()==LotStatus.CANCELED) throw WarehouseSupport.error("Cancelled lots cannot be stocktaken");
-            StocktakeItem row=new StocktakeItem();row.setNoteId(saved.getNoteId());row.setProductId(lot.getProductId());row.setLotId(lot.getLotId());row.setSystemQuantity(lot.getCurrentQuantity());row.setUnitCost(lot.getUnitCost());rows.add(row);
+        StocktakeNote stocktakeNote=new StocktakeNote(); stocktakeNote.setCode(WarehouseSupport.code("STK")); stocktakeNote.setStocktakeDate(LocalDateTime.now()); stocktakeNote.setCreatedBy(SecurityUtils.getCurrentUserId()); stocktakeNote.setHandleBy(request.handleBy()); stocktakeNote.setStatus(StocktakeStatus.DRAFT);
+        StocktakeNote savedNote=notes.save(stocktakeNote); List<StocktakeItem> stocktakeItems=new ArrayList<>();
+        for(StockLot stockLot:lockedLots) {
+            if(stockLot.getStatus()==LotStatus.CANCELED) throw WarehouseSupport.error("Cancelled lots cannot be stocktaken");
+            StocktakeItem stocktakeItem=new StocktakeItem();stocktakeItem.setNoteId(savedNote.getNoteId());stocktakeItem.setProductId(stockLot.getProductId());stocktakeItem.setLotId(stockLot.getLotId());stocktakeItem.setSystemQuantity(stockLot.getCurrentQuantity());stocktakeItem.setUnitCost(stockLot.getUnitCost());stocktakeItems.add(stocktakeItem);
         }
-        items.saveAll(rows);return saved;
+        items.saveAll(stocktakeItems);return detail(savedNote,stocktakeItems);
     }
     @Transactional
-    public List<StocktakeItem> count(UUID noteId,StocktakeCountRequest req) {
-        StocktakeNote n=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
-        if(n.getStatus()!=StocktakeStatus.DRAFT) throw new AppException(WarehouseErrorCode.CONFLICT,"Only DRAFT stocktakes accept counts");
-        List<StocktakeItem> rows=items.findByNoteIdOrderByItemId(noteId); Map<UUID,StocktakeItem> rowMap=new HashMap<>();rows.forEach(r->rowMap.put(r.getLotId(),r));
-        Set<UUID> seen=new HashSet<>();
-        for(var count:req.items()) { if(!seen.add(count.lotId()))throw WarehouseSupport.error("Duplicate lot counts are not allowed"); StocktakeItem row=rowMap.get(count.lotId());if(row==null)throw WarehouseSupport.error("Lot is not part of this stocktake: "+count.lotId());row.setActualQuantity(count.actualQuantity());row.setReason(count.reason());row.setNote(count.note()); }
-        return items.saveAll(rows);
+    public StocktakeDetailResponse count(UUID noteId,StocktakeCountRequest request) {
+        StocktakeNote stocktakeNote=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
+        if(stocktakeNote.getStatus()!=StocktakeStatus.DRAFT) throw new AppException(WarehouseErrorCode.CONFLICT,"Only DRAFT stocktakes accept counts");
+        List<StocktakeItem> stocktakeItems=items.findByNoteIdOrderByItemId(noteId); Map<UUID,StocktakeItem> itemsById=new HashMap<>();stocktakeItems.forEach(stocktakeItem->itemsById.put(stocktakeItem.getItemId(),stocktakeItem));
+        Set<UUID> countedItemIds=new HashSet<>();
+        for(StocktakeCountRequest.CountedProduct productCount:request.products()) {
+            Set<UUID> productLots=new HashSet<>();
+            for(StocktakeCountRequest.CountedLot lotCount:productCount.lots()) {
+                if(!productLots.add(lotCount.itemId())||!countedItemIds.add(lotCount.itemId()))throw WarehouseSupport.error("Duplicate stocktake item counts are not allowed");
+                StocktakeItem stocktakeItem=itemsById.get(lotCount.itemId());
+                if(stocktakeItem==null||!stocktakeItem.getProductId().equals(productCount.productId()))throw WarehouseSupport.error("Stocktake item is not part of the specified product in this note");
+                stocktakeItem.setActualQuantity(lotCount.actualQuantity());stocktakeItem.setReason(lotCount.reason());stocktakeItem.setNote(lotCount.note());
+            }
+        }
+        return detail(stocktakeNote,items.saveAll(stocktakeItems));
     }
     @Transactional
-    public StocktakeNote complete(UUID noteId) {
-        StocktakeNote n=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
-        if(n.getStatus()!=StocktakeStatus.DRAFT)throw new AppException(WarehouseErrorCode.CONFLICT,"Only DRAFT stocktakes can be completed");
-        List<StocktakeItem> rows=items.findByNoteIdOrderByItemId(noteId);if(rows.isEmpty())throw WarehouseSupport.error("Stocktake must contain at least one lot");
-        List<UUID> pids=rows.stream().map(StocktakeItem::getProductId).distinct().sorted().toList();Map<UUID,Product> products=new HashMap<>();support.lockProducts(pids).forEach(p->products.put(p.getProductId(),p));
-        List<StockLot> lockedLots=lots.lockByLotIds(rows.stream().map(StocktakeItem::getLotId).toList());Map<UUID,StockLot> lotMap=new HashMap<>();lockedLots.forEach(l->lotMap.put(l.getLotId(),l));
-        for(StocktakeItem row:rows) {
-            if(row.getActualQuantity()==null)throw WarehouseSupport.error("Enter actual quantity for every lot before completing");
-            StockLot lot=lotMap.get(row.getLotId()); if(lot==null)throw new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake lot no longer exists");
-            if(lot.getCurrentQuantity().compareTo(row.getSystemQuantity())!=0)throw new AppException(WarehouseErrorCode.CONFLICT,"Lot changed during stocktake; cancel and create a new stocktake");
-            BigDecimal diff=row.getActualQuantity().subtract(row.getSystemQuantity()); if(diff.signum()!=0&&(row.getReason()==null||row.getReason().isBlank()))throw WarehouseSupport.error("Reason is required when counted quantity differs");
-            BigDecimal costAmount=WarehouseSupport.money(diff.multiply(row.getUnitCost()));if(costAmount.precision()-costAmount.scale()>13)throw WarehouseSupport.error("Stocktake cost amount exceeds the database precision limit");
-            row.setDiffQuantity(diff);row.setCostAmount(costAmount);
-            Product product=products.get(row.getProductId());if(product.getStockQuantity()==null)product.setStockQuantity(BigDecimal.ZERO);product.setStockQuantity(product.getStockQuantity().add(diff));
-            lot.setCurrentQuantity(row.getActualQuantity());lot.setStatus(lot.getCurrentQuantity().signum()==0?LotStatus.EMPTY:lot.getExpiryDate()!=null&&lot.getExpiryDate().isBefore(LocalDate.now())?LotStatus.EXPIRED:LotStatus.STORAGE);
+    public StocktakeDetailResponse complete(UUID noteId) {
+        StocktakeNote stocktakeNote=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
+        if(stocktakeNote.getStatus()!=StocktakeStatus.DRAFT)throw new AppException(WarehouseErrorCode.CONFLICT,"Only DRAFT stocktakes can be completed");
+        List<StocktakeItem> stocktakeItems=items.findByNoteIdOrderByItemId(noteId);if(stocktakeItems.isEmpty())throw WarehouseSupport.error("Stocktake must contain at least one lot");
+        List<UUID> productIds=stocktakeItems.stream().map(StocktakeItem::getProductId).distinct().sorted().toList();support.lockProducts(productIds);
+        List<StockLot> lockedLots=lots.lockByLotIds(stocktakeItems.stream().map(StocktakeItem::getLotId).toList());Map<UUID,StockLot> lotsById=new HashMap<>();lockedLots.forEach(stockLot->lotsById.put(stockLot.getLotId(),stockLot));
+        Map<UUID,BigDecimal> stockDeltas=new HashMap<>();
+        for(StocktakeItem stocktakeItem:stocktakeItems) {
+            if(stocktakeItem.getActualQuantity()==null)throw WarehouseSupport.error("Enter actual quantity for every lot before completing");
+            StockLot stockLot=lotsById.get(stocktakeItem.getLotId()); if(stockLot==null)throw new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake lot no longer exists");
+            if(stockLot.getCurrentQuantity().compareTo(stocktakeItem.getSystemQuantity())!=0)throw new AppException(WarehouseErrorCode.CONFLICT,"Lot changed during stocktake; cancel and create a new stocktake");
+            BigDecimal difference=stocktakeItem.getActualQuantity().subtract(stocktakeItem.getSystemQuantity()); if(difference.signum()!=0&&(stocktakeItem.getReason()==null||stocktakeItem.getReason().isBlank()))throw WarehouseSupport.error("Reason is required when counted quantity differs");
+            BigDecimal costAmount=WarehouseSupport.money(difference.multiply(stocktakeItem.getUnitCost()));if(costAmount.precision()-costAmount.scale()>13)throw WarehouseSupport.error("Stocktake cost amount exceeds the database precision limit");
+            stocktakeItem.setDiffQuantity(difference);stocktakeItem.setCostAmount(costAmount);
+            stockDeltas.merge(stocktakeItem.getProductId(),difference,BigDecimal::add);
+            stockLot.setCurrentQuantity(stocktakeItem.getActualQuantity());stockLot.setStatus(stockLot.getCurrentQuantity().signum()==0?LotStatus.EMPTY:stockLot.getExpiryDate()!=null&&stockLot.getExpiryDate().isBefore(LocalDate.now())?LotStatus.EXPIRED:LotStatus.STORAGE);
         }
-        items.saveAll(rows);n.setStatus(StocktakeStatus.COMPLETED);n.setUpdatedAt(LocalDateTime.now());return notes.save(n);
+        items.saveAll(stocktakeItems);support.adjustStock(stockDeltas);stocktakeNote.setStatus(StocktakeStatus.COMPLETED);stocktakeNote.setUpdatedAt(LocalDateTime.now());notes.save(stocktakeNote);return detail(stocktakeNote,stocktakeItems);
     }
     @Transactional
     public StocktakeNote cancel(UUID noteId) {
-        StocktakeNote n=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
-        if(n.getStatus()!=StocktakeStatus.DRAFT)throw new AppException(WarehouseErrorCode.CONFLICT,"Only DRAFT stocktakes can be cancelled");
-        n.setStatus(StocktakeStatus.CANCELLED);n.setUpdatedAt(LocalDateTime.now());return notes.save(n);
+        StocktakeNote stocktakeNote=notes.lockById(noteId).orElseThrow(()->new AppException(WarehouseErrorCode.NOT_FOUND,"Stocktake note not found"));
+        if(stocktakeNote.getStatus()!=StocktakeStatus.DRAFT)throw new AppException(WarehouseErrorCode.CONFLICT,"Only DRAFT stocktakes can be cancelled");
+        stocktakeNote.setStatus(StocktakeStatus.CANCELLED);stocktakeNote.setUpdatedAt(LocalDateTime.now());return notes.save(stocktakeNote);
+    }
+    private StocktakeDetailResponse detail(StocktakeNote note,List<StocktakeItem> rows) {
+        Map<UUID,List<StocktakeItem>> grouped=new LinkedHashMap<>();
+        rows.stream().sorted(Comparator.comparing(StocktakeItem::getProductId).thenComparing(StocktakeItem::getLotId))
+                .forEach(stocktakeItem->grouped.computeIfAbsent(stocktakeItem.getProductId(),productId->new ArrayList<>()).add(stocktakeItem));
+        List<StocktakeDetailResponse.ProductLots> products=grouped.entrySet().stream()
+                .map(entry->new StocktakeDetailResponse.ProductLots(entry.getKey(),List.copyOf(entry.getValue()))).toList();
+        return new StocktakeDetailResponse(note,products);
     }
 }

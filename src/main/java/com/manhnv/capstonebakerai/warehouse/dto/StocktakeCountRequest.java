@@ -8,8 +8,9 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
-public record StocktakeCountRequest(@NotEmpty List<@Valid CountedLot> items) {
-    public record CountedLot(@NotNull UUID lotId,
+public record StocktakeCountRequest(@NotEmpty List<@Valid CountedProduct> products) {
+    public record CountedProduct(@NotNull UUID productId, @NotEmpty List<@Valid CountedLot> lots) { }
+    public record CountedLot(@NotNull UUID itemId,
             @NotNull @DecimalMin("0.00") @Digits(integer = 8, fraction = 2) BigDecimal actualQuantity,
             @Size(max = 255) String reason, @Size(max = 5000) String note) { }
 }

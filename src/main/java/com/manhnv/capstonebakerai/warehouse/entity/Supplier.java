@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity @Table(name = "suppliers")
@@ -20,4 +21,9 @@ public class Supplier {
     private String email;
     @Column(columnDefinition = "text")
     private String address;
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    void setCreationTime() { if (createdAt == null) createdAt = LocalDateTime.now(); }
 }
