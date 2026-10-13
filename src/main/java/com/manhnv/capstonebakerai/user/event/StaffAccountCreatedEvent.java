@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.identity.event;
+package com.manhnv.capstonebakerai.user.event;
 
 import com.manhnv.capstonebakerai.user.enums.Role;
 

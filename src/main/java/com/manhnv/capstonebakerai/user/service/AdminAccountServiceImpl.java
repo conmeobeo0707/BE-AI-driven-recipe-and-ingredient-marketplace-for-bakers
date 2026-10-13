@@ -1,30 +1,27 @@
-package com.manhnv.capstonebakerai.identity.service;
+package com.manhnv.capstonebakerai.user.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
-import com.manhnv.capstonebakerai.identity.dto.CreateStaffAccountRequest;
-import com.manhnv.capstonebakerai.identity.dto.StaffAccountResponse;
-import com.manhnv.capstonebakerai.identity.dto.UpdateAccountStatusRequest;
-import com.manhnv.capstonebakerai.identity.dto.UpdateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.dto.CreateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.dto.StaffAccountResponse;
+import com.manhnv.capstonebakerai.user.dto.UpdateAccountStatusRequest;
+import com.manhnv.capstonebakerai.user.dto.UpdateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.event.StaffAccountCreatedEvent;
 import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.exception.UserErrorCode;
+import com.manhnv.capstonebakerai.user.port.StaffAccountIdentityPort;
 import com.manhnv.capstonebakerai.user.enums.Role;
 import com.manhnv.capstonebakerai.user.enums.UserStatus;
-import com.manhnv.capstonebakerai.identity.event.StaffAccountCreatedEvent;
-import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
-import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.SQLException;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Base64;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -33,11 +30,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AdminAccountServiceImpl implements  AdminAccountService{
 
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Set<Role> MANAGED_ROLES = Set.of(Role.STAFF, Role.MANAGER, Role.BAKER_STAFF);
     private final UserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final StaffAccountIdentityPort identityPort;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -48,17 +43,13 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
         String email = request.email().trim().toLowerCase(Locale.ROOT);
 
         if(userRepository.existsByEmailIgnoreCase(email)) {
-            throw new AppException(IdentityErrorCode.EMAIL_ALREADY_EXISTS);
+            throw new AppException(UserErrorCode.EMAIL_ALREADY_EXISTS);
         }
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        byte[] randomBytes = new byte[32];
-        SECURE_RANDOM.nextBytes(randomBytes);
-        String generatedPassword = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
 
         User user = User.builder()
                 .fullName(request.fullName().trim())
                 .email(email)
-                .password(passwordEncoder.encode(generatedPassword))
                 .role(request.role())
                 .status(UserStatus.ACTIVE)
                 .phone(request.phone())
@@ -69,6 +60,7 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
+        identityPort.initializeCredentials(user);
 
         User savedUser;
         try {
@@ -77,7 +69,7 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
             if (exception.getMostSpecificCause() instanceof SQLException sqlException
                     && "23505".equals(sqlException.getSQLState())) {
                 throw new AppException(
-                        IdentityErrorCode.EMAIL_ALREADY_EXISTS
+                        UserErrorCode.EMAIL_ALREADY_EXISTS
                 );
             }
             throw exception;
@@ -127,7 +119,7 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
         User savedUser = userRepository.saveAndFlush(user);
 
         if (roleChanged) {
-            refreshTokenRepository.revokeAllActiveByUser(savedUser, now);
+            identityPort.revokeActiveSessions(savedUser, now);
         }
         return toResponse(savedUser);
     }
@@ -146,23 +138,21 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
         user.setUpdatedAt(now);
 
         User savedUser = userRepository.saveAndFlush(user);
-        refreshTokenRepository.revokeAllActiveByUser(savedUser, now);
+        identityPort.revokeActiveSessions(savedUser, now);
 
         return toResponse(savedUser);
     }
 
     private void validateRole(Role role) {
         if (role == null || !MANAGED_ROLES.contains(role)) {
-            throw new AppException(IdentityErrorCode.INVALID_STAFF_ROLE);
+            throw new AppException(UserErrorCode.INVALID_STAFF_ROLE);
         }
     }
 
     private User findManagedAccount(UUID id) {
         return userRepository.findById(id)
                 .filter(user -> MANAGED_ROLES.contains(user.getRole()))
-                .orElseThrow(() -> new AppException(
-                        IdentityErrorCode.ACCOUNT_NOT_FOUND
-                ));
+                .orElseThrow(() -> new AppException(UserErrorCode.ACCOUNT_NOT_FOUND));
     }
 
     private StaffAccountResponse toResponse(User user) {

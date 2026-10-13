@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.identity.dto;
+package com.manhnv.capstonebakerai.user.dto;
 
 import com.manhnv.capstonebakerai.user.enums.Role;
 import com.manhnv.capstonebakerai.user.enums.UserStatus;

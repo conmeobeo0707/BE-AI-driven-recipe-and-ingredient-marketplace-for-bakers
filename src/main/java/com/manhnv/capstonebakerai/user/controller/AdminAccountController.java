@@ -1,11 +1,11 @@
-package com.manhnv.capstonebakerai.identity.controller;
+package com.manhnv.capstonebakerai.user.controller;
 
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
-import com.manhnv.capstonebakerai.identity.dto.CreateStaffAccountRequest;
-import com.manhnv.capstonebakerai.identity.dto.StaffAccountResponse;
-import com.manhnv.capstonebakerai.identity.dto.UpdateAccountStatusRequest;
-import com.manhnv.capstonebakerai.identity.dto.UpdateStaffAccountRequest;
-import com.manhnv.capstonebakerai.identity.service.AdminAccountService;
+import com.manhnv.capstonebakerai.user.dto.CreateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.dto.StaffAccountResponse;
+import com.manhnv.capstonebakerai.user.dto.UpdateAccountStatusRequest;
+import com.manhnv.capstonebakerai.user.dto.UpdateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.service.AdminAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

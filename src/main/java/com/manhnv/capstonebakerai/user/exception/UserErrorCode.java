@@ -9,6 +9,9 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum UserErrorCode implements ErrorCode {
     USER_NOT_FOUND("User was not found", HttpStatus.NOT_FOUND),
+    EMAIL_ALREADY_EXISTS("Email is already registered", HttpStatus.CONFLICT),
+    ACCOUNT_NOT_FOUND("Managed staff account was not found", HttpStatus.NOT_FOUND),
+    INVALID_STAFF_ROLE("Only STAFF, MANAGER and BAKER_STAFF roles are supported", HttpStatus.BAD_REQUEST),
     AVATAR_REQUIRED("Avatar file is required", HttpStatus.BAD_REQUEST),
     INVALID_AVATAR_TYPE("Avatar must be JPEG, PNG or WebP", HttpStatus.BAD_REQUEST),
     AVATAR_TOO_LARGE("Avatar must not exceed 5 MB", HttpStatus.BAD_REQUEST),
