@@ -2,7 +2,7 @@ package com.manhnv.capstonebakerai.identity.mapper;
 
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserRequest;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserResponse;
-import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.user.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -13,13 +13,13 @@ import java.time.LocalDateTime;
 public interface UserMapper {
 
     @Mapping(target = "userId", ignore = true)
-    @Mapping(target = "customer", ignore = true)
     @Mapping(target = "avatarUrl", ignore = true)
     @Mapping(target = "password", source = "encodedPassword")
     @Mapping(target = "email", source = "normalizedEmail")
     @Mapping(target = "fullName", source = "request.fullName")
     @Mapping(target = "bod", source = "request.dateOfBirth")
     @Mapping(target = "status", constant = "ACTIVE")
+    @Mapping(target = "role", ignore = true)
     @Mapping(target = "createdAt", source = "registeredAt")
     @Mapping(target = "updatedAt", source = "registeredAt")
     User toEntity(

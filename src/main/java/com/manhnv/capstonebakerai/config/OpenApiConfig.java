@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.config;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
@@ -15,15 +16,21 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Capstone Baker AI API")
-                        .version("1.0.0")
-                        .description("API documentation for Baker AI platform"))
-                .addSecurityItem(new SecurityRequirement().addList("bearer"))
-                .components(new io.swagger.v3.oas.models.Components()
-                        .addSecuritySchemes("bearer",
-                                new SecurityScheme()
-                                        .type(SecurityScheme.Type.HTTP)
-                                        .scheme("bearer")
-                                        .bearerFormat("JWT")
-                                        .description("JWT token")));
+                        .version("1.0.0"))
+                .addSecurityItem(
+                        new SecurityRequirement()
+                                .addList("bearerAuth")
+                )
+                .components(
+                        new Components()
+                                .addSecuritySchemes(
+                                        "bearerAuth",
+                                        new SecurityScheme()
+                                                .name("Authorization")
+                                                .type(SecurityScheme.Type.HTTP)
+                                                .scheme("bearer")
+                                                .bearerFormat("JWT")
+                                )
+                );
     }
 }

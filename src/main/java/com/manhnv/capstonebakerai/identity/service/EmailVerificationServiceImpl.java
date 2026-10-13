@@ -1,17 +1,17 @@
 package com.manhnv.capstonebakerai.identity.service;
 
+import com.manhnv.capstonebakerai.customer.entity.Customer;
+import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
-import com.manhnv.capstonebakerai.identity.entity.User;
+import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
 import com.manhnv.capstonebakerai.identity.exception.InvalidVerificationCodeException;
 import com.manhnv.capstonebakerai.identity.exception.VerificationEmailDeliveryException;
 import com.manhnv.capstonebakerai.identity.repository.VerificationCodeRepository;
-import com.manhnv.capstonebakerai.identity.repository.UserRepository;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,34 +31,39 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
-    private final String sender;
+    private final EmailTemplateService emailTemplateService;
     private final Duration codeExpiration;
 
     public EmailVerificationServiceImpl(
             UserRepository userRepository,
+            CustomerRepository customerRepository,
             VerificationCodeRepository verificationCodeRepository,
             PasswordEncoder passwordEncoder,
-            JavaMailSender mailSender,
-            @Value("${app.mail.from}") String sender,
+            EmailTemplateService emailTemplateService,
             @Value("${app.verification-code-expiration}") Duration codeExpiration
     ) {
         this.userRepository = userRepository;
+        this.customerRepository = customerRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
-        this.sender = sender;
+        this.emailTemplateService = emailTemplateService;
         this.codeExpiration = codeExpiration;
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendRegistrationCode(UUID userId) {
-        userRepository.findById(userId)
-                .filter(user -> !Boolean.TRUE.equals(user.getIsConfirmed()))
-                .ifPresent(this::sendVerificationCode);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        customerRepository.findByUserId(userId)
+                .filter(customer -> !customer.isConfirmed())
+                .ifPresent(customer -> sendVerificationCode(user));
     }
 
     private void sendVerificationCode(User user) {
@@ -75,15 +80,15 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         verification.setExpiresAt(now.plus(codeExpiration));
         verificationCodeRepository.saveAndFlush(verification);
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(sender);
-        message.setTo(user.getEmail());
-        message.setSubject("Your email verification code");
-        message.setText("Your verification code is %s. It expires in %d minutes."
-                .formatted(code, codeExpiration.toMinutes()));
-
         try {
-            mailSender.send(message);
+            emailTemplateService.send(
+                    user.getEmail(),
+                    "Mã xác minh email Baker AI",
+                    "email-verification.html",
+                    "Mã xác minh email của bạn là " + code + ". Mã có hiệu lực trong "
+                            + codeExpiration.toMinutes() + " phút.",
+                    java.util.Map.of("code", code, "expirationMinutes", String.valueOf(codeExpiration.toMinutes()))
+            );
         } catch (MailException exception) {
             throw new VerificationEmailDeliveryException(exception);
         }
@@ -95,8 +100,11 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         User user = userRepository.findByEmailIgnoreCase(normalize(email))
                 .orElseThrow(InvalidVerificationCodeException::new);
 
-        if (Boolean.TRUE.equals(user.getIsConfirmed())) {
-            return new MessageResponse("Email is already verified");
+        Customer customer = customerRepository.findByUserId(user.getUserId())
+                .orElseThrow(InvalidVerificationCodeException::new);
+
+        if (customer.isConfirmed()) {
+            return new MessageResponse("Email has already been verified");
         }
 
         VerificationCode verification = verificationCodeRepository
@@ -109,8 +117,9 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             throw new InvalidVerificationCodeException();
         }
 
-        user.setIsConfirmed(true);
+        customer.setConfirmed(true);
         user.setUpdatedAt(now);
+        customerRepository.save(customer);
         userRepository.save(user);
         verificationCodeRepository.delete(verification);
         return new MessageResponse("Email verified successfully");
@@ -124,10 +133,9 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
         if (optionalUser.isPresent()) {
             User user = optionalUser.get();
-
-            if (!Boolean.TRUE.equals(user.getIsConfirmed())) {
-                sendVerificationCode(user);
-            }
+            customerRepository.findByUserId(user.getUserId())
+                    .filter(customer -> !customer.isConfirmed())
+                    .ifPresent(customer -> sendVerificationCode(user));
         }
 
         return new MessageResponse(

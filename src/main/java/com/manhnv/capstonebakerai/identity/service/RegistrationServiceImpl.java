@@ -4,13 +4,12 @@ import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserRequest;
 import com.manhnv.capstonebakerai.identity.dto.RegisterUserResponse;
-import com.manhnv.capstonebakerai.identity.entity.User;
-import com.manhnv.capstonebakerai.identity.enums.Role;
+import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.enums.Role;
 import com.manhnv.capstonebakerai.identity.event.UserRegisteredEvent;
 import com.manhnv.capstonebakerai.identity.exception.EmailAlreadyExistsException;
-import com.manhnv.capstonebakerai.identity.exception.InvalidRegistrationRoleException;
 import com.manhnv.capstonebakerai.identity.mapper.UserMapper;
-import com.manhnv.capstonebakerai.identity.repository.UserRepository;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -35,10 +34,6 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     @Transactional
     public RegisterUserResponse register(RegisterUserRequest request) {
-        if (request.role() != Role.CUSTOMER) {
-            throw new InvalidRegistrationRoleException();
-        }
-
         String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new EmailAlreadyExistsException();
@@ -51,6 +46,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                 LocalDateTime.now(ZoneOffset.UTC)
         );
         user.setFullName(request.fullName().trim());
+        user.setRole(Role.CUSTOMER);
 
         User savedUser;
         try {
@@ -61,10 +57,8 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         Customer customer = new Customer();
         customer.setUser(savedUser);
-        customer.setHobbyId(null);
         customer.setSkillLevel(null);
         customer.setConfirmed(false);
-        savedUser.setCustomer(customer);
         customerRepository.saveAndFlush(customer);
 
         eventPublisher.publishEvent(new UserRegisteredEvent(savedUser.getUserId()));
