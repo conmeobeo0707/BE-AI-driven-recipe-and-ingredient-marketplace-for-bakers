@@ -19,6 +19,7 @@ public interface UserMapper {
     @Mapping(target = "fullName", source = "request.fullName")
     @Mapping(target = "bod", source = "request.dateOfBirth")
     @Mapping(target = "status", constant = "ACTIVE")
+    @Mapping(target = "role", ignore = true)
     @Mapping(target = "createdAt", source = "registeredAt")
     @Mapping(target = "updatedAt", source = "registeredAt")
     User toEntity(

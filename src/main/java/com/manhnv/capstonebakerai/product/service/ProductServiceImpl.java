@@ -165,8 +165,8 @@ public class ProductServiceImpl implements ProductService {
         if (units.findByUnitIdAndProductId(unitId, productId).isEmpty())
             throw new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product");
         return priceHistory.findByUnitIdOrderByCreatedAtDesc(unitId).stream()
-                .map(h -> new UnitPriceHistoryResponse(h.getUnitHistoryId(), h.getUnitId(), h.getUpdatedBy(),
-                        h.getSellingPrice(), h.getCreatedAt())).toList();
+                .map(priceHistoryEntry -> new UnitPriceHistoryResponse(priceHistoryEntry.getUnitHistoryId(), priceHistoryEntry.getUnitId(), priceHistoryEntry.getUpdatedBy(),
+                        priceHistoryEntry.getSellingPrice(), priceHistoryEntry.getCreatedAt())).toList();
     }
 
     @Override
@@ -201,6 +201,61 @@ public class ProductServiceImpl implements ProductService {
         Product product = getEntity(productId);
         if (!product.isCombo()) throw invalid("Product is not a combo");
         return calculateStock(productId, new HashSet<>());
+    }
+
+    @Override
+    public List<InventoryProduct> lockInventoryProducts(Collection<UUID> productIds) {
+        if (productIds == null || productIds.isEmpty()) throw invalid("At least one product is required");
+        List<UUID> sorted = productIds.stream().distinct().sorted().toList();
+        List<Product> locked = products.lockProducts(sorted);
+        if (locked.size() != sorted.size()) throw new AppException(ProductErrorCode.NOT_FOUND, "One or more products were not found");
+        return locked.stream().map(product -> new InventoryProduct(product.getProductId(), nz(product.getStockQuantity()), product.isCombo())).toList();
+    }
+
+    @Override @Transactional(readOnly = true)
+    public InventoryProduct getInventoryProduct(UUID productId) {
+        Product product = getEntity(productId);
+        return new InventoryProduct(product.getProductId(), nz(product.getStockQuantity()), product.isCombo());
+    }
+
+    @Override @Transactional(readOnly = true)
+    public InventoryUnit getActiveInventoryUnit(UUID productId, UUID unitId) {
+        ProductUnit unit=units.findByUnitIdAndProductId(unitId,productId)
+                .filter(productUnit -> productUnit.getStatus() == UnitStatus.ACTIVE)
+                .orElseThrow(() -> new AppException(ProductErrorCode.NOT_FOUND,"Active unit was not found for this product"));
+        return new InventoryUnit(unit.getUnitId(),unit.getProductId(),unit.getConversionFactor(),unit.isBase());
+    }
+
+    @Override @Transactional(readOnly = true)
+    public InventoryUnit getActiveBaseInventoryUnit(UUID productId) {
+        ProductUnit unit=units.findByProductIdAndBaseTrueAndStatus(productId,UnitStatus.ACTIVE)
+                .orElseThrow(() -> new AppException(ProductErrorCode.NOT_FOUND,"Product has no active base unit"));
+        return new InventoryUnit(unit.getUnitId(),unit.getProductId(),unit.getConversionFactor(),unit.isBase());
+    }
+
+    @Override
+    public void adjustInventoryStock(Map<UUID, BigDecimal> stockDeltas) {
+        if(stockDeltas==null||stockDeltas.isEmpty())return;
+        List<UUID> productIds = stockDeltas.keySet().stream().sorted().toList();
+        List<Product> lockedProducts = products.lockProducts(productIds);
+        if (lockedProducts.size() != productIds.size()) throw new AppException(ProductErrorCode.NOT_FOUND, "One or more products were not found");
+        Map<UUID, Product> productsById = new HashMap<>();
+        lockedProducts.forEach(product -> productsById.put(product.getProductId(), product));
+        for (UUID productId : productIds) {
+            Product product = productsById.get(productId);
+            BigDecimal delta = stockDeltas.get(productId);
+            if(product.isCombo())throw invalid("Inventory cannot be adjusted directly for combo products");
+            if(delta==null)continue;
+            BigDecimal updated=nz(product.getStockQuantity()).add(delta);
+            if(updated.signum()<0)throw invalid("Inventory adjustment would make stock negative for product: "+productId);
+            if(!fits(updated,10,2))throw invalid("Inventory quantity exceeds the database precision limit");
+            product.setStockQuantity(updated);
+        }
+    }
+
+    @Override @Transactional(readOnly = true)
+    public List<ProductResponse> listLowStockProducts() {
+        return products.findLowStockProducts(ProductStatus.ACTIVE).stream().map(this::toResponse).toList();
     }
 
     private BigDecimal calculateStock(UUID productId, Set<UUID> visiting) {
@@ -249,36 +304,36 @@ public class ProductServiceImpl implements ProductService {
     private void validateCategory(UUID id) {
         if (id != null && !categories.existsById(id)) throw new AppException(ProductErrorCode.NOT_FOUND, "Category was not found");
     }
-    private void apply(Product p, ProductUpsertRequest r, boolean creating) {
-        boolean clearingCombo = p.isCombo() && Boolean.FALSE.equals(r.combo());
-        p.setSku(r.sku().trim()); p.setName(r.name().trim()); p.setDescription(r.description());
-        p.setCategoryId(r.categoryId()); p.setImgUrl(r.imgUrl());
-        p.setDiscountPercent(r.discountPercent() == null ? BigDecimal.ZERO : r.discountPercent());
-        p.setStorageGuide(r.storageGuide()); p.setMinStock(r.minStock() == null ? BigDecimal.ZERO : r.minStock());
-        p.setMaxStock(r.maxStock()); p.setBrand(r.brand());
-        if (r.status() != null) p.setStatus(r.status());
-        if (r.combo() != null) p.setCombo(r.combo()); else if (creating) p.setCombo(false);
-        if (clearingCombo) children.deleteByParentProductId(p.getProductId());
+    private void apply(Product product, ProductUpsertRequest request, boolean creating) {
+        boolean clearingCombo = product.isCombo() && Boolean.FALSE.equals(request.combo());
+        product.setSku(request.sku().trim()); product.setName(request.name().trim()); product.setDescription(request.description());
+        product.setCategoryId(request.categoryId()); product.setImgUrl(request.imgUrl());
+        product.setDiscountPercent(request.discountPercent() == null ? BigDecimal.ZERO : request.discountPercent());
+        product.setStorageGuide(request.storageGuide()); product.setMinStock(request.minStock() == null ? BigDecimal.ZERO : request.minStock());
+        product.setMaxStock(request.maxStock()); product.setBrand(request.brand());
+        if (request.status() != null) product.setStatus(request.status());
+        if (request.combo() != null) product.setCombo(request.combo()); else if (creating) product.setCombo(false);
+        if (clearingCombo) children.deleteByParentProductId(product.getProductId());
     }
-    private void validateProductRequest(ProductUpsertRequest r) {
-        if (r == null || r.sku() == null || r.sku().isBlank() || r.name() == null || r.name().isBlank())
+    private void validateProductRequest(ProductUpsertRequest request) {
+        if (request == null || request.sku() == null || request.sku().isBlank() || request.name() == null || request.name().isBlank())
             throw invalid("SKU and name are required");
-        if (r.discountPercent() != null && (r.discountPercent().signum() < 0 || r.discountPercent().compareTo(new BigDecimal("100")) > 0))
+        if (request.discountPercent() != null && (request.discountPercent().signum() < 0 || request.discountPercent().compareTo(new BigDecimal("100")) > 0))
             throw invalid("discountPercent must be between 0 and 100");
-        if ((r.discountPercent() != null && !fits(r.discountPercent(), 5, 2))
-                || (r.minStock() != null && !fits(r.minStock(), 10, 2))
-                || (r.maxStock() != null && !fits(r.maxStock(), 10, 2)))
+        if ((request.discountPercent() != null && !fits(request.discountPercent(), 5, 2))
+                || (request.minStock() != null && !fits(request.minStock(), 10, 2))
+                || (request.maxStock() != null && !fits(request.maxStock(), 10, 2)))
             throw invalid("A numeric product field exceeds its database precision");
-        if (r.minStock() != null && r.minStock().signum() < 0) throw invalid("minStock cannot be negative");
-        if (r.maxStock() != null && r.maxStock().signum() < 0) throw invalid("maxStock cannot be negative");
-        if (r.minStock() != null && r.maxStock() != null && r.maxStock().compareTo(r.minStock()) < 0)
+        if (request.minStock() != null && request.minStock().signum() < 0) throw invalid("minStock cannot be negative");
+        if (request.maxStock() != null && request.maxStock().signum() < 0) throw invalid("maxStock cannot be negative");
+        if (request.minStock() != null && request.maxStock() != null && request.maxStock().compareTo(request.minStock()) < 0)
             throw invalid("maxStock cannot be lower than minStock");
     }
-    private void validateUnit(ProductUnitRequest r) {
-        if (r == null || r.unitName() == null || r.unitName().isBlank() || r.conversionFactor() == null
-                || r.conversionFactor().signum() <= 0 || !fits(r.conversionFactor(), 10, 2)
-                || r.base() == null || r.sellingPrice() == null || r.sellingPrice().signum() < 0
-                || !fits(r.sellingPrice(), 15, 2) || r.unitName().trim().length() > 100)
+    private void validateUnit(ProductUnitRequest unitRequest) {
+        if (unitRequest == null || unitRequest.unitName() == null || unitRequest.unitName().isBlank() || unitRequest.conversionFactor() == null
+                || unitRequest.conversionFactor().signum() <= 0 || !fits(unitRequest.conversionFactor(), 10, 2)
+                || unitRequest.base() == null || unitRequest.sellingPrice() == null || unitRequest.sellingPrice().signum() < 0
+                || !fits(unitRequest.sellingPrice(), 15, 2) || unitRequest.unitName().trim().length() > 100)
             throw invalid("Unit name, positive conversion factor, and non-negative selling price are required");
         boolean sale = r.sale() == null || r.sale();
         if (sale && (r.weightGram() == null || r.weightGram() <= 0))

@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
+    Optional<Customer> findByUser_UserId(UUID userId);
     @Query("""
             select c
             from Customer c
