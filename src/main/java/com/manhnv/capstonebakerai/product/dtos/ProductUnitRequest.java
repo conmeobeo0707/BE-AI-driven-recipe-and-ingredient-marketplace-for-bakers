@@ -1,11 +1,8 @@
 package com.manhnv.capstonebakerai.product.dtos;
 
 import com.manhnv.capstonebakerai.product.entities.UnitStatus;
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -15,4 +12,5 @@ public record ProductUnitRequest(UUID unitId,
         @NotNull Boolean base,
         Boolean sale,
         @NotNull @DecimalMin("0.00") @Digits(integer = 13, fraction = 2) BigDecimal sellingPrice,
-        UnitStatus status) { }
+        UnitStatus status,
+                                 @Min(1) @Max(1_000_000) Integer weightGram) { }

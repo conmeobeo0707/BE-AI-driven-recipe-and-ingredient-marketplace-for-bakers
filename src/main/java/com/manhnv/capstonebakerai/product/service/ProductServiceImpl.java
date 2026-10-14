@@ -140,6 +140,7 @@ public class ProductServiceImpl implements ProductService {
             unit.setSale(request.sale() == null || request.sale());
             unit.setSellingPrice(request.sellingPrice());
             unit.setStatus(request.status() == null ? UnitStatus.ACTIVE : request.status());
+            unit.setWeightGram(request.weightGram());
             ProductUnit saved = units.save(unit);
             if (priceChanged) {
                 if (updatedBy == null) updatedBy = SecurityUtils.getCurrentUserId();
@@ -239,7 +240,7 @@ public class ProductServiceImpl implements ProductService {
 
     private ProductUnitResponse toUnitResponse(ProductUnit unit) {
         return new ProductUnitResponse(unit.getUnitId(), unit.getUnitName(), unit.getConversionFactor(),
-                unit.isBase(), unit.isSale(), unit.getSellingPrice(), unit.getStatus());
+                unit.isBase(), unit.isSale(), unit.getSellingPrice(), unit.getStatus(), unit.getWeightGram());
     }
 
     private Product getEntity(UUID id) {
@@ -279,6 +280,9 @@ public class ProductServiceImpl implements ProductService {
                 || r.base() == null || r.sellingPrice() == null || r.sellingPrice().signum() < 0
                 || !fits(r.sellingPrice(), 15, 2) || r.unitName().trim().length() > 100)
             throw invalid("Unit name, positive conversion factor, and non-negative selling price are required");
+        boolean sale = r.sale() == null || r.sale();
+        if (sale && (r.weightGram() == null || r.weightGram() <= 0))
+            throw invalid("weightGram is required and must be positive when the unit is for sale");
     }
     private AppException invalid(String message) { return new AppException(ProductErrorCode.INVALID_REQUEST, message); }
     private BigDecimal nz(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }

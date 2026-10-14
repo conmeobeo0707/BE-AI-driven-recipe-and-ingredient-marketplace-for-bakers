@@ -2,9 +2,9 @@ package com.manhnv.capstonebakerai.customer.controller;
 
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
-import com.manhnv.capstonebakerai.customer.dto.CustomerProfileResponse;
-import com.manhnv.capstonebakerai.customer.dto.UpdateCustomerHobbiesRequest;
-import com.manhnv.capstonebakerai.customer.dto.UpdateCustomerProfileRequest;
+import com.manhnv.capstonebakerai.customer.dto.response.CustomerProfileResponse;
+import com.manhnv.capstonebakerai.customer.dto.request.UpdateCustomerHobbiesRequest;
+import com.manhnv.capstonebakerai.customer.dto.request.UpdateCustomerProfileRequest;
 import com.manhnv.capstonebakerai.customer.service.CustomerProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
