@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.customer.dto;
+package com.manhnv.capstonebakerai.customer.dto.request;
 
 import com.manhnv.capstonebakerai.customer.enums.SkillLevel;
 

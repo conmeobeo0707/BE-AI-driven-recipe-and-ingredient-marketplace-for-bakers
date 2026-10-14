@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.customer.dto;
+package com.manhnv.capstonebakerai.customer.dto.request;
 
 import jakarta.validation.constraints.NotNull;
 

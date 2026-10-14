@@ -32,4 +32,6 @@ public class ProductUnit {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "unit_status_enum")
     private UnitStatus status = UnitStatus.ACTIVE;
+    @Column(name = "weight_gram")
+    private Integer weightGram;   // khối lượng của MỘT đơn vị bán, tính bằng gram
 }

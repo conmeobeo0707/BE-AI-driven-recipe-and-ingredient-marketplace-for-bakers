@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.customer.dto;
+package com.manhnv.capstonebakerai.customer.dto.response;
 
 import com.manhnv.capstonebakerai.customer.enums.SkillLevel;
 import com.manhnv.capstonebakerai.hobby.dto.HobbyResponse;

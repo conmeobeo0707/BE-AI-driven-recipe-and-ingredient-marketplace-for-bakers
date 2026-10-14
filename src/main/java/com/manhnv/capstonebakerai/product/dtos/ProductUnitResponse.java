@@ -5,4 +5,4 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public record ProductUnitResponse(UUID unitId, String unitName, BigDecimal conversionFactor,
-        boolean base, boolean sale, BigDecimal sellingPrice, UnitStatus status) { }
+        boolean base, boolean sale, BigDecimal sellingPrice, UnitStatus status, Integer weightGram) { }

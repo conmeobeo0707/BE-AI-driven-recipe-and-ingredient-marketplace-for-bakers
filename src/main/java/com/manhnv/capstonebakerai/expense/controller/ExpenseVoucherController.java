@@ -56,7 +56,7 @@ public class ExpenseVoucherController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
-    public ResponseEntity<ApiResponse<Page<ExpenseVoucherResponse>>> getById(Pageable pageable) {
+    public ResponseEntity<ApiResponse<Page<ExpenseVoucherResponse>>> getAll(Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(service.getAll(pageable)));
     }
 
