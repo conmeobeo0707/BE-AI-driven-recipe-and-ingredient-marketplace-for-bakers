@@ -13,6 +13,7 @@ import com.manhnv.capstonebakerai.order.enums.RevenuePeriodType;
 import com.manhnv.capstonebakerai.order.exception.OrderErrorCode;
 import com.manhnv.capstonebakerai.order.mapper.OrderMapper;
 import com.manhnv.capstonebakerai.order.repository.OrderRepository;
+import com.manhnv.capstonebakerai.payment.service.PaymentService;
 import com.manhnv.capstonebakerai.product.entities.Product;
 import com.manhnv.capstonebakerai.product.entities.ProductUnit;
 import com.manhnv.capstonebakerai.product.entities.UnitStatus;
@@ -26,6 +27,7 @@ import jakarta.persistence.criteria.Predicate;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -42,6 +44,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -54,13 +57,15 @@ public class OrderServiceImpl implements OrderService {
     OrderMapper mapper;
     ShipmentService shipmentService;
     ShippingRateService shippingRateService;
+    PaymentService paymentService;
 
     @Override
     @Transactional
     public OrderResponse createForCustomer(UUID userId, CreateOrderRequest request) {
         Customer customer = findCustomerByUserId(userId);
         Order order = buildOrder(customer, userId, request, BigDecimal.ZERO);
-        return mapper.toResponse(orderRepository.save(order));
+        Order saved = saveWithPayment(order);
+        return mapper.toResponse(saved);
     }
 
     @Override
@@ -117,6 +122,18 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional
+    public void markPaidOrderPending(UUID orderId) {
+        Order order = findOrThrow(orderId);
+        if (order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+            log.warn("Order {} is {} but payment PAID, check manually", order.getCode(), order.getStatus());
+            return;
+        }
+        applyTransition(order, OrderStatus.PENDING);
+        orderRepository.save(order);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<ShippingRateResponse> previewShippingRates(ShippingRatesRequest request) {
         List<ResolvedLine> lines = resolveLines(request.items());
@@ -151,14 +168,18 @@ public class OrderServiceImpl implements OrderService {
                 ? request.discountPercent()
                 : BigDecimal.ZERO;
         Order order = buildOrder(customer, staffUserId, request.order(), discount);
-        return mapper.toResponse(orderRepository.save(order));
+        Order saved = saveWithPayment(order);
+        return mapper.toResponse(saved);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<OrderSummaryResponse> getAllForStaff(OrderStatus status, PaymentMethod paymentMethod, Pageable pageable) {
-        return orderRepository.findAll(spec(null, status, paymentMethod), pageable)
-                .map(mapper::toSummary);
+        Specification<Order> s = spec(null, status, paymentMethod);
+        if (status == null) {
+            s = s.and((root, q, cb) -> cb.notEqual(root.get("status"), OrderStatus.AWAITING_PAYMENT));
+        }
+        return orderRepository.findAll(s, pageable).map(mapper::toSummary);
     }
 
     @Override
@@ -231,6 +252,7 @@ public class OrderServiceImpl implements OrderService {
                 .fullAddress(request.fullAddress())
                 .addressDetail(request.addressDetail())
                 .discountPercent(discountPercent)
+                .status(request.paymentMethod() == PaymentMethod.PAYOS ? OrderStatus.AWAITING_PAYMENT : OrderStatus.PENDING)
                 .build();
 
         addItems(order, request.items());
@@ -301,6 +323,12 @@ public class OrderServiceImpl implements OrderService {
         order.setProductsPrice(productsPrice);
     }
 
+    private Order saveWithPayment(Order order) {
+        Order saved = orderRepository.save(order);
+        paymentService.createPending(saved.getId(), saved.getPaymentMethod(), saved.getTotal());
+        return saved;
+    }
+
     private void applyShipping(Order order, String rateId) {
         ShippingRateResponse rate = shippingRateService.requireRate(
                 order.getProvinceCode(), order.getDistrictCode(), order.getWardCode(),
@@ -322,14 +350,15 @@ public class OrderServiceImpl implements OrderService {
         }
         switch (next) {
             case CONFIRMED -> {
-                // TODO Phase 4: nếu paymentMethod = PAYOS thì chỉ cho CONFIRMED khi payment đã PAID
                 // TODO: gọi InventoryService.deduct(...) trừ kho (quantity x conversionFactor)
                 shipmentService.createForOrder(order);
             }
             case DELIVERED -> {
                 order.setDeliveredAt(LocalDateTime.now());
                 order.setRevenue(order.getProductsPrice().subtract(order.getDiscountAmount()));
-                // TODO Phase 4: nếu COD thì payment PAID, ghi payment_transaction, tạo phiếu thu
+                if (order.getPaymentMethod() == PaymentMethod.COD) {
+                    paymentService.settleCod(order);
+                }
             }
             default -> { }
         }
@@ -341,12 +370,13 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelledAt(LocalDateTime.now());
         order.setCancelReason(request != null ? request.reason() : null);
-        if (previous != OrderStatus.PENDING) {
+        if (previous != OrderStatus.PENDING && previous != OrderStatus.AWAITING_PAYMENT) {
             // TODO: hoàn kho (InventoryService.restock)
             // TODO Phase 3: hủy vận đơn trên Goship
             shipmentService.cancelForOrder(order.getId());
             // TODO Phase 4: hoàn tiền nếu đã thanh toán PayOS
         }
+        paymentService.onOrderCancelled(order);
     }
 
     private Specification<Order> spec(UUID customerId, OrderStatus status, PaymentMethod paymentMethod) {

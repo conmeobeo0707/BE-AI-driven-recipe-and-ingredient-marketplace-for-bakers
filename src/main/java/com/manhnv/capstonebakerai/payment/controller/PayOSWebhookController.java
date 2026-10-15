@@ -1,6 +1,6 @@
 package com.manhnv.capstonebakerai.payment.controller;
 
-import com.manhnv.capstonebakerai.payment.service.TopUpService;
+import com.manhnv.capstonebakerai.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,11 +14,11 @@ import vn.payos.model.webhooks.Webhook;
 @RequiredArgsConstructor
 public class PayOSWebhookController {
 
-    private final TopUpService topUpService;
+    private final PaymentService paymentService;
 
     @PostMapping("/webhook")
     public ResponseEntity<String> handleWebhook(@RequestBody Webhook webhook) {
-        topUpService.handleWebhook(webhook);
+        paymentService.handlePayosWebhook(webhook);
         return ResponseEntity.ok("OK");
     }
 }

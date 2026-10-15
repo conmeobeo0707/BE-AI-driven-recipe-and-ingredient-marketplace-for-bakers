@@ -1,8 +1,7 @@
 package com.manhnv.capstonebakerai.payment.enums;
 
-public enum TopUpStatus {
+public enum PaymentStatus {
     PENDING,
-    SUCCESS,
-    FAILED,
-    CANCELLED
+    PAID,
+    FAILED
 }

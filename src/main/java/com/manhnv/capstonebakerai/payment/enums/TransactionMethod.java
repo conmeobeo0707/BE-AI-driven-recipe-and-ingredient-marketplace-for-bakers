@@ -1,6 +1,5 @@
 package com.manhnv.capstonebakerai.payment.enums;
 
-public enum PaymentMethod {
+public enum TransactionMethod {
     BANK_TRANSFER,
-    CASH
 }

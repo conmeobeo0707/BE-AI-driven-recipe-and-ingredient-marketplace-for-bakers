@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 
 public enum OrderStatus {
+    AWAITING_PAYMENT,
     PENDING,
     CONFIRMED,
     READY_TO_SHIP,
@@ -15,6 +16,7 @@ public enum OrderStatus {
     private static final Map<OrderStatus, Set<OrderStatus>> TRANSITIONS = new EnumMap<>(OrderStatus.class);
 
     static {
+        TRANSITIONS.put(AWAITING_PAYMENT, Set.of(CANCELLED));
         TRANSITIONS.put(PENDING, Set.of(CONFIRMED, CANCELLED));
         TRANSITIONS.put(CONFIRMED, Set.of(READY_TO_SHIP, CANCELLED));
         TRANSITIONS.put(READY_TO_SHIP, Set.of(SHIPPING, CANCELLED));
@@ -23,7 +25,7 @@ public enum OrderStatus {
         TRANSITIONS.put(CANCELLED, Set.of());
     }
 
-    private static final Set<OrderStatus> CUSTOMER_CANCELLABLE = Set.of(PENDING, CONFIRMED);
+    private static final Set<OrderStatus> CUSTOMER_CANCELLABLE = Set.of(AWAITING_PAYMENT, PENDING, CONFIRMED);
     private static final Set<OrderStatus> STAFF_CANCELLABLE = Set.of(PENDING, CONFIRMED, READY_TO_SHIP);
 
     public boolean canTransitionTo(OrderStatus next) {
