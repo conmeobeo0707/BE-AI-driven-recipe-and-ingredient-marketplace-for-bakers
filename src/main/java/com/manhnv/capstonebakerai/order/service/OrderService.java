@@ -29,6 +29,7 @@ public interface OrderService {
     OrderResponse confirmReceived(UUID userId, UUID orderId);
 
     void syncStatusFromShipment(UUID orderId, OrderStatus next);
+    void markPaidOrderPending(UUID orderId);
     List<ShippingRateResponse> previewShippingRates(ShippingRatesRequest request);
 
     // Staff/Manager

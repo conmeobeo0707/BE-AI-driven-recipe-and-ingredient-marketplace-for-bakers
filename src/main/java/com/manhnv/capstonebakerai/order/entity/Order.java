@@ -51,8 +51,7 @@ public class Order {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    @Builder.Default
-    private OrderStatus status = OrderStatus.PENDING;
+    private OrderStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = false, length = 20)
