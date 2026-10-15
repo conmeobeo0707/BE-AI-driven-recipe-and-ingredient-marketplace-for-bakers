@@ -17,9 +17,8 @@ public class ShipmentWebhookController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> receive(
-            @RequestHeader(value = "X-Webhook-Token", required = false) String token,
             @Valid @RequestBody ShipmentWebhookRequest request) {
-        service.handle(token, request);
+        service.handle(request);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

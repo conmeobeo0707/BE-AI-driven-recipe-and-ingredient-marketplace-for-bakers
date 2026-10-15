@@ -30,11 +30,7 @@ public class ShipmentWebhookServiceImpl implements ShipmentWebhookService{
 
     @Override
     @Transactional
-    public void handle(String token, ShipmentWebhookRequest request) {
-        if (token == null || !MessageDigest.isEqual(
-                token.getBytes(StandardCharsets.UTF_8), webhookSecret.getBytes(StandardCharsets.UTF_8))) {
-            throw new AppException(ShipmentErrorCode.WEBHOOK_UNAUTHORIZED);
-        }
+    public void handle(ShipmentWebhookRequest request) {
 
         Shipment shipment = shipmentRepository.findByTrackingCode(request.trackingCode())
                 .orElseThrow(() -> new AppException(ShipmentErrorCode.SHIPMENT_NOT_FOUND));
