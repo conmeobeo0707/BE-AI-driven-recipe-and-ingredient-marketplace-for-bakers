@@ -335,8 +335,8 @@ public class ProductServiceImpl implements ProductService {
                 || unitRequest.base() == null || unitRequest.sellingPrice() == null || unitRequest.sellingPrice().signum() < 0
                 || !fits(unitRequest.sellingPrice(), 15, 2) || unitRequest.unitName().trim().length() > 100)
             throw invalid("Unit name, positive conversion factor, and non-negative selling price are required");
-        boolean sale = r.sale() == null || r.sale();
-        if (sale && (r.weightGram() == null || r.weightGram() <= 0))
+        boolean sale = unitRequest.sale() == null || unitRequest.sale();
+        if (sale && (unitRequest.weightGram() == null || unitRequest.weightGram() <= 0))
             throw invalid("weightGram is required and must be positive when the unit is for sale");
     }
     private AppException invalid(String message) { return new AppException(ProductErrorCode.INVALID_REQUEST, message); }
