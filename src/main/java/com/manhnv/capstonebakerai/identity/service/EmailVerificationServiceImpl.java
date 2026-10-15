@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Propagation;
@@ -87,7 +88,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
                     "email-verification.html",
                     "Mã xác minh email của bạn là " + code + ". Mã có hiệu lực trong "
                             + codeExpiration.toMinutes() + " phút.",
-                    java.util.Map.of("code", code, "expirationMinutes", String.valueOf(codeExpiration.toMinutes()))
+                    Map.of("code", code, "expirationMinutes", String.valueOf(codeExpiration.toMinutes()))
             );
         } catch (MailException exception) {
             throw new VerificationEmailDeliveryException(exception);
