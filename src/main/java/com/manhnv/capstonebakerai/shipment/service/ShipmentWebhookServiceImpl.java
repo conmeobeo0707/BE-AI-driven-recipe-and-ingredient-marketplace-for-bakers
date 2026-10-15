@@ -14,8 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
 
 @Service
@@ -32,7 +30,7 @@ public class ShipmentWebhookServiceImpl implements ShipmentWebhookService{
     @Transactional
     public void handle(ShipmentWebhookRequest request) {
 
-        Shipment shipment = shipmentRepository.findByTrackingCode(request.trackingCode())
+        Shipment shipment = shipmentRepository.findByExternalId(request.externalId())
                 .orElseThrow(() -> new AppException(ShipmentErrorCode.SHIPMENT_NOT_FOUND));
 
         ShipmentStatus next = GoshipStatusCode.toShipmentStatus(request.statusCode())

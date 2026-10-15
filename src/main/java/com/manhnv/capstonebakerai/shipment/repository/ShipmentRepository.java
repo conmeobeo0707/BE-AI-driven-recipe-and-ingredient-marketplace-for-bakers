@@ -10,6 +10,6 @@ import java.util.UUID;
 @Repository
 public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
     Optional<Shipment> findByOrderId(UUID orderId);
-    Optional<Shipment> findByTrackingCode(String trackingCode);
+    Optional<Shipment> findByExternalId(String externalId);
     boolean existsByOrderId(UUID orderId);
 }

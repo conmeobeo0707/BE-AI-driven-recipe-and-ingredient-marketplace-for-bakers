@@ -42,8 +42,7 @@ public class GoshipShippingProvider implements ShippingProvider {
                     .orElseThrow(() -> e);
             res = send(order, fresh.id(), codAmount, weightGram);
         }
-        String carrier = res.carrierShortName() != null ? res.carrierShortName() : res.carrier();
-        return new ShipmentCreateResult(res.id(), res.trackingNumber(), carrier);
+        return new ShipmentCreateResult(res.id(), res.trackingNumber(), res.carrier());
     }
 
     private GoshipCreateResponse send(Order order, String rateId, BigDecimal cod, int weightGram) {
