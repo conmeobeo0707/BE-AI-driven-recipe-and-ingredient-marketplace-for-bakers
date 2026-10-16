@@ -46,14 +46,14 @@ public class RecipeCategoryController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe category mới")
+    @Operation(summary = "Tạo recipe category mới", description = "Request body: name bắt buộc, không được null.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeCategoryResponse>> create(@Valid @RequestBody RecipeCategoryRequest request) {
         RecipeCategoryResponse resp = recipeCategoryService.create(request);
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Cập nhật recipe category")
+    @Operation(summary = "Cập nhật recipe category", description = "Request body: name bắt buộc, không được null. Đây là cập nhật tên, không phải partial update.")
     @PutMapping("/{categoryId}")
     public ResponseEntity<ApiResponse<RecipeCategoryResponse>> update(@PathVariable UUID categoryId,
                                                                       @Valid @RequestBody RecipeCategoryRequest request) {

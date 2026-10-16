@@ -1,7 +1,7 @@
-package com.manhnv.capstonebakerai.recipe.dto.response;
+package com.manhnv.capstonebakerai.media.dto.response;
 
-import com.manhnv.capstonebakerai.recipe.enums.MediaStatus;
-import com.manhnv.capstonebakerai.recipe.enums.MediaType;
+import com.manhnv.capstonebakerai.media.enums.MediaStatus;
+import com.manhnv.capstonebakerai.media.enums.MediaType;
 import lombok.*;
 
 import java.util.UUID;
