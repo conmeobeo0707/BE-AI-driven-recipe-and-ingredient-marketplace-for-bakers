@@ -1,13 +1,14 @@
-package com.manhnv.capstonebakerai.recipe.entity;
+package com.manhnv.capstonebakerai.media.entity;
 
-import com.manhnv.capstonebakerai.recipe.enums.MediaStatus;
-import com.manhnv.capstonebakerai.recipe.enums.MediaType;
+import com.manhnv.capstonebakerai.media.enums.MediaStatus;
+import com.manhnv.capstonebakerai.media.enums.MediaType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -35,4 +36,7 @@ public class Media {
 
     @Version
     private Long version;
+
+    @Column(name = "temp_since")
+    private Instant tempSince;
 }
