@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.recipe.entity;
 
+import com.manhnv.capstonebakerai.media.entity.Media;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;

@@ -1,20 +1,18 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeStepResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
-import com.manhnv.capstonebakerai.recipe.entity.Media;
-import com.manhnv.capstonebakerai.recipe.entity.RecipeStepImage;
-import com.manhnv.capstonebakerai.recipe.enums.MediaStatus;
-import com.manhnv.capstonebakerai.recipe.enums.MediaType;
+import com.manhnv.capstonebakerai.media.entity.Media;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeStepMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepRepository;
-import com.manhnv.capstonebakerai.recipe.repository.MediaRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepImageRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeStepService;
+import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
@@ -33,9 +31,8 @@ public class RecipeStepServiceImpl implements RecipeStepService {
 
     private final RecipeStepRepository recipeStepRepository;
     private final RecipeRepository recipeRepository;
-    private final MediaRepository mediaRepository;
     private final RecipeStepImageRepository recipeStepImageRepository;
-    private final RecipeServiceImpl recipeService;
+    private final RecipeMediaHelper mediaHelper;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -88,71 +85,66 @@ public class RecipeStepServiceImpl implements RecipeStepService {
                 .collect(Collectors.toCollection(ArrayList::new));
         allStepNumbers.add(request.getStepNumber());
 
-        validateContinuousStepNumbers(allStepNumbers);
+        mediaHelper.validateContinuousStepNumbers(allStepNumbers);
 
         List<UUID> imageIds = request.getImageIds() == null ? List.of() : request.getImageIds();
-        validateUniqueMediaIds(imageIds);
-        Map<UUID, Media> mediaById = loadMediaMap(imageIds);
+        mediaHelper.validateUniqueMediaIds(imageIds);
+        Map<UUID, Media> mediaById = mediaHelper.loadMediaMap(imageIds);
 
         RecipeStep entity = RecipeStepMapper.toEntity(request);
         entity.setRecipe(recipe);
 
         RecipeStep saved = recipeStepRepository.save(entity);
-        if (request.getImageIds() != null) recipeService.saveStepImages(saved, imageIds, mediaById, Set.of());
+        if (request.getImageIds() != null) mediaHelper.saveStepImages(saved, imageIds, mediaById, Set.of());
         return RecipeStepMapper.toDTO(saved);
     }
 
     @Override
     @Transactional
-    public RecipeStepResponse updateRecipeStep(UUID id, RecipeStepRequest request) {
+    public RecipeStepResponse updateRecipeStep(UUID id, RecipeStepEmbeddedRequest request) {
         RecipeStep existing = recipeStepRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeStep not found"));
+        UUID recipeId = existing.getRecipe().getId();   // không lấy recipe từ request
 
-        List<RecipeStepImage> existingImages = recipeStepImageRepository.findByRecipeStepIdWithMedia(id);
-        Set<UUID> currentlyAttachedMediaIds = existingImages.stream()
-                .map(link -> link.getMedia().getId())
-                .collect(Collectors.toSet());
+        Set<UUID> currentlyAttachedMediaIds =
+                new HashSet<>(recipeStepImageRepository.findMediaIdsByRecipeStepId(id));
         List<UUID> requestedImageIds = request.getImageIds() == null ? List.of() : request.getImageIds();
         Set<UUID> allMediaIds = new HashSet<>(currentlyAttachedMediaIds);
         allMediaIds.addAll(requestedImageIds);
-        Map<UUID, Media> mediaById = loadMediaMap(allMediaIds);
+        Map<UUID, Media> mediaById = mediaHelper.loadMediaMap(allMediaIds);
 
-        Recipe recipe = recipeRepository.findById(request.getRecipeId())
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
-
-        List<RecipeStep> existingSteps = recipeStepRepository.findByRecipe_IdOrderByStepNumberAsc(request.getRecipeId());
-
+        List<RecipeStep> existingSteps = recipeStepRepository.findByRecipe_IdOrderByStepNumberAsc(recipeId);
         List<Integer> allStepNumbers = existingSteps.stream()
                 .filter(step -> !step.getId().equals(id))
                 .map(RecipeStep::getStepNumber)
                 .collect(Collectors.toCollection(ArrayList::new));
-
         if (allStepNumbers.contains(request.getStepNumber())) {
             throw new RuntimeException("Step number already exists in recipe");
         }
-
         allStepNumbers.add(request.getStepNumber());
+        mediaHelper.validateContinuousStepNumbers(allStepNumbers);
 
-        validateContinuousStepNumbers(allStepNumbers);
-
-        existing.setRecipe(recipe);
         existing.setStepNumber(request.getStepNumber());
         existing.setInstruction(request.getInstruction());
-        if (request.getImageIds() != null) {
-            validateUniqueMediaIds(requestedImageIds);
-            recipeStepImageRepository.deleteByRecipeStepIds(List.of(id));
-            recipeStepImageRepository.flush();
-            recipeService.saveStepImages(existing, requestedImageIds, mediaById, currentlyAttachedMediaIds);
-            Set<UUID> retainedMediaIds = new HashSet<>(requestedImageIds);
-            for (UUID oldMediaId : currentlyAttachedMediaIds) {
-                if (!retainedMediaIds.contains(oldMediaId)) {
-                    Media detachedMedia = mediaById.get(oldMediaId);
-                    if (detachedMedia != null) detachedMedia.setStatus(MediaStatus.TEMP);
-                }
+
+        mediaHelper.validateUniqueMediaIds(requestedImageIds);
+        recipeStepImageRepository.deleteByRecipeStepIds(List.of(id));
+        recipeStepImageRepository.flush();
+        mediaHelper.saveStepImages(existing, requestedImageIds, mediaById, currentlyAttachedMediaIds);
+
+        List<UUID> detachedIds = new ArrayList<>();
+        Set<UUID> retained = new HashSet<>(requestedImageIds);
+        List<Media> detached = new ArrayList<>();
+        for (UUID oldId : currentlyAttachedMediaIds) {
+            if (!retained.contains(oldId) && mediaById.get(oldId) != null) {
+                detached.add(mediaById.get(oldId));
+                detachedIds.add(oldId);
             }
         }
+        mediaHelper.detachMedia(detached);
 
         recipeStepRepository.save(existing);
+        mediaHelper.deleteMediaAfterCommit(detachedIds);
 
         entityManager.flush();
         entityManager.clear();
@@ -166,21 +158,22 @@ public class RecipeStepServiceImpl implements RecipeStepService {
         RecipeStep existing = recipeStepRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeStep not found"));
 
-        List<RecipeStepImage> linkedImages = recipeStepImageRepository.findByRecipeStepIdWithMedia(id);
+        List<UUID> mediaIds = recipeStepImageRepository.findMediaIdsByRecipeStepId(id);
 
-        List<RecipeStep> existingSteps = recipeStepRepository.findByRecipe_IdOrderByStepNumberAsc(existing.getRecipe().getId());
-
-        List<Integer> remainingStepNumbers = existingSteps.stream()
+        List<RecipeStep> existingSteps =
+                recipeStepRepository.findByRecipe_IdOrderByStepNumberAsc(existing.getRecipe().getId());
+        List<Integer> remaining = existingSteps.stream()
                 .filter(step -> !step.getId().equals(id))
                 .map(RecipeStep::getStepNumber)
                 .toList();
+        if (!remaining.isEmpty()) mediaHelper.validateContinuousStepNumbers(remaining);
 
-        if (!remainingStepNumbers.isEmpty()) {
-            validateContinuousStepNumbers(remainingStepNumbers);
+        if (!mediaIds.isEmpty()) {
+            mediaHelper.detachMedia(mediaHelper.loadMediaMap(mediaIds).values());
         }
+        recipeStepRepository.delete(existing);   // cascade xóa RecipeStepImage
 
-        linkedImages.forEach(link -> link.getMedia().setStatus(MediaStatus.TEMP));
-        recipeStepRepository.deleteById(id);
+        mediaHelper.deleteMediaAfterCommit(mediaIds);
     }
 
     @Override
@@ -206,48 +199,4 @@ public class RecipeStepServiceImpl implements RecipeStepService {
                 .build();
     }
 
-    private void validateContinuousStepNumbers(List<Integer> stepNumbers) {
-        if (stepNumbers == null || stepNumbers.isEmpty()) {
-            return;
-        }
-
-        Set<Integer> unique = new HashSet<>(stepNumbers);
-        if (unique.size() != stepNumbers.size()) {
-            throw new RuntimeException("Step number already exists in recipe");
-        }
-
-        int max = unique.stream().mapToInt(Integer::intValue).max().orElse(0);
-
-        for (int i = 1; i <= max; i++) {
-            if (!unique.contains(i)) {
-                throw new RuntimeException("Step number must be continuous starting from 1");
-            }
-        }
-    }
-
-    private Map<UUID, Media> loadMediaMap(java.util.Collection<UUID> requestedIds) {
-        if (requestedIds.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("Media IDs cannot contain null values");
-        }
-        Set<UUID> uniqueIds = new HashSet<>(requestedIds);
-        Map<UUID, Media> mediaById = new HashMap<>();
-        for (Media media : mediaRepository.findAllById(uniqueIds)) {
-            mediaById.put(media.getId(), media);
-        }
-        if (mediaById.size() != uniqueIds.size()) {
-            Set<UUID> missingIds = new HashSet<>(uniqueIds);
-            missingIds.removeAll(mediaById.keySet());
-            throw new IllegalArgumentException("Media not found: " + missingIds);
-        }
-        return mediaById;
-    }
-
-    private void validateUniqueMediaIds(List<UUID> mediaIds) {
-        if (mediaIds.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("Media IDs cannot contain null values");
-        }
-        if (new HashSet<>(mediaIds).size() != mediaIds.size()) {
-            throw new IllegalArgumentException("Media IDs cannot contain duplicates");
-        }
-    }
 }

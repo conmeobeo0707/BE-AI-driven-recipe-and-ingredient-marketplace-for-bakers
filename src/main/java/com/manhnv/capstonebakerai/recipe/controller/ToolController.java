@@ -60,13 +60,13 @@ public class ToolController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo tool mới")
+    @Operation(summary = "Tạo tool mới", description = "Request body: recipeId và name bắt buộc, không được null. recipeId phải trỏ tới recipe hiện có.")
     @PostMapping
     public ResponseEntity<ApiResponse<ToolResponse>> create(@Valid @RequestBody ToolRequest request) {
         return ResponseEntity.ok(ApiResponse.success(toolService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật tool")
+    @Operation(summary = "Cập nhật tool", description = "Request body: recipeId và name bắt buộc, không được null. Đây là cập nhật các giá trị, không phải partial update.")
     @PutMapping("/{toolId}")
     public ResponseEntity<ApiResponse<ToolResponse>> update(@PathVariable UUID toolId,
                                                             @Valid @RequestBody ToolRequest request) {

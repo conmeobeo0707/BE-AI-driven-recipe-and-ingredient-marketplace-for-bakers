@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.recipe.dto.request;
 
 import lombok.*;
+import jakarta.validation.constraints.NotNull;
 
 @Setter
 @Getter
@@ -8,5 +9,6 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RecipeCategoryRequest {
+    @NotNull(message = "name is required")
     private String name;
 }

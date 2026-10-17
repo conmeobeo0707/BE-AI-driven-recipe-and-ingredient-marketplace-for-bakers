@@ -77,6 +77,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/notifications/**"
                         ).permitAll()
+                        .requestMatchers(
+                                "/api/v1/payos/webhook"
+                        ).permitAll()
                         // Swagger / OpenAPI cho phép public
                         .requestMatchers(
                                 "/swagger-ui.html",

@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.recipe.dto.request;
 
 import lombok.*;
+import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
 
@@ -10,5 +11,6 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RecipeBookmarkRequest {
+    @NotNull(message = "recipeId is required")
     private UUID recipeId;
 }

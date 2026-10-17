@@ -1,10 +1,10 @@
 package com.manhnv.capstonebakerai.customer.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
-import com.manhnv.capstonebakerai.customer.dto.CustomerProfileResponse;
+import com.manhnv.capstonebakerai.customer.dto.response.CustomerProfileResponse;
 import com.manhnv.capstonebakerai.hobby.dto.HobbyResponse;
-import com.manhnv.capstonebakerai.customer.dto.UpdateCustomerHobbiesRequest;
-import com.manhnv.capstonebakerai.customer.dto.UpdateCustomerProfileRequest;
+import com.manhnv.capstonebakerai.customer.dto.request.UpdateCustomerHobbiesRequest;
+import com.manhnv.capstonebakerai.customer.dto.request.UpdateCustomerProfileRequest;
 import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.customer.entity.CustomerHobby;
 import com.manhnv.capstonebakerai.customer.exception.CustomerErrorCode;
