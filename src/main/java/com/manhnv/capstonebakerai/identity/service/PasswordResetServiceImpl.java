@@ -10,6 +10,7 @@ import com.manhnv.capstonebakerai.identity.event.PasswordResetRequestedEvent;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.repository.VerificationCodeRepository;
 import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
+import com.manhnv.capstonebakerai.identity.security.AuthRateLimiter;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuthRateLimiter authRateLimiter;
 
     @Value("${app.password-reset.code-expiration}")
     private Duration codeExpiration;
@@ -46,6 +48,8 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Override
     @Transactional
     public MessageResponse requestCode(String email) {
+        requireEmailRateLimit("forgot-password", email, 3, Duration.ofHours(1));
+
         User user = userRepository.findByEmailIgnoreCaseForUpdate(normalize(email)).orElse(null);
         if (user == null || user.getStatus() != UserStatus.ACTIVE) {
             return REQUEST_RESPONSE;
@@ -73,6 +77,8 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Override
     @Transactional
     public MessageResponse verifyCode(String email, String code) {
+        requireEmailRateLimit("forgot-password-verify", email, 10, Duration.ofMinutes(15));
+
         User user = userRepository.findByEmailIgnoreCase(normalize(email))
                 .filter(account -> account.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(this::invalidCode);
@@ -86,6 +92,8 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Override
     @Transactional
     public MessageResponse resetPassword(String email, String code, String newPassword) {
+        requireEmailRateLimit("reset-password", email, 5, Duration.ofMinutes(15));
+
         User user = userRepository.findByEmailIgnoreCaseForUpdate(normalize(email))
                 .filter(account -> account.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(this::invalidCode);
@@ -118,5 +126,11 @@ public class PasswordResetServiceImpl implements PasswordResetService {
 
     private String normalize(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void requireEmailRateLimit(String action, String email, int capacity, Duration window) {
+        if (!authRateLimiter.consumeForEmail(action, email, capacity, window).isConsumed()) {
+            throw new AppException(IdentityErrorCode.RATE_LIMIT_EXCEEDED);
+        }
     }
 }

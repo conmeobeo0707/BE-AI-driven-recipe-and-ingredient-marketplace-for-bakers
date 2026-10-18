@@ -2,18 +2,22 @@ package com.manhnv.capstonebakerai.identity.service;
 
 import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
+import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
-import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
+import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.exception.InvalidVerificationCodeException;
 import com.manhnv.capstonebakerai.identity.exception.VerificationEmailDeliveryException;
 import com.manhnv.capstonebakerai.identity.repository.VerificationCodeRepository;
+import com.manhnv.capstonebakerai.identity.security.AuthRateLimiter;
+import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
@@ -24,7 +28,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.transaction.annotation.Propagation;
 
 @Service
 public class EmailVerificationServiceImpl implements EmailVerificationService {
@@ -36,6 +39,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private final VerificationCodeRepository verificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailTemplateService emailTemplateService;
+    private final AuthRateLimiter authRateLimiter;
     private final Duration codeExpiration;
 
     public EmailVerificationServiceImpl(
@@ -44,6 +48,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             VerificationCodeRepository verificationCodeRepository,
             PasswordEncoder passwordEncoder,
             EmailTemplateService emailTemplateService,
+            AuthRateLimiter authRateLimiter,
             @Value("${app.verification-code-expiration}") Duration codeExpiration
     ) {
         this.userRepository = userRepository;
@@ -51,6 +56,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         this.verificationCodeRepository = verificationCodeRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailTemplateService = emailTemplateService;
+        this.authRateLimiter = authRateLimiter;
         this.codeExpiration = codeExpiration;
     }
 
@@ -98,6 +104,8 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     @Override
     @Transactional
     public MessageResponse verify(String email, String code) {
+        requireEmailRateLimit("verify-email", email, 10, Duration.ofMinutes(15));
+
         User user = userRepository.findByEmailIgnoreCase(normalize(email))
                 .orElseThrow(InvalidVerificationCodeException::new);
 
@@ -129,6 +137,8 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     @Override
     @Transactional
     public MessageResponse resend(String email) {
+        requireEmailRateLimit("resend-verification", email, 3, Duration.ofHours(1));
+
         Optional<User> optionalUser =
                 userRepository.findByEmailIgnoreCase(normalize(email));
 
@@ -146,5 +156,11 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
     private String normalize(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void requireEmailRateLimit(String action, String email, int capacity, Duration window) {
+        if (!authRateLimiter.consumeForEmail(action, email, capacity, window).isConsumed()) {
+            throw new AppException(IdentityErrorCode.RATE_LIMIT_EXCEEDED);
+        }
     }
 }
