@@ -18,4 +18,5 @@ public interface NotificationService {
     UnreadCountResponse countUnread(UUID userId);
     void create(UUID userId, String title, String content, NotificationRefType refType, UUID refId);
     void createForUsers(Collection<UUID> userIds, String title, String content, NotificationRefType refType, UUID refId);
+
 }

@@ -10,6 +10,8 @@ import com.manhnv.capstonebakerai.order.entity.OrderItem;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
 import com.manhnv.capstonebakerai.order.enums.RevenuePeriodType;
+import com.manhnv.capstonebakerai.order.event.OrderCreatedEvent;
+import com.manhnv.capstonebakerai.order.event.OrderStatusChangedEvent;
 import com.manhnv.capstonebakerai.order.exception.OrderErrorCode;
 import com.manhnv.capstonebakerai.order.mapper.OrderMapper;
 import com.manhnv.capstonebakerai.order.repository.OrderRepository;
@@ -28,6 +30,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -58,6 +61,7 @@ public class OrderServiceImpl implements OrderService {
     ShipmentService shipmentService;
     ShippingRateService shippingRateService;
     PaymentService paymentService;
+    ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -95,7 +99,7 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getStatus().isCancellableByCustomer()) {
             throw new AppException(OrderErrorCode.ORDER_CANNOT_CANCEL);
         }
-        applyCancel(order, request);
+        applyCancel(order, request, true);
         return mapper.toResponse(orderRepository.save(order));
     }
 
@@ -206,7 +210,7 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getStatus().isCancellableByStaff()) {
             throw new AppException(OrderErrorCode.ORDER_CANNOT_CANCEL);
         }
-        applyCancel(order, request);
+        applyCancel(order, request, false);
         return mapper.toResponse(orderRepository.save(order));
     }
 
@@ -326,6 +330,11 @@ public class OrderServiceImpl implements OrderService {
     private Order saveWithPayment(Order order) {
         Order saved = orderRepository.save(order);
         paymentService.createPending(saved.getId(), saved.getPaymentMethod(), saved.getTotal());
+
+        // Notification Configure
+        if (saved.getStatus() == OrderStatus.PENDING) {
+            eventPublisher.publishEvent(new OrderCreatedEvent(saved.getId(), saved.getCode()));
+        }
         return saved;
     }
 
@@ -363,9 +372,20 @@ public class OrderServiceImpl implements OrderService {
             default -> { }
         }
         order.setStatus(next);
+
+        // Notification configure
+        if (next == OrderStatus.PENDING) {
+            eventPublisher.publishEvent(new OrderCreatedEvent(order.getId(), order.getCode()));
+        } else {
+            eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                    order.getId(), order.getCode(),
+                    order.getCustomer().getUser().getUserId(),
+                    next, false
+            ));
+        }
     }
 
-    private void applyCancel(Order order, CancelOrderRequest request) {
+    private void applyCancel(Order order, CancelOrderRequest request, boolean byCustomer) {
         OrderStatus previous = order.getStatus();
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelledAt(LocalDateTime.now());
@@ -377,6 +397,11 @@ public class OrderServiceImpl implements OrderService {
             // TODO Phase 4: hoàn tiền nếu đã thanh toán PayOS
         }
         paymentService.onOrderCancelled(order);
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                order.getId(), order.getCode(),
+                order.getCustomer().getUser().getUserId(),
+                OrderStatus.CANCELLED, byCustomer
+        ));
     }
 
     private Specification<Order> spec(UUID customerId, OrderStatus status, PaymentMethod paymentMethod) {

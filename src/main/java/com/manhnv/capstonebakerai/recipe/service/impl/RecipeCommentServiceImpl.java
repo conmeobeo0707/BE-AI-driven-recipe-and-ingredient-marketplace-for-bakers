@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
+import com.manhnv.capstonebakerai.recipe.event.CommentCreatedEvent;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeCommentRequest;
@@ -13,10 +14,12 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeCommentRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeCommentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +31,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     private final RecipeCommentRepository repository;
     private final RecipeRepository recipeRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResponse<RecipeCommentResponse> getAll(String search, Pageable pageable) {
@@ -55,6 +59,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     }
 
     @Override
+    @Transactional
     public RecipeCommentResponse create(RecipeCommentRequest request) {
         Recipe recipe = recipeRepository.findById(request.getRecipeId())
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
@@ -67,13 +72,26 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
         entity.setUser(user);
         entity.setContent(request.getContent());
 
+        UUID parentOwnerId = null;
         if (request.getParentId() != null) {
             RecipeComment parent = repository.findById(request.getParentId())
                     .orElseThrow(() -> new RuntimeException("Parent comment not found"));
             entity.setParent(parent);
+            parentOwnerId = parent.getUser().getUserId();
         }
 
-        return RecipeCommentMapper.toDTO(repository.save(entity));
+        RecipeComment saved = repository.save(entity);
+
+        eventPublisher.publishEvent(new CommentCreatedEvent(
+                saved.getId(),
+                currentUserId,
+                recipe.getId(),
+                recipe.getTitle(),
+                recipe.getUser().getUserId(),
+                parentOwnerId
+        ));
+
+        return RecipeCommentMapper.toDTO(saved);
     }
 
     @Override

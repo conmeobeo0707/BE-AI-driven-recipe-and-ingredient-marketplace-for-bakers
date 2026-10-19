@@ -8,15 +8,18 @@ import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeRatingResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeRating;
+import com.manhnv.capstonebakerai.recipe.event.RatingCreatedEvent;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeRatingMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRatingRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeRatingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +32,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
     private final RecipeRatingRepository repository;
     private final RecipeRepository recipeRepository;
     private final CustomerRepository customerRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResponse<RecipeRatingResponse> getAll(String search, Pageable pageable) {
@@ -66,6 +70,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
     }
 
     @Override
+    @Transactional
     public RecipeRatingResponse create(RecipeRatingRequest request) {
         validateScore(request.getScore());
 
@@ -84,7 +89,18 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         entity.setCustomer(customer);
         entity.setScore(request.getScore());
 
-        return RecipeRatingMapper.toDTO(repository.save(entity));
+        RecipeRating saved = repository.save(entity);
+
+        eventPublisher.publishEvent(new RatingCreatedEvent(
+                saved.getId(),
+                currentUserId,
+                recipe.getId(),
+                recipe.getTitle(),
+                recipe.getUser().getUserId(),
+                request.getScore()
+        ));
+
+        return RecipeRatingMapper.toDTO(saved);
     }
 
     @Override
