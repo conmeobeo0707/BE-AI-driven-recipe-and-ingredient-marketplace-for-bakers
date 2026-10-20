@@ -199,6 +199,9 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(OrderErrorCode.ORDER_USE_CANCEL_ENDPOINT);
         }
         Order order = findOrThrow(orderId);
+        if (order.getStatus() == OrderStatus.AWAITING_PAYMENT) {
+            throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+        }
         applyTransition(order, next);
         return mapper.toResponse(orderRepository.save(order));
     }
@@ -333,6 +336,7 @@ public class OrderServiceImpl implements OrderService {
 
         // Notification Configure
         if (saved.getStatus() == OrderStatus.PENDING) {
+            // TODO: DEDCUT STOCK
             eventPublisher.publishEvent(new OrderCreatedEvent(saved.getId(), saved.getCode()));
         }
         return saved;
@@ -358,10 +362,8 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
         }
         switch (next) {
-            case CONFIRMED -> {
-                // TODO: gọi InventoryService.deduct(...) trừ kho (quantity x conversionFactor)
-                shipmentService.createForOrder(order);
-            }
+            // TODO: gọi InventoryService.deduct(...) trừ kho (quantity x conversionFactor)
+            case CONFIRMED -> shipmentService.createForOrder(order);
             case DELIVERED -> {
                 order.setDeliveredAt(LocalDateTime.now());
                 order.setRevenue(order.getProductsPrice().subtract(order.getDiscountAmount()));
@@ -390,11 +392,11 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelledAt(LocalDateTime.now());
         order.setCancelReason(request != null ? request.reason() : null);
-        if (previous != OrderStatus.PENDING && previous != OrderStatus.AWAITING_PAYMENT) {
+        if (previous != OrderStatus.AWAITING_PAYMENT) {
             // TODO: hoàn kho (InventoryService.restock)
-            // TODO Phase 3: hủy vận đơn trên Goship
+        }
+        if (previous != OrderStatus.PENDING && previous != OrderStatus.AWAITING_PAYMENT) {
             shipmentService.cancelForOrder(order.getId());
-            // TODO Phase 4: hoàn tiền nếu đã thanh toán PayOS
         }
         paymentService.onOrderCancelled(order);
         eventPublisher.publishEvent(new OrderStatusChangedEvent(

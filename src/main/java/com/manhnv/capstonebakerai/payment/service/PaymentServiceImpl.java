@@ -196,6 +196,12 @@ public class PaymentServiceImpl implements PaymentService {
     public void onOrderCancelled(Order order) {
         paymentRepository.findByOrderId(order.getId()).ifPresent(p -> {
             if (p.getStatus() == PaymentStatus.PENDING) {
+                if (!closePayosLink(p)) {
+                    // Không đóng được link: KHÔNG đánh FAILED, để webhook còn ghi nhận nếu khách trả tiền
+                    log.warn("Order {} cancelled but PayOS link of payment {} could not be closed, check manually",
+                            order.getCode(), p.getId());
+                    return;
+                }
                 p.setStatus(PaymentStatus.FAILED);
                 paymentRepository.save(p);
             } else if (p.getStatus() == PaymentStatus.PAID) {
@@ -203,6 +209,33 @@ public class PaymentServiceImpl implements PaymentService {
                 log.warn("Order {} cancelled but payment PAID, needs refund", order.getCode());
             }
         });
+    }
+
+    /** true = không còn link nào có thể nhận tiền (đã hủy, hết hạn hoặc chưa từng tạo). */
+    private boolean closePayosLink(Payment payment) {
+        if (payment.getMethod() != PaymentMethod.PAYOS || payment.getExternalId() == null) {
+            return true;
+        }
+        long orderCode = Long.parseLong(payment.getExternalId());
+        try {
+            payOS.paymentRequests().cancel(orderCode, "Đơn hàng đã bị hủy");
+            return true;
+        } catch (PayOSException e) {
+            log.warn("PayOS cancel link failed, payment={}: {}", payment.getId(), e.getMessage());
+            return isLinkAlreadyDead(orderCode);   // cancel lỗi vì link đã hủy/hết hạn thì vẫn coi là ổn
+        }
+    }
+
+    private boolean isLinkAlreadyDead(long orderCode) {
+        try {
+            PaymentLink link = payOS.paymentRequests().get(orderCode);
+            return switch (link.getStatus()) {
+                case CANCELLED, EXPIRED -> true;
+                default -> false;   // PAID, PENDING, PROCESSING: không chắc, coi như chưa đóng được
+            };
+        } catch (PayOSException e) {
+            return false;
+        }
     }
 
     private void markPaid(Payment payment, TransactionMethod method, ReceiptCategoryType receiptType,

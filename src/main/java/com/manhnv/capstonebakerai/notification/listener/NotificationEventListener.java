@@ -5,6 +5,9 @@ import com.manhnv.capstonebakerai.notification.service.NotificationService;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.event.OrderCreatedEvent;
 import com.manhnv.capstonebakerai.order.event.OrderStatusChangedEvent;
+import com.manhnv.capstonebakerai.quote.enums.RequestQuoteStatus;
+import com.manhnv.capstonebakerai.quote.event.RequestQuoteCreatedEvent;
+import com.manhnv.capstonebakerai.quote.event.RequestQuoteStatusChangedEvent;
 import com.manhnv.capstonebakerai.recipe.event.CommentCreatedEvent;
 import com.manhnv.capstonebakerai.recipe.event.RatingCreatedEvent;
 import com.manhnv.capstonebakerai.user.entity.User;
@@ -111,6 +114,51 @@ public class NotificationEventListener {
         );
     }
 
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onRequestQuoteCreated(RequestQuoteCreatedEvent e) {
+        List<UUID> staffIds = findStaffIds();
+        if (staffIds.isEmpty()) return;
+        String who = (e.contactName() != null && !e.contactName().isBlank())
+                ? e.contactName() + " - " + e.contactPhone()
+                : e.contactPhone();
+        notificationService.createForUsers(staffIds,
+                "Yêu cầu đặt sỉ mới",
+                "Có yêu cầu đặt sỉ mới từ " + who + " cần xử lý",
+                NotificationRefType.REQUEST_QUOTE,
+                e.requestQuoteId()
+        );
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onRequestQuoteStatusChanged(RequestQuoteStatusChangedEvent e) {
+        // Customer tự hủy: chỉ báo người đang xử lý (nếu có), không broadcast
+        if (e.newStatus() == RequestQuoteStatus.CANCELLED && e.cancelledByCustomer()) {
+            if (e.handledBy() == null) return;
+            notificationService.create(e.handledBy(),
+                    "Khách hủy yêu cầu đặt sỉ",
+                    "Một yêu cầu đặt sỉ bạn đang xử lý đã bị khách hàng hủy",
+                    NotificationRefType.REQUEST_QUOTE, e.requestQuoteId());
+            return;
+        }
+        notificationService.create(e.customerUserId(),
+                "Cập nhật yêu cầu đặt sỉ",
+                describe(e.newStatus(), e.reason()),
+                NotificationRefType.REQUEST_QUOTE, e.requestQuoteId());
+    }
+
+    private String describe(RequestQuoteStatus s, String reason) {
+        return switch (s) {
+            case IN_PROGRESS -> "Yêu cầu đặt sỉ của bạn đang được xử lý, nhân viên sẽ liên hệ với bạn";
+            case ORDERED -> "Đơn hàng theo yêu cầu đặt sỉ của bạn đã được tạo, vào mục Đơn hàng để xem";
+            case REJECTED -> "Yêu cầu đặt sỉ của bạn đã bị từ chối"
+                    + (reason != null && !reason.isBlank() ? ": " + shorten(reason) : "");
+            default -> "Yêu cầu đặt sỉ của bạn đã chuyển sang trạng thái " + s.name();
+        };
+    }
 
     private String shorten(String s) {
         if (s == null) return "";
