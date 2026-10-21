@@ -2,6 +2,12 @@ package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
+import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
+import com.manhnv.capstonebakerai.payment.entity.PaymentTransaction;
+import com.manhnv.capstonebakerai.payment.enums.TransactionDirection;
+import com.manhnv.capstonebakerai.payment.enums.TransactionMethod;
+import com.manhnv.capstonebakerai.payment.enums.TransactionRefType;
+import com.manhnv.capstonebakerai.payment.repository.PaymentTransactionRepository;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierPaymentCreateRequest;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierPaymentDetailResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierPaymentResponse;
@@ -37,13 +43,15 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     private final SupplierPaymentRepository payments;
     private final SupplierPaymentDetailRepository paymentDetails;
     private final StockInNoteRepository stockInNotes;
+    private final PaymentTransactionRepository transactionRepository;
 
     public SupplierPaymentServiceImpl(SupplierRepository suppliers, SupplierPaymentRepository payments,
-            SupplierPaymentDetailRepository paymentDetails, StockInNoteRepository stockInNotes) {
+            SupplierPaymentDetailRepository paymentDetails, StockInNoteRepository stockInNotes, PaymentTransactionRepository transactionRepository) {
         this.suppliers = suppliers;
         this.payments = payments;
         this.paymentDetails = paymentDetails;
         this.stockInNotes = stockInNotes;
+        this.transactionRepository = transactionRepository;
     }
 
     @Override
@@ -110,6 +118,17 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         }
         stockInNotes.saveAll(lockedNotes);
         List<SupplierPaymentDetail> savedPaymentDetails = paymentDetails.saveAll(savedDetails);
+
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .refType(TransactionRefType.SUPPLIER_PAYMENT)
+                .refId(savedPayment.getId())
+                .direction(TransactionDirection.OUT)
+                .amount(request.amount())
+                .method(TransactionMethod.BANK_TRANSFER)
+                .createdBy(SecurityUtils.getCurrentUserId())
+                .build();
+        transactionRepository.save(transaction);
+
         return toDetailResponse(savedPayment, savedPaymentDetails, notesById);
     }
 
