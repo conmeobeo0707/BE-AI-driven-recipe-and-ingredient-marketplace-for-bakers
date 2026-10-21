@@ -75,13 +75,13 @@ public class RecipeRatingController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe rating mới")
+    @Operation(summary = "Tạo recipe rating mới", description = "Request body: recipeId bắt buộc và phải trỏ tới recipe hiện có; score bắt buộc, nhận giá trị từ 1 đến 5. Customer được xác định từ tài khoản đăng nhập, không truyền trong body.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeRatingResponse>> create(@Valid @RequestBody RecipeRatingRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeRatingService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe rating")
+    @Operation(summary = "Cập nhật recipe rating", description = "Request body: recipeId bắt buộc và phải trỏ tới recipe hiện có; score bắt buộc, nhận giá trị từ 1 đến 5. Customer được xác định từ tài khoản đăng nhập, không truyền trong body.")
     @PutMapping("/{ratingId}")
     public ResponseEntity<ApiResponse<RecipeRatingResponse>> update(@PathVariable UUID ratingId,
                                                                     @Valid @RequestBody RecipeRatingRequest request) {

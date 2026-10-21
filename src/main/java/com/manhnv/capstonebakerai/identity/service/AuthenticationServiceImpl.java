@@ -13,6 +13,7 @@ import com.manhnv.capstonebakerai.user.enums.Role;
 import com.manhnv.capstonebakerai.user.enums.UserStatus;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.repository.RefreshTokenRepository;
+import com.manhnv.capstonebakerai.identity.security.AuthRateLimiter;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,6 +49,7 @@ public class AuthenticationServiceImpl implements AuthenticationService{
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final CustomerRepository customerRepository;
+    private final AuthRateLimiter authRateLimiter;
 
     @Value("${app.jwt.issuer}")
     private String issuer;
@@ -63,12 +65,13 @@ public class AuthenticationServiceImpl implements AuthenticationService{
     public AuthenticationResult login(LoginRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
 
-        User user = userRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new AppException(
-                        IdentityErrorCode.INVALID_CREDENTIALS));
+        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (user == null) {
+            throw invalidCredentialsOrRateLimited(email);
+        }
 
         if(!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new AppException(IdentityErrorCode.INVALID_CREDENTIALS);
+            throw invalidCredentialsOrRateLimited(email);
         }
         checkUserCanLogin(user);
         return issueTokenPair(user, null);
@@ -134,6 +137,18 @@ public class AuthenticationServiceImpl implements AuthenticationService{
                 throw new AppException(IdentityErrorCode.EMAIL_NOT_VERIFIED);
             }
         }
+    }
+
+    private AppException invalidCredentialsOrRateLimited(String email) {
+        if (!authRateLimiter.consumeForEmail(
+                "login",
+                email,
+                5,
+                Duration.ofMinutes(15)
+        ).isConsumed()) {
+            return new AppException(IdentityErrorCode.RATE_LIMIT_EXCEEDED);
+        }
+        return new AppException(IdentityErrorCode.INVALID_CREDENTIALS);
     }
 
     private AuthenticationResult issueTokenPair(User user, RefreshToken previousToken) {

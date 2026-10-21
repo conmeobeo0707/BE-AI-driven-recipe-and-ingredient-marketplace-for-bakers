@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.recipe.entity;
 
+import com.manhnv.capstonebakerai.media.entity.Media;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

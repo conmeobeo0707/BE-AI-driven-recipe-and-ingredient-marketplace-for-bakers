@@ -28,4 +28,7 @@ public interface RecipeStepImageRepository extends JpaRepository<RecipeStepImage
     @Query("SELECT image.media.id FROM RecipeStepImage image " +
             "WHERE image.recipeStep.recipe.id = :recipeId")
     List<UUID> findMediaIdsByRecipeId(@Param("recipeId") UUID recipeId);
+
+    @Query("SELECT image.media.id FROM RecipeStepImage image WHERE image.recipeStep.id = :recipeStepId")
+    List<UUID> findMediaIdsByRecipeStepId(@Param("recipeStepId") UUID recipeStepId);
 }

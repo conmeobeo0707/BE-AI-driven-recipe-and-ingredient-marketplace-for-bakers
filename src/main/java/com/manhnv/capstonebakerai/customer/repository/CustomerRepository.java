@@ -1,7 +1,6 @@
 package com.manhnv.capstonebakerai.customer.repository;
 
 import com.manhnv.capstonebakerai.customer.entity.Customer;
-import com.manhnv.capstonebakerai.user.entity.User;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -28,7 +27,4 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
             where c.user.userId = :userId
             """)
     Optional<Customer> findByUserIdForUpdate(@Param("userId") UUID userId);
-
-    UUID user(User user);
-
 }

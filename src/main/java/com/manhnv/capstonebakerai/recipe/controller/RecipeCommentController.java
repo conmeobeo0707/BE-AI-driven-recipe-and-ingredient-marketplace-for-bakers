@@ -92,13 +92,13 @@ public class RecipeCommentController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe comment mới")
+    @Operation(summary = "Tạo recipe comment mới", description = "Request body: recipeId và content bắt buộc, không được null. parentId có thể null hoặc không gửi để tạo comment gốc; truyền parentId để tạo reply cho comment hiện có. User được xác định từ tài khoản đăng nhập.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeCommentResponse>> create(@Valid @RequestBody RecipeCommentRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeCommentService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe comment")
+    @Operation(summary = "Cập nhật recipe comment", description = "Request body: recipeId và content bắt buộc, không được null. parentId có thể null hoặc không gửi; khi null, comment sẽ bỏ liên kết parent và trở thành comment gốc. User được xác định từ tài khoản đăng nhập.")
     @PutMapping("/{commentId}")
     public ResponseEntity<ApiResponse<RecipeCommentResponse>> update(@PathVariable UUID commentId,
                                                                      @Valid @RequestBody RecipeCommentRequest request) {

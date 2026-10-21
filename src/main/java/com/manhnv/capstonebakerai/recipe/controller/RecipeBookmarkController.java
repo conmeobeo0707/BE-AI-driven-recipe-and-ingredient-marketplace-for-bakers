@@ -73,13 +73,13 @@ public class RecipeBookmarkController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe bookmark mới")
+    @Operation(summary = "Tạo recipe bookmark mới", description = "Request body: recipeId bắt buộc, không được null và phải trỏ tới recipe hiện có. Customer được xác định từ tài khoản đăng nhập, không truyền trong body.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeBookmarkResponse>> create(@Valid @RequestBody RecipeBookmarkRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeBookmarkService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe bookmark")
+    @Operation(summary = "Cập nhật recipe bookmark", description = "Request body: recipeId bắt buộc, không được null và phải trỏ tới recipe hiện có. Bookmark được gán cho customer đang đăng nhập; customerId không nhận từ body.")
     @PutMapping("/{recipeBookmarkId}")
     public ResponseEntity<ApiResponse<RecipeBookmarkResponse>> update(@PathVariable UUID recipeBookmarkId,
                                                                       @Valid @RequestBody RecipeBookmarkRequest request) {
