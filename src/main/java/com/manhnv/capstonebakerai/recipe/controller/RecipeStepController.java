@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.recipe.controller;
 
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeStepResponse;
 import com.manhnv.capstonebakerai.recipe.service.RecipeStepService;
@@ -60,16 +61,16 @@ public class RecipeStepController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe step mới")
+    @Operation(summary = "Tạo recipe step mới", description = "Request body: recipeId và stepNumber bắt buộc, không được null. instruction có thể null. imageIds có thể null/không gửi để tạo step không có ảnh. recipeId phải trỏ tới recipe hiện có; stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeStepResponse>> create(@Valid @RequestBody RecipeStepRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeStepService.createRecipeStep(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe step")
+    @Operation(summary = "Cập nhật recipe step", description = "Request body dùng RecipeStepEmbeddedRequest: stepNumber và instruction cần có; instruction không được null. imageIds null/không gửi hoặc danh sách rỗng đều xóa toàn bộ ảnh hiện có của step; gửi danh sách có phần tử để thay ảnh. stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
     @PutMapping("/{recipeStepId}")
     public ResponseEntity<ApiResponse<RecipeStepResponse>> update(@PathVariable UUID recipeStepId,
-                                                                  @Valid @RequestBody RecipeStepRequest request) {
+                                                                  @Valid @RequestBody RecipeStepEmbeddedRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeStepService.updateRecipeStep(recipeStepId, request)));
     }
 

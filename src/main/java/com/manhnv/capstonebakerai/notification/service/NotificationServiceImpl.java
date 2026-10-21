@@ -46,6 +46,7 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    @Transactional
     public NotificationResponse markAsRead(UUID userId, UUID id) {
         Notification notification = findOrThrow(userId, id);
         if (!notification.isRead()) {

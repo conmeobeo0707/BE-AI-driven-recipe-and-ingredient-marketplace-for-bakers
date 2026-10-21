@@ -96,6 +96,10 @@ public class SecurityConfig {
                                 "/api/v1/admin/accounts/**"
                         ).hasRole("ADMIN")
                         .requestMatchers(
+                                "/api/v1/admin/customers",
+                                "/api/v1/admin/customers/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
                                 "/api/v1/users/me",
                                 "/api/v1/users/me/**"
                         )

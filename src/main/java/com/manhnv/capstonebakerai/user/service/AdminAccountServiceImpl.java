@@ -85,9 +85,11 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
 
     @Override
     @Transactional(readOnly = true)
-    public List<StaffAccountResponse> getAccounts() {
-        return userRepository
-                .findByRoleInOrderByCreatedAtDescUserIdAsc(MANAGED_ROLES)
+    public List<StaffAccountResponse> getAccounts(UserStatus status) {
+        List<User> users = status == null
+                ? userRepository.findByRoleInOrderByCreatedAtDescUserIdAsc(MANAGED_ROLES)
+                : userRepository.findByRoleInAndStatusOrderByCreatedAtDescUserIdAsc(MANAGED_ROLES, status);
+        return users
                 .stream()
                 .map(this::toResponse)
                 .toList();
