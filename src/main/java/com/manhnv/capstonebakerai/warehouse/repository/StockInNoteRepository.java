@@ -10,10 +10,17 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
+import java.util.Collection;
+import java.util.List;
 public interface StockInNoteRepository extends JpaRepository<StockInNote, UUID> {
     boolean existsByCode(String code);
     boolean existsBySupplierId(UUID supplierId);
     Page<StockInNote> findByStatus(NoteStatus status, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select n from StockInNote n where n.noteId=:id")
     Optional<StockInNote> lockById(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select n from StockInNote n where n.supplierId = :supplierId and n.noteId in :noteIds and n.status = :status order by n.noteId")
+    List<StockInNote> lockBySupplierAndNoteIdsAndStatus(@Param("supplierId") UUID supplierId,
+            @Param("noteIds") Collection<UUID> noteIds, @Param("status") NoteStatus status);
 }
