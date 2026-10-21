@@ -5,6 +5,7 @@ import com.manhnv.capstonebakerai.user.dto.CreateStaffAccountRequest;
 import com.manhnv.capstonebakerai.user.dto.StaffAccountResponse;
 import com.manhnv.capstonebakerai.user.dto.UpdateAccountStatusRequest;
 import com.manhnv.capstonebakerai.user.dto.UpdateStaffAccountRequest;
+import com.manhnv.capstonebakerai.user.enums.UserStatus;
 import com.manhnv.capstonebakerai.user.service.AdminAccountService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -32,9 +33,12 @@ public class AdminAccountController {
     }
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách tài khoản nhân viên", description = "Trả về toàn bộ tài khoản STAFF, MANAGER và BAKER_STAFF, mới tạo trước. API hiện chưa phân trang.")
-    public ApiResponse<List<StaffAccountResponse>> getAccounts() {
-        return ApiResponse.success(adminAccountService.getAccounts());
+    @Operation(summary = "Lấy danh sách tài khoản nhân viên", description = "Trả về tài khoản STAFF, MANAGER và BAKER_STAFF, mới tạo trước. Có thể lọc theo status ACTIVE, BLOCKED hoặc INACTIVE; bỏ status để lấy tất cả. API hiện chưa phân trang.")
+    public ApiResponse<List<StaffAccountResponse>> getAccounts(
+            @Parameter(description = "Lọc theo trạng thái tài khoản; bỏ trống để lấy tất cả", required = false)
+            @RequestParam(required = false) UserStatus status
+    ) {
+        return ApiResponse.success(adminAccountService.getAccounts(status));
     }
 
     @GetMapping("/{id}")
