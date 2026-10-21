@@ -194,6 +194,28 @@ Mẫu cập nhật số đếm. `itemId` là ID dòng kiểm kê do API chi ti�
 
 `supplierName` bắt buộc; `phoneNumber` tối đa 20, email hợp lệ tối đa 100, địa chỉ tối đa 5000 ký tự. Supplier response hiện không có trường đối soát công nợ.
 
+### Thanh toán nhà cung cấp — `/api/suppliers/{supplierId}/payments`
+
+| Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |
+|---|---|---|---|---|
+| `POST /api/suppliers/{supplierId}/payments` | Tạo phiếu thanh toán và phân bổ toàn bộ số tiền vào một hoặc nhiều phiếu nhập đã hoàn tất của nhà cung cấp. Cập nhật `paid_amount`, `debt_amount`, `payment_status` tương ứng. | Path `supplierId`; JSON mẫu bên dưới. | `201`, `ApiResponse<SupplierPaymentDetailResponse>` | `400` thiếu/sai dữ liệu, tổng chi tiết không bằng `amount`, hoặc lặp phiếu nhập; `404` nhà cung cấp/phiếu nhập không tìm thấy hoặc phiếu không thuộc nhà cung cấp; `409` một khoản phân bổ lớn hơn dư nợ còn lại. |
+| `GET /api/suppliers/{supplierId}/payments` | Danh sách phiếu thanh toán của nhà cung cấp. | Path `supplierId`; `page`, `size`, `sort`; mặc định size 20, `createdAt DESC`. | `200`, `ApiResponse<Page<SupplierPaymentResponse>>` | `400` tham số phân trang/sort sai; `404` nhà cung cấp không tồn tại. |
+| `GET /api/suppliers/{supplierId}/payments/{paymentId}` | Chi tiết phiếu thanh toán và các phiếu nhập được phân bổ. | Path `supplierId`, `paymentId`. | `200`, `ApiResponse<SupplierPaymentDetailResponse>` | `404` không tìm thấy phiếu thanh toán thuộc nhà cung cấp này. |
+
+Body tạo thanh toán:
+
+```json
+{
+  "amount": 150000,
+  "details": [
+    {"stockInNoteId":"uuid-phiếu-nhập-1","amount":100000},
+    {"stockInNoteId":"uuid-phiếu-nhập-2","amount":50000}
+  ]
+}
+```
+
+`amount` và từng khoản phân bổ phải lớn hơn 0, tối đa 2 chữ số thập phân. Tổng `details.amount` phải bằng chính xác `amount`; không hỗ trợ tiền chưa phân bổ. Mỗi phiếu nhập chỉ được xuất hiện một lần trong một request, phải ở trạng thái `COMPLETED`, thuộc đúng nhà cung cấp và số phân bổ không được vượt `debt_amount` còn lại. Khi `debt_amount` về 0, trạng thái công nợ chuyển thành `PAID`; nếu còn dư nợ, chuyển thành `PARTIAL`.
+
 ## Ghi chú về phân trang
 
 Các API list dùng Spring `Pageable`. Ví dụ `?page=0&size=10&sort=createdAt,desc`; page bắt đầu từ 0. `sort` dùng tên thuộc tính entity được hỗ trợ bởi endpoint. Cấu trúc `Page` được serialize theo phiên bản Spring đang chạy.
