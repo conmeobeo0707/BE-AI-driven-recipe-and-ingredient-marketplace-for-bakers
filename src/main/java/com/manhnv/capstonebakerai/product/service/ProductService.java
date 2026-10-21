@@ -17,6 +17,7 @@ public interface ProductService {
     void deactivate(UUID productId);
     List<UnitPriceHistoryResponse> getUnitPriceHistory(UUID productId, UUID unitId);
     List<ComboItemRequest> setComboItems(UUID productId, List<ComboItemRequest> items);
+    List<ComboItemRequest> getComboItems(UUID productId);
     java.math.BigDecimal calculateComboStock(UUID productId);
     List<InventoryProduct> lockInventoryProducts(Collection<UUID> productIds);
     InventoryProduct getInventoryProduct(UUID productId);

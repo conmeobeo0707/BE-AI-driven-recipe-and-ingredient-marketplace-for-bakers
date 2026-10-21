@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.enums.StockOutType;
 public interface StockOutNoteRepository extends JpaRepository<StockOutNote, UUID> {
+    Optional<StockOutNote> findByReferenceOrderIdAndType(UUID referenceOrderId, StockOutType type);
     boolean existsByCode(String code);
     Page<StockOutNote> findByStatus(NoteStatus status, Pageable pageable);
     Page<StockOutNote> findByType(StockOutType type, Pageable pageable);

@@ -196,6 +196,16 @@ public class ProductServiceImpl implements ProductService {
         return List.copyOf(items);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<ComboItemRequest> getComboItems(UUID productId) {
+        Product product = getEntity(productId);
+        if (!product.isCombo()) throw invalid("Product is not a combo");
+        return children.findByParentProductId(productId).stream()
+                .map(childProduct -> new ComboItemRequest(childProduct.getChildrenProductId(), childProduct.getQuantity()))
+                .toList();
+    }
+
     @Override @Transactional(readOnly = true)
     public BigDecimal calculateComboStock(UUID productId) {
         Product product = getEntity(productId);
