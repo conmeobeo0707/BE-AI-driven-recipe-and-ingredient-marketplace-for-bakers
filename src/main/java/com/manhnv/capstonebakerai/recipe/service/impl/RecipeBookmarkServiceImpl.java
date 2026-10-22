@@ -8,15 +8,19 @@ import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeBookmarkResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeBookmark;
+import com.manhnv.capstonebakerai.recipe.enums.InteractionSource;
+import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeBookmarkMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeBookmarkRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeBookmarkService;
+import com.manhnv.capstonebakerai.recipe.service.RecipeInteractionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +32,7 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
     private final RecipeBookmarkRepository repository;
     private final RecipeRepository recipeRepository;
     private final CustomerRepository customerRepository;
+    private final RecipeInteractionService interactionService;
 
     @Override
     public PageResponse<RecipeBookmarkResponse> getAll(Pageable pageable) {
@@ -52,6 +57,7 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
     }
 
     @Override
+    @Transactional
     public RecipeBookmarkResponse create(RecipeBookmarkRequest request) {
         Recipe recipe = recipeRepository.findById(request.getRecipeId())
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
@@ -67,10 +73,16 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         entity.setRecipe(recipe);
         entity.setCustomer(customer);
 
-        return RecipeBookmarkMapper.toDTO(repository.save(entity));
+        RecipeBookmark saved = repository.save(entity);
+        interactionService.record(
+                customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
+                null, InteractionSource.DIRECT
+        );
+        return RecipeBookmarkMapper.toDTO(saved);
     }
 
     @Override
+    @Transactional
     public RecipeBookmarkResponse update(UUID id, RecipeBookmarkRequest request) {
         RecipeBookmark existing = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeBookmark not found"));
@@ -81,18 +93,33 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         Customer customer = customerRepository.findByUser_UserId(currentUserId)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
 
-        existing.setRecipe(recipe);
-        existing.setCustomer(customer);
+        if (!existing.getCustomer().getId().equals(customer.getId())) {
+            throw new RuntimeException("RecipeBookmark not found");
+        }
 
-        return RecipeBookmarkMapper.toDTO(repository.save(existing));
+        UUID previousRecipeId = existing.getRecipe().getId();
+        existing.setRecipe(recipe);
+        RecipeBookmark saved = repository.save(existing);
+        if (!previousRecipeId.equals(recipe.getId())) {
+            interactionService.record(
+                    customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
+                    null, InteractionSource.DIRECT
+            );
+        }
+        return RecipeBookmarkMapper.toDTO(saved);
     }
 
     @Override
+    @Transactional
     public void delete(UUID id) {
-        if (!repository.existsById(id)) {
+        RecipeBookmark existing = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("RecipeBookmark not found"));
+        Customer customer = customerRepository.findByUser_UserId(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Customer not found"));
+        if (!existing.getCustomer().getId().equals(customer.getId())) {
             throw new RuntimeException("RecipeBookmark not found");
         }
-        repository.deleteById(id);
+        repository.delete(existing);
     }
 
     @Override
