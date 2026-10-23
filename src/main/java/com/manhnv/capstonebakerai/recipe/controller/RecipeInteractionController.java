@@ -14,12 +14,15 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.constraints.Size;
 
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/customers/me/interaction-history")
 @RequiredArgsConstructor
+@Validated
 public class RecipeInteractionController {
 
     private final RecipeInteractionService interactionService;
@@ -40,9 +43,10 @@ public class RecipeInteractionController {
     @PostMapping("/views/{recipeId}")
     public ResponseEntity<ApiResponse<String>> recordView(
             @PathVariable UUID recipeId,
-            @RequestParam(defaultValue = "DIRECT") InteractionSource source
+            @RequestParam(defaultValue = "DIRECT") InteractionSource source,
+            @RequestParam(required = false) @Size(max = 100) String recommId
     ) {
-        interactionService.recordViewForCurrentCustomer(recipeId, source);
+        interactionService.recordViewForCurrentCustomer(recipeId, source, recommId);
         return ResponseEntity.ok(ApiResponse.success("View recorded"));
     }
 }

@@ -12,6 +12,9 @@ import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeInteractionRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeInteractionService;
+import com.manhnv.capstonebakerai.recommendation.event.RecipeInteractionDeletedEvent;
+import com.manhnv.capstonebakerai.recommendation.event.RecipeInteractionRecordedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +32,7 @@ public class RecipeInteractionServiceImpl
     private final RecipeInteractionRepository repository;
     private final CustomerRepository customerRepository;
     private final RecipeRepository recipeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -37,7 +41,8 @@ public class RecipeInteractionServiceImpl
             UUID recipeId,
             RecipeInteractionType type,
             Integer ratingScore,
-            InteractionSource requestedSource
+            InteractionSource requestedSource,
+            String recommId
     ) {
         RecipeInteraction event = new RecipeInteraction();
         event.setCustomer(customerRepository.getReferenceById(customerId));
@@ -50,17 +55,32 @@ public class RecipeInteractionServiceImpl
         );
         event.setSource(requestedSource == null ? InteractionSource.DIRECT : requestedSource);
         event.setOccurredAt(Instant.now());
-        repository.save(event);
+        event.setRecommId(recommId);
+        RecipeInteraction saved = repository.save(event);
+        if (type != RecipeInteractionType.SEARCH) {
+            eventPublisher.publishEvent(new RecipeInteractionRecordedEvent(
+                    saved.getId(), customerId, recipeId, type, saved.getRatingScore(), recommId, saved.getOccurredAt()));
+        }
     }
 
     @Override
     @Transactional
-    public void recordViewForCurrentCustomer(UUID recipeId, InteractionSource source) {
+    public void recordViewForCurrentCustomer(UUID recipeId, InteractionSource source, String recommId) {
         Customer customer = getCurrentCustomer();
         Recipe recipe = recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
-        record(customer.getId(), recipe.getId(), RecipeInteractionType.VIEW, null, source);
+        InteractionSource effectiveSource = recommId == null || recommId.isBlank()
+                ? source : InteractionSource.RECOMMENDATION;
+        record(customer.getId(), recipe.getId(), RecipeInteractionType.VIEW, null, effectiveSource, recommId);
+    }
+
+    @Override
+    @Transactional
+    public void remove(UUID customerId, UUID recipeId, RecipeInteractionType type) {
+        if (type == RecipeInteractionType.BOOKMARK || type == RecipeInteractionType.RATING) {
+            eventPublisher.publishEvent(new RecipeInteractionDeletedEvent(customerId, recipeId, type));
+        }
     }
 
     @Override
@@ -121,6 +141,7 @@ public class RecipeInteractionServiceImpl
                 .recipeId(recipe == null ? null : recipe.getId())
                 .recipeTitle(recipe == null ? null : recipe.getTitle())
                 .ratingScore(event.getRatingScore())
+                .recommId(event.getRecommId())
                 .searchQuery(event.getSearchQuery())
                 .source(event.getSource())
                 .occurredAt(event.getOccurredAt())

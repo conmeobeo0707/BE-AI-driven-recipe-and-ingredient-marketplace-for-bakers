@@ -15,10 +15,13 @@ public interface RecipeInteractionService {
             UUID recipeId,
             RecipeInteractionType type,
             Integer ratingScore,
-            InteractionSource requestedSource
+            InteractionSource requestedSource,
+            String recommId
     );
 
-    void recordViewForCurrentCustomer(UUID recipeId, InteractionSource source);
+    void recordViewForCurrentCustomer(UUID recipeId, InteractionSource source, String recommId);
+
+    void remove(UUID customerId, UUID recipeId, RecipeInteractionType type);
 
     void recordSearchForCurrentCustomer(String query);
 

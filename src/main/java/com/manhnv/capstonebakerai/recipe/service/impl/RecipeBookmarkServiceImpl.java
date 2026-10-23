@@ -76,7 +76,8 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         RecipeBookmark saved = repository.save(entity);
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
-                null, InteractionSource.DIRECT
+                null, request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getRecommId()
         );
         return RecipeBookmarkMapper.toDTO(saved);
     }
@@ -101,9 +102,11 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         existing.setRecipe(recipe);
         RecipeBookmark saved = repository.save(existing);
         if (!previousRecipeId.equals(recipe.getId())) {
+            interactionService.remove(customer.getId(), previousRecipeId, RecipeInteractionType.BOOKMARK);
             interactionService.record(
                     customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
-                    null, InteractionSource.DIRECT
+                    null, request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                    request.getRecommId()
             );
         }
         return RecipeBookmarkMapper.toDTO(saved);
@@ -120,6 +123,7 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
             throw new RuntimeException("RecipeBookmark not found");
         }
         repository.delete(existing);
+        interactionService.remove(customer.getId(), existing.getRecipe().getId(), RecipeInteractionType.BOOKMARK);
     }
 
     @Override

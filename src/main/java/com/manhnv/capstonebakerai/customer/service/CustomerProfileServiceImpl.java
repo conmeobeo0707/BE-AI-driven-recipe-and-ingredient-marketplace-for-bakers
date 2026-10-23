@@ -10,7 +10,9 @@ import com.manhnv.capstonebakerai.customer.entity.CustomerHobby;
 import com.manhnv.capstonebakerai.customer.exception.CustomerErrorCode;
 import com.manhnv.capstonebakerai.customer.repository.CustomerHobbyRepository;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
+import com.manhnv.capstonebakerai.recommendation.event.CustomerProfileChangedEvent;
 import com.manhnv.capstonebakerai.hobby.service.HobbyService;
+import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final CustomerRepository customerRepository;
     private final CustomerHobbyRepository customerHobbyRepository;
     private final HobbyService hobbyService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -45,7 +48,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     public CustomerProfileResponse updateProfile(UUID userId, UpdateCustomerProfileRequest request) {
         Customer customer = findCustomer(userId);
         customer.setSkillLevel(request.skillLevel());
-        return toResponse(customerRepository.save(customer), selectedHobbies(customer));
+        Customer savedCustomer = customerRepository.save(customer);
+        eventPublisher.publishEvent(new CustomerProfileChangedEvent(savedCustomer.getId()));
+        return toResponse(savedCustomer, selectedHobbies(savedCustomer));
     }
 
     @Override
@@ -64,6 +69,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 .map(hobbyId -> new CustomerHobby(customer.getId(), hobbyId))
                 .toList();
         customerHobbyRepository.saveAll(customerHobbies);
+        eventPublisher.publishEvent(new CustomerProfileChangedEvent(customer.getId()));
 
         return toResponse(customer, hobbies);
     }

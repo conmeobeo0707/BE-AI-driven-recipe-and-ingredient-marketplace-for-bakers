@@ -96,7 +96,8 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         RecipeRating saved = repository.save(entity);
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
-                request.getScore(), InteractionSource.DIRECT);
+                request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getRecommId());
 
         eventPublisher.publishEvent(new RatingCreatedEvent(
                 saved.getId(),
@@ -133,6 +134,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
             throw new RuntimeException("Rating already exists");
         }
 
+        UUID previousRecipeId = existing.getRecipe().getId();
         existing.setRecipe(recipe);
         existing.setCustomer(customer);
         existing.setScore(request.getScore());
@@ -140,7 +142,11 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         RecipeRating saved = repository.save(existing);
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
-                request.getScore(), InteractionSource.DIRECT);
+                request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getRecommId());
+        if (!previousRecipeId.equals(recipe.getId())) {
+            interactionService.remove(customer.getId(), previousRecipeId, RecipeInteractionType.RATING);
+        }
         return RecipeRatingMapper.toDTO(saved);
     }
 
@@ -155,6 +161,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
             throw new RuntimeException("RecipeRating not found");
         }
         repository.delete(existing);
+        interactionService.remove(customer.getId(), existing.getRecipe().getId(), RecipeInteractionType.RATING);
     }
 
     @Override

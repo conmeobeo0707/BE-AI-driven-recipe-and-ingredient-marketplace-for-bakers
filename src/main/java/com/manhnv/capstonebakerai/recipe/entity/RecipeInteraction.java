@@ -37,6 +37,9 @@ public class RecipeInteraction {
     @Column(name = "rating_score")
     private Integer ratingScore;
 
+    @Column(name = "recomm_id", length = 100)
+    private String recommId;
+
     @Column(name = "search_query", length = 255)
     private String searchQuery;
 

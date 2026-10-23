@@ -20,6 +20,7 @@ public class RecipeInteractionResponse {
     private UUID recipeId;
     private String recipeTitle;
     private Integer ratingScore;
+    private String recommId;
     private String searchQuery;
     private InteractionSource source;
     private Instant occurredAt;
