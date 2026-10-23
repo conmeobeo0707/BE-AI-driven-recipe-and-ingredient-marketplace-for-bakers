@@ -7,6 +7,7 @@ import com.manhnv.capstonebakerai.recipe.dto.response.RecipeResponse;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import com.manhnv.capstonebakerai.recipe.service.RecipeService;
+import com.manhnv.capstonebakerai.recipe.service.RecipeInteractionService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class RecipeController {
 
     private final RecipeService recipeService;
+    private final RecipeInteractionService interactionService;
 
     @Operation(summary = "Lấy recipe theo id")
     @GetMapping("/{recipeId}")
@@ -74,6 +76,7 @@ public class RecipeController {
                 recipeStatus,
                 pageable
         );
+        interactionService.recordSearchForCurrentCustomer(search);
 
         return ResponseEntity.ok(ApiResponse.success(result));
     }

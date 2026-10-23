@@ -109,6 +109,8 @@ public class SecurityConfig {
                                 "/api/v1/customers/me/**"
                         )
                         .hasRole("CUSTOMER")
+                        .requestMatchers("/api/v1/recommendations/**")
+                        .hasRole("CUSTOMER")
                         .requestMatchers(
                                 "/api/v1/admin/hobbies",
                                 "/api/v1/admin/hobbies/**"

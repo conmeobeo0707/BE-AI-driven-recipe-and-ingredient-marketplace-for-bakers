@@ -9,10 +9,13 @@ import com.manhnv.capstonebakerai.recipe.dto.response.RecipeRatingResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeRating;
 import com.manhnv.capstonebakerai.recipe.event.RatingCreatedEvent;
+import com.manhnv.capstonebakerai.recipe.enums.InteractionSource;
+import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeRatingMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRatingRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeRatingService;
+import com.manhnv.capstonebakerai.recipe.service.RecipeInteractionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -33,6 +36,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
     private final RecipeRepository recipeRepository;
     private final CustomerRepository customerRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final RecipeInteractionService interactionService;
 
     @Override
     public PageResponse<RecipeRatingResponse> getAll(String search, Pageable pageable) {
@@ -90,6 +94,10 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         entity.setScore(request.getScore());
 
         RecipeRating saved = repository.save(entity);
+        interactionService.record(
+                customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
+                request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getRecommId());
 
         eventPublisher.publishEvent(new RatingCreatedEvent(
                 saved.getId(),
@@ -104,36 +112,56 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
     }
 
     @Override
+    @Transactional
     public RecipeRatingResponse update(UUID id, RecipeRatingRequest request) {
         validateScore(request.getScore());
 
         RecipeRating existing = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeRating not found"));
 
-        Recipe recipe = recipeRepository.findById(request.getRecipeId())
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
         UUID currentUserId = SecurityUtils.getCurrentUserId();
         Customer customer = customerRepository.findByUser_UserId(currentUserId)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
+        if (!existing.getCustomer().getId().equals(customer.getId())) {
+            throw new RuntimeException("RecipeRating not found");
+        }
+
+        Recipe recipe = recipeRepository.findById(request.getRecipeId())
+                .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
         if (repository.existsByRecipe_IdAndCustomer_Id(request.getRecipeId(), customer.getId())
                 && !existing.getId().equals(id)) {
             throw new RuntimeException("Rating already exists");
         }
 
+        UUID previousRecipeId = existing.getRecipe().getId();
         existing.setRecipe(recipe);
         existing.setCustomer(customer);
         existing.setScore(request.getScore());
 
-        return RecipeRatingMapper.toDTO(repository.save(existing));
+        RecipeRating saved = repository.save(existing);
+        interactionService.record(
+                customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
+                request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getRecommId());
+        if (!previousRecipeId.equals(recipe.getId())) {
+            interactionService.remove(customer.getId(), previousRecipeId, RecipeInteractionType.RATING);
+        }
+        return RecipeRatingMapper.toDTO(saved);
     }
 
     @Override
+    @Transactional
     public void delete(UUID id) {
-        if (!repository.existsById(id)) {
+        RecipeRating existing = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("RecipeRating not found"));
+        Customer customer = customerRepository.findByUser_UserId(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new RuntimeException("Customer not found"));
+        if (!existing.getCustomer().getId().equals(customer.getId())) {
             throw new RuntimeException("RecipeRating not found");
         }
-        repository.deleteById(id);
+        repository.delete(existing);
+        interactionService.remove(customer.getId(), existing.getRecipe().getId(), RecipeInteractionType.RATING);
     }
 
     @Override

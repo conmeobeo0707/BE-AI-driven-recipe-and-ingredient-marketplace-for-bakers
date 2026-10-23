@@ -27,6 +27,8 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeImageRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepImageRepository;
 import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeService;
+import com.manhnv.capstonebakerai.recommendation.event.RecipeChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.Predicate;
@@ -54,6 +56,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeImageRepository recipeImageRepository;
     private final RecipeStepImageRepository recipeStepImageRepository;
     private final RecipeMediaHelper mediaHelper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -143,6 +146,8 @@ public class RecipeServiceImpl implements RecipeService {
 
         Recipe detail = repository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
+
+        eventPublisher.publishEvent(new RecipeChangedEvent(recipeId));
 
         return RecipeMapper.toDTO(detail);
     }
@@ -264,6 +269,8 @@ public class RecipeServiceImpl implements RecipeService {
         Recipe detail = repository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
+        eventPublisher.publishEvent(new RecipeChangedEvent(recipeId));
+
         return RecipeMapper.toDTO(detail);
     }
 
@@ -279,6 +286,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         recipe.setRecipeStatus(RecipeStatus.HIDDEN);
         repository.save(recipe);
+        eventPublisher.publishEvent(new RecipeChangedEvent(id));
     }
 
     @Override

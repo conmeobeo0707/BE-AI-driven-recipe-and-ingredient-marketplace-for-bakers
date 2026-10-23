@@ -165,6 +165,12 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.recombee</groupId>
+            <artifactId>api-client</artifactId>
+            <version>6.3.0</version>
+        </dependency>
+
     </dependencies>
 
     <build>
