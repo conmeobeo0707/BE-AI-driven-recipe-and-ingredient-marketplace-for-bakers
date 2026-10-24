@@ -5,6 +5,7 @@ import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ public class RecipeResponse {
     private Integer prepTimeMinutes;
     private Integer cookTimeMinutes;
     private Integer servings;
+    private BigDecimal averageRating;
     private RecipeStatus recipeStatus;
     private LocalDateTime createdAt;
 

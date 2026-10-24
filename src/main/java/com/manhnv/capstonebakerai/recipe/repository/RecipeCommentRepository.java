@@ -6,10 +6,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface RecipeCommentRepository extends JpaRepository<RecipeComment, UUID> {
     List<RecipeComment> findByRecipe_Id(UUID recipeId);
+
+    Optional<RecipeComment> findById(UUID id);
 
     Page<RecipeComment> findByContentContainingIgnoreCase(String content, Pageable pageable);
     Page<RecipeComment> findByRecipe_IdAndContentContainingIgnoreCase(UUID recipeId, String content, Pageable pageable);

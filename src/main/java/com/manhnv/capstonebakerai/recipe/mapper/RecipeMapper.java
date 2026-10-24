@@ -29,6 +29,7 @@ public class RecipeMapper {
                 .prepTimeMinutes(entity.getPrepTimeMinutes())
                 .cookTimeMinutes(entity.getCookTimeMinutes())
                 .servings(entity.getServings())
+                .averageRating(entity.getAverageRating())
                 .recipeStatus(entity.getRecipeStatus())
                 .createdAt(entity.getCreatedAt())
                 .tools(entity.getTools() != null
