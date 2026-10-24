@@ -47,7 +47,7 @@ public class RecipeRatingController {
 
     @Operation(summary = "Lấy recipe ratings theo customerId (search + pagination + sorting)")
     @GetMapping("/user/{customerId}")
-    public ResponseEntity<ApiResponse<PageResponse<RecipeRatingResponse>>> getByUserId(
+    public ResponseEntity<ApiResponse<PageResponse<RecipeRatingResponse>>> getByCustomerId(
             @PathVariable UUID customerId,
             @RequestParam(value = "search", required = false) String search,
             @ParameterObject
