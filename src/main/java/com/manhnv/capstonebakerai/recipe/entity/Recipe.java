@@ -12,6 +12,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import java.util.List;
@@ -61,6 +62,10 @@ public class Recipe {
 
     @Column(name = "servings", nullable = false)
     private Integer servings;
+
+    @Builder.Default
+    @Column(name = "average_rating", nullable = false, precision = 10, scale = 4)
+    private BigDecimal averageRating = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)

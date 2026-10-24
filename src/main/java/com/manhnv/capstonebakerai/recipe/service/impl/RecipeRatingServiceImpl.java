@@ -24,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -93,7 +94,8 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         entity.setCustomer(customer);
         entity.setScore(request.getScore());
 
-        RecipeRating saved = repository.save(entity);
+        RecipeRating saved = repository.saveAndFlush(entity);
+        refreshRecipeAverageRating(recipe.getId());
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
                 request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
@@ -139,7 +141,11 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         existing.setCustomer(customer);
         existing.setScore(request.getScore());
 
-        RecipeRating saved = repository.save(existing);
+        RecipeRating saved = repository.saveAndFlush(existing);
+        refreshRecipeAverageRating(recipe.getId());
+        if (!previousRecipeId.equals(recipe.getId())) {
+            refreshRecipeAverageRating(previousRecipeId);
+        }
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
                 request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
@@ -229,5 +235,13 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         if (score < 1 || score > 5) {
             throw new RuntimeException("Rating score must be from 1 to 5");
         }
+    }
+
+    private void refreshRecipeAverageRating(UUID recipeId) {
+        BigDecimal averageRating = repository.findAverageRatingByRecipeId(recipeId);
+        Recipe recipe = recipeRepository.findById(recipeId)
+                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+        recipe.setAverageRating(averageRating);
+        recipeRepository.save(recipe);
     }
 }
