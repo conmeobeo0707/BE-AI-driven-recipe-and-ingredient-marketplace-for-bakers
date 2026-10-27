@@ -83,7 +83,7 @@ Validation thường trả HTTP 400; lỗi nghiệp vụ của Product/Warehouse
 
 | Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |
 |---|---|---|---|---|
-| `GET /api/warehouse/inventory/available?productId={uuid}` | Xem tồn thực có thể bán, số lượng đang giữ và tồn khả dụng. | Query bắt buộc `productId`. | `200`, `ApiResponse<AvailableInventoryResponse>` gồm `productId`, `saleableOnHandQuantity`, `reservedQuantity`, `availableQuantity`. | `400` thiếu/sai UUID; `404` không tìm thấy sản phẩm. |
+| `GET /api/warehouse/inventory/available?productId={uuid}` | Xem số lượng hiện có thể bán; sản phẩm combo được tính từ tồn khả dụng của các thành phần. | Query bắt buộc `productId`. | `200`, `ApiResponse<AvailableInventoryResponse>` gồm `productId`, `availableQuantity`. | `400` thiếu/sai UUID; `404` không tìm thấy sản phẩm. |
 | `GET /api/warehouse/inventory/lots?productId={uuid}` | Xem các lô của sản phẩm, sắp theo hạn dùng rồi thời điểm tạo. | Query bắt buộc `productId`. | `200`, `ApiResponse<List<StockLot>>` | `400` thiếu/sai UUID; `404` sản phẩm không tồn tại. |
 | `GET /api/warehouse/inventory/low-stock` | Danh sách sản phẩm dưới ngưỡng tồn tối thiểu. | Không có. | `200`, `ApiResponse<List<ProductResponse>>` | `500` lỗi ngoài dự kiến. |
 | `GET /api/warehouse/inventory/expiring-lots?withinDays=30` | Tìm các lô sắp hết hạn trong số ngày chỉ định (mặc định 30). | Query tùy chọn `withinDays`, từ 0 đến 3650. | `200`, `ApiResponse<List<StockLot>>` | `400` giá trị ngoài khoảng hoặc không phải số. |
@@ -133,26 +133,9 @@ Body tạo phiếu xuất:
 }
 ```
 
-`type` và ít nhất một `items` bắt buộc. Mỗi dòng cần `productId`, `unitId`, `quantity` > 0. Với `DISPOSAL`, cần gửi `lotId` để chỉ rõ lô; với `SALE`, việc phân bổ lô chạy ở bước hoàn tất. `referenceOrderId` và `note` tùy chọn.
+`type` và ít nhất một `items` bắt buộc. Mỗi dòng cần `productId`, `unitId`, `quantity` > 0. Với `DISPOSAL`, cần gửi `lotId` để chỉ rõ lô; phiếu `SALE` tạo qua API quản trị được phân bổ lô ở bước hoàn tất. `referenceOrderId` và `note` tùy chọn.
 
-### Giữ hàng cho đơn — `/api/warehouse/reservations`
-
-| Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |
-|---|---|---|---|---|
-| `POST /api/warehouse/reservations` | Tạo reservation, giữ tồn cho một order đến `expiresAt`. | Body bên dưới. | `201`, `ApiResponse<StockReservationResponse>` | `400` thiếu/sai trường hoặc `expiresAt` không ở tương lai; `404` product/unit không tồn tại; `409` tồn khả dụng không đủ hoặc đã có reservation xung đột. |
-| `GET /api/warehouse/reservations/order/{orderId}` | Xem reservation theo order. | Path `orderId`. | `200`, `ApiResponse<StockReservationResponse>` | `404` chưa có reservation/không tìm thấy. |
-| `POST /api/warehouse/reservations/order/{orderId}/release` | Giải phóng số lượng đã giữ cho order bị hủy. | Path `orderId`. | `200`, `ApiResponse<StockReservationResponse>` | `404` không tìm thấy; `409` reservation ở trạng thái không thể release. |
-| `POST /api/warehouse/reservations/order/{orderId}/consume` | Dùng reservation để tạo và hoàn tất phiếu xuất SALE. | Path `orderId`. | `200`, `ApiResponse<StockOutNote>` | `404` reservation/order không tồn tại; `409` reservation hết hạn/không còn hiệu lực hoặc lỗi tồn kho. |
-
-```json
-{
-  "orderId":"uuid",
-  "expiresAt":"2026-10-21T12:30:00",
-  "items":[{"productId":"uuid","unitId":"uuid","quantity":2}]
-}
-```
-
-`orderId`, thời điểm hết hạn tương lai và ít nhất một dòng hàng là bắt buộc. Số lượng phải lớn hơn 0. Các endpoint này hiện được cung cấp ở Warehouse; module Order chưa tự động gọi chúng khi tạo/hủy/giao đơn.
+Warehouse cung cấp `InventoryService.deductForOrder(orderId, items)` để tạo và hoàn tất phiếu xuất `SALE`, cùng `InventoryService.restockForOrder(orderId)` để hủy phiếu và hoàn số lượng về đúng các lô đã xuất. Khi Order tích hợp hai hàm này trong giao dịch tạo/hủy đơn, Warehouse sẽ quy đổi unit, mở rộng combo thành sản phẩm con, phân bổ FEFO và trừ tồn; nếu không đủ tồn, thao tác tạo đơn cần rollback. Không tạo phiếu nhập để hoàn hàng. Phần gọi service từ Order chưa được chỉnh sửa trong phạm vi hiện tại.
 
 ### Kiểm kê — `/api/warehouse/stocktakes`
 
