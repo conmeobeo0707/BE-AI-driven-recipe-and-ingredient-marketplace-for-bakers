@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
+import com.manhnv.capstonebakerai.recipe.helper.IngredientCatalogBindingHelper;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
@@ -57,6 +58,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeStepImageRepository recipeStepImageRepository;
     private final RecipeMediaHelper mediaHelper;
     private final ApplicationEventPublisher eventPublisher;
+    private final IngredientCatalogBindingHelper catalogBindingHelper;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -117,7 +119,13 @@ public class RecipeServiceImpl implements RecipeService {
         if (request.getIngredients() != null) {
             List<Ingredient> ingredients = request.getIngredients().stream().map(ingredientRequest -> {
                 Ingredient ingredient = new Ingredient();
-                ingredient.setName(ingredientRequest.getName());
+//                ingredient.setName(ingredientRequest.getName());
+
+                catalogBindingHelper.bind(
+                        ingredient,
+                        ingredientRequest.getName()
+                );
+
                 ingredient.setUnit(ingredientRequest.getUnit());
                 ingredient.setQuantity(ingredientRequest.getQuantity());
                 ingredient.setRecipe(savedRecipe);
@@ -218,7 +226,13 @@ public class RecipeServiceImpl implements RecipeService {
         ingredientRepository.flush();
         ingredientRepository.saveAll(ingredients.stream().map(ingReq -> {
             Ingredient newIngredient = new Ingredient();
-            newIngredient.setName(ingReq.getName());
+//            newIngredient.setName(ingReq.getName());
+
+            catalogBindingHelper.bind(
+                    newIngredient,
+                    ingReq.getName()
+            );
+
             newIngredient.setUnit(ingReq.getUnit());
             newIngredient.setQuantity(ingReq.getQuantity());
             newIngredient.setRecipe(existing);

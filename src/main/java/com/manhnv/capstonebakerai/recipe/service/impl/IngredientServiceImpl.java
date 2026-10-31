@@ -5,6 +5,7 @@ import com.manhnv.capstonebakerai.recipe.dto.response.IngredientResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
+import com.manhnv.capstonebakerai.recipe.helper.IngredientCatalogBindingHelper;
 import com.manhnv.capstonebakerai.recipe.mapper.IngredientMapper;
 import com.manhnv.capstonebakerai.recipe.repository.IngredientRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +26,7 @@ public class IngredientServiceImpl implements IngredientService {
 
     private final IngredientRepository repository;
     private final RecipeRepository recipeRepository;
+    private final IngredientCatalogBindingHelper catalogBindingHelper;
 
     @Override
     public PageResponse<IngredientResponse> getAll(String search, Pageable pageable) {
@@ -56,6 +59,7 @@ public class IngredientServiceImpl implements IngredientService {
     }
 
     @Override
+    @Transactional
     public IngredientResponse create(IngredientRequest request) {
         Recipe recipe = recipeRepository.findById(request.getRecipeId())
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
@@ -63,10 +67,13 @@ public class IngredientServiceImpl implements IngredientService {
         Ingredient entity = IngredientMapper.toEntity(request);
         entity.setRecipe(recipe);
 
+        catalogBindingHelper.bind(entity, request.getName());
+
         return IngredientMapper.toDTO(repository.save(entity));
     }
 
     @Override
+    @Transactional
     public IngredientResponse update(UUID id, IngredientRequest request) {
         Ingredient existing = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ingredient not found"));
@@ -78,6 +85,8 @@ public class IngredientServiceImpl implements IngredientService {
         existing.setName(request.getName());
         existing.setUnit(request.getUnit());
         existing.setQuantity(request.getQuantity());
+
+        catalogBindingHelper.bind(existing, request.getName());
 
         return IngredientMapper.toDTO(repository.save(existing));
     }

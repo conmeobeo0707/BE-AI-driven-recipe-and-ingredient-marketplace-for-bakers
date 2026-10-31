@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.recipe.entity;
 
+import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -33,4 +34,8 @@ public class Ingredient {
 
     @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
     private BigDecimal quantity;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "catalog_ingredient_id")
+    private IngredientCatalog catalogIngredient;
 }

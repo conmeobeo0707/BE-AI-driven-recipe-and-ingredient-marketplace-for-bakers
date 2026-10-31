@@ -14,6 +14,11 @@ public class IngredientMapper {
                 .name(entity.getName())
                 .unit(entity.getUnit())
                 .quantity(entity.getQuantity())
+                .catalogIngredientId(
+                        entity.getCatalogIngredient() == null
+                                ? null
+                                : entity.getCatalogIngredient().getId()
+                )
                 .build();
     }
 

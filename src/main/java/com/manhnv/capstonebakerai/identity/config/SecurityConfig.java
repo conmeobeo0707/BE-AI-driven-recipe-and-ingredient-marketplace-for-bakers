@@ -109,7 +109,21 @@ public class SecurityConfig {
                                 "/api/v1/customers/me/**"
                         )
                         .hasRole("CUSTOMER")
-                        .requestMatchers("/api/v1/recommendations/**")
+                        .requestMatchers(
+                                "/api/v1/recommendations/**"
+                        )
+                        .hasRole("CUSTOMER")
+                        .requestMatchers(
+                                "/api/v1/management/ingredient-catalog",
+                                "/api/v1/management/ingredient-catalog/**"
+                        ).hasAnyRole("ADMIN", "BAKER_STAFF")
+                        .requestMatchers(
+                                HttpMethod.GET, "/api/v1/ingredient-catalog"
+                        ).hasAnyRole("CUSTOMER", "ADMIN", "BAKER_STAFF")
+                        .requestMatchers(
+                                "/api/v1/recipe-suggestions",
+                                "/api/v1/recipe-suggestions/**"
+                        )
                         .hasRole("CUSTOMER")
                         .requestMatchers(
                                 "/api/v1/admin/hobbies",
