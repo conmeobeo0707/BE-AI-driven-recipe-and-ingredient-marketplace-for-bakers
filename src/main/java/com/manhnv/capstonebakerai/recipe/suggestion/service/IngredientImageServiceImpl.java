@@ -6,6 +6,8 @@ import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.customer.exception.CustomerErrorCode;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
+import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate;
+import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientNormalizer;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientResolver;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientCatalogLookupService;
@@ -21,14 +23,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
 public class IngredientImageServiceImpl implements IngredientImageService {
+
+    private static final long SLOT_WAIT_SECONDS = 10;
 
     private final CustomerRepository customerRepository;
 
@@ -71,6 +79,9 @@ public class IngredientImageServiceImpl implements IngredientImageService {
             );
         }
 
+        // Validate the image first so an invalid file does not use up the customer's quota.
+        String dataUrl = imagePreprocessor.toDataUrl(file);
+
         Bucket bucket = userBuckets.get(
                 userId,
                 ignored -> Bucket.builder()
@@ -90,73 +101,128 @@ public class IngredientImageServiceImpl implements IngredientImageService {
             );
         }
 
-        if (!recognitionSlots.tryAcquire()) {
+        acquireSlot();
+
+        List<DetectedIngredient> detectedIngredients;
+        try {
+            detectedIngredients = visionClient.recognize(dataUrl);
+        } finally {
+            recognitionSlots.release();
+        }
+
+        return toResponse(detectedIngredients);
+    }
+
+    private void acquireSlot() {
+        try {
+            if (!recognitionSlots.tryAcquire(SLOT_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                throw new AppException(
+                        IngredientImageErrorCode.VISION_UNAVAILABLE
+                );
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
             throw new AppException(
                     IngredientImageErrorCode.VISION_UNAVAILABLE
             );
         }
+    }
 
-        try {
-            String dataUrl = imagePreprocessor.toDataUrl(file);
+    private IngredientImageRecognitionResponse toResponse(
+            List<DetectedIngredient> detectedIngredients
+    ) {
+        Map<String, DetectedIngredient> uniqueNames = new LinkedHashMap<>();
 
-            var detectedIngredients = visionClient.recognize(dataUrl);
+        for (DetectedIngredient item : detectedIngredients) {
+            String normalized = ingredientNormalizer.normalize(item.name());
 
-            Map<String, DetectedIngredient> uniqueIngredients =
-                    new LinkedHashMap<>();
-
-            for (DetectedIngredient item : detectedIngredients) {
-                String normalized =
-                        ingredientNormalizer.normalize(item.name());
-
-                if (normalized.isBlank()) {
-                    continue;
-                }
-
-                uniqueIngredients.merge(
-                        normalized,
-                        item,
-                        (first, second) -> new DetectedIngredient(
-                                first.name(),
-                                first.uncertain() || second.uncertain()
-                        )
-                );
+            if (normalized.isBlank()) {
+                continue;
             }
 
-            var items = uniqueIngredients.values().stream()
-                    .map(item -> {
-                        var resolved =
-                                ingredientResolver.resolveExact(item.name());
-
-                        return new IngredientImageRecognitionResponse.Item(
-                                item.name(),
-                                item.uncertain(),
-                                resolved.isPresent(),
-                                resolved.map(catalog -> catalog.getId())
-                                        .orElse(null),
-                                resolved.map(
-                                        catalog -> catalog.getCanonicalName()
-                                ).orElse(null),
-                                java.util.List.of()
-                        );
-                    })
-                    .toList();
-
-            var unmatchedNames = items.stream().filter(item -> !item.matched())
-                    .map(IngredientImageRecognitionResponse.Item::observedName).toList();
-            var candidates = lookupService.searchAll(unmatchedNames, 3);
-            var withCandidates = items.stream().map(item -> new IngredientImageRecognitionResponse.Item(
-                    item.observedName(), item.uncertain(), item.matched(), item.catalogIngredientId(),
-                    item.canonicalName(), candidates.getOrDefault(item.observedName(), java.util.List.of())
-            )).toList();
-
-            return new IngredientImageRecognitionResponse(
-                    "IMAGE",
-                    true,
-                    withCandidates
-            );
-
-        } finally {
-            recognitionSlots.release();
+            uniqueNames.merge(normalized, item, this::mergeDetected);
         }
+
+        // Matched items are keyed by catalog ID so two names for the same ingredient become one row.
+        Map<String, IngredientImageRecognitionResponse.Item> items = new LinkedHashMap<>();
+        List<DetectedIngredient> unmatched = new ArrayList<>();
+
+        for (DetectedIngredient item : uniqueNames.values()) {
+            Optional<IngredientCatalog> resolved = ingredientResolver.resolveExact(item.name())
+                    .or(() -> ingredientResolver.resolveExact(item.nameVi()));
+
+            if (resolved.isEmpty()) {
+                unmatched.add(item);
+                continue;
+            }
+
+            IngredientCatalog catalog = resolved.get();
+            items.merge(
+                    catalog.getId().toString(),
+                    new IngredientImageRecognitionResponse.Item(
+                            item.name(),
+                            item.nameVi(),
+                            item.uncertain(),
+                            true,
+                            catalog.getId(),
+                            catalog.getCanonicalName(),
+                            List.of()
+                    ),
+                    (first, second) -> new IngredientImageRecognitionResponse.Item(
+                            first.observedName(),
+                            first.vietnameseName(),
+                            first.uncertain() || second.uncertain(),
+                            true,
+                            first.catalogIngredientId(),
+                            first.canonicalName(),
+                            List.of()
+                    )
+            );
+        }
+
+        List<String> lookupNames = new ArrayList<>();
+        for (DetectedIngredient item : unmatched) {
+            lookupNames.add(item.name());
+            if (!item.nameVi().isBlank()) {
+                lookupNames.add(item.nameVi());
+            }
+        }
+        Map<String, List<IngredientCatalogCandidate>> candidates = lookupService.searchAll(lookupNames, 3);
+
+        for (DetectedIngredient item : unmatched) {
+            List<IngredientCatalogCandidate> found = candidates.getOrDefault(item.name(), List.of());
+            if (found.isEmpty()) {
+                found = candidates.getOrDefault(item.nameVi(), List.of());
+            }
+            items.put(
+                    "unmatched:" + ingredientNormalizer.normalize(item.name()),
+                    new IngredientImageRecognitionResponse.Item(
+                            item.name(),
+                            item.nameVi(),
+                            item.uncertain(),
+                            false,
+                            null,
+                            null,
+                            found
+                    )
+            );
+        }
+
+        return new IngredientImageRecognitionResponse(
+                "IMAGE",
+                true,
+                List.copyOf(items.values())
+        );
+    }
+
+    private DetectedIngredient mergeDetected(
+            DetectedIngredient first,
+            DetectedIngredient second
+    ) {
+        return new DetectedIngredient(
+                first.name(),
+                first.nameVi().isBlank() ? second.nameVi() : first.nameVi(),
+                first.uncertain() || second.uncertain()
+        );
     }
 }

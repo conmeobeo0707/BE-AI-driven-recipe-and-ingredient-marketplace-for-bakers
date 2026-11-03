@@ -10,6 +10,7 @@ import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.repository.IngredientCatalogRepository;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientCatalogLookupService;
+import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientNormalizer;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientResolver;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.suggestion.dto.IngredientInputResult;
@@ -37,6 +38,7 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
     private final IngredientCatalogRepository catalogRepository;
     private final IngredientCatalogLookupService lookupService;
     private final RecipeRepository recipeRepository;
+    private final IngredientNormalizer ingredientNormalizer;
 
     @Override
     public IngredientSuggestionResponse suggest(
@@ -48,11 +50,18 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
 
         List<IngredientInputResult> inputs = new ArrayList<>();
         Set<UUID> ids = new LinkedHashSet<>();
+        Set<String> seenNames = new HashSet<>();
         for (String name : ingredientNames) {
+            // "Bơ" and "bơ " (or "bơ" and "butter") are one ingredient; keep the first spelling only.
+            if (!seenNames.add(ingredientNormalizer.normalize(name))) {
+                continue;
+            }
             var resolved = ingredientResolver.resolveExact(name);
             if (resolved.isPresent()) {
                 var catalog = resolved.get();
-                ids.add(catalog.getId());
+                if (!ids.add(catalog.getId())) {
+                    continue;
+                }
                 inputs.add(new IngredientInputResult(name.trim(), true, catalog.getId(),
                         catalog.getCanonicalName(), List.of()));
             } else {
@@ -122,7 +131,7 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
         if (ids.isEmpty()) {
             warnings.add("No catalog ingredient was recognized. Choose an ingredient from the catalog to continue.");
         } else if (!requiresResolution && recipes.isEmpty()) {
-            warnings.add("No published recipe with complete active catalog mappings matched this selection.");
+            warnings.add("No published recipe matched this selection.");
         }
         return new IngredientSuggestionResponse(inputMode, enriched, unmatched, recipes,
                 inputs.size(), matchedCount, ids.size(), requiresResolution, "INGREDIENT_TYPES_ONLY", warnings);
@@ -136,7 +145,7 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
             return List.of();
         }
         return recipeRepository.findSuggestionRecipesWithIngredients(recipeIds, RecipeStatus.PUBLISHED).stream()
-                .filter(this::hasCompleteCatalog)
+                .filter(recipe -> recipe.getIngredients() != null && !recipe.getIngredients().isEmpty())
                 .map(recipe -> toSuggestion(recipe, ids))
                 .filter(item -> item.matchedIngredientCount() > 0)
                 .sorted(Comparator.comparingDouble(RecipeSuggestionItem::coverage).reversed()
@@ -146,28 +155,28 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
                 .limit(limit).toList();
     }
 
-    private boolean hasCompleteCatalog(Recipe recipe) {
-        List<Ingredient> ingredients = recipe.getIngredients();
-        return ingredients != null && !ingredients.isEmpty()
-                && ingredients.stream().allMatch(ingredient -> ingredient.getCatalogIngredient() != null
-                && ingredient.getCatalogIngredient().isActive());
-    }
-
+    // Unmapped or inactive-catalog ingredients stay in the recipe as missing (by raw name) instead of hiding it.
     private RecipeSuggestionItem toSuggestion(Recipe recipe, Set<UUID> inputCatalogIds) {
-        Map<UUID, IngredientCatalog> required = new LinkedHashMap<>();
+        Map<UUID, IngredientCatalog> mapped = new LinkedHashMap<>();
+        Map<String, String> unmapped = new LinkedHashMap<>();
         for (Ingredient ingredient : recipe.getIngredients()) {
             IngredientCatalog catalog = ingredient.getCatalogIngredient();
-            required.putIfAbsent(catalog.getId(), catalog);
+            if (catalog != null && catalog.isActive()) {
+                mapped.putIfAbsent(catalog.getId(), catalog);
+            } else if (ingredient.getName() != null && !ingredient.getName().isBlank()) {
+                unmapped.putIfAbsent(ingredientNormalizer.normalize(ingredient.getName()), ingredient.getName().trim());
+            }
         }
         List<String> matched = new ArrayList<>();
-        List<String> missing = new ArrayList<>();
-        for (IngredientCatalog catalog : required.values()) {
+        List<String> missing = new ArrayList<>(unmapped.values());
+        for (IngredientCatalog catalog : mapped.values()) {
             (inputCatalogIds.contains(catalog.getId()) ? matched : missing).add(catalog.getCanonicalName());
         }
         matched.sort(String.CASE_INSENSITIVE_ORDER);
         missing.sort(String.CASE_INSENSITIVE_ORDER);
-        return new RecipeSuggestionItem(recipe.getId(), recipe.getTitle(), matched.size(), required.size(),
-                (double) matched.size() / required.size(), matched, missing);
+        int total = mapped.size() + unmapped.size();
+        return new RecipeSuggestionItem(recipe.getId(), recipe.getTitle(), matched.size(), total,
+                total == 0 ? 0 : (double) matched.size() / total, matched, missing, unmapped.size());
     }
 
     private void requireCustomer() {

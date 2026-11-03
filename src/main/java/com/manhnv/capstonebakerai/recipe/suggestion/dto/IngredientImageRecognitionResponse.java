@@ -12,6 +12,7 @@ public record IngredientImageRecognitionResponse(
 
     public record Item(
             String observedName,
+            String vietnameseName,
             boolean uncertain,
             boolean matched,
             UUID catalogIngredientId,
