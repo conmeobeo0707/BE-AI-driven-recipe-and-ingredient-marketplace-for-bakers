@@ -45,6 +45,17 @@ public class Order {
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
+    // === Voucher
+    @Column(name = "voucher_id")
+    private UUID voucherId;
+
+    @Column(name = "voucher_code", length = 50)
+    private String voucherCode;
+
+    @Column(name = "voucher_discount_amount", nullable = false, precision = 19, scale = 2)
+    @Builder.Default
+    private BigDecimal voucherDiscountAmount = BigDecimal.ZERO;
+
     // userId của người tạo: chính khách hoặc staff tạo hộ
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
@@ -142,7 +153,21 @@ public class Order {
         this.discountAmount = productsPrice
                 .multiply(discountPercent)
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
-        this.total = productsPrice.subtract(discountAmount).add(shippingFee);
+        this.total = productsPrice
+                .subtract(discountAmount)
+                .subtract(voucherDiscountAmount)
+                .add(shippingFee);
+    }
+
+    /** Tiền hàng sau giảm tay của staff, là cơ sở để tính voucher. Gọi sau recalculateTotals(). */
+    public BigDecimal amountAfterDiscount() {
+        return productsPrice.subtract(discountAmount);
+    }
+
+    public void applyVoucher(UUID voucherId, String voucherCode, BigDecimal amount) {
+        this.voucherId = voucherId;
+        this.voucherCode = voucherCode;
+        this.voucherDiscountAmount = amount;
     }
 
     public void addItem(OrderItem item) {

@@ -12,6 +12,8 @@ import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
 import com.manhnv.capstonebakerai.order.enums.RevenuePeriodType;
 import com.manhnv.capstonebakerai.shipment.dto.response.ShippingRateResponse;
+import com.manhnv.capstonebakerai.voucher.dto.request.ValidateVoucherRequest;
+import com.manhnv.capstonebakerai.voucher.dto.response.VoucherPreviewResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -31,6 +33,7 @@ public interface OrderService {
     void syncStatusFromShipment(UUID orderId, OrderStatus next);
     void markPaidOrderPending(UUID orderId);
     List<ShippingRateResponse> previewShippingRates(ShippingRatesRequest request);
+    VoucherPreviewResponse previewVoucher(UUID userId, ValidateVoucherRequest request);
 
     // Staff/Manager
     OrderResponse createByStaff(UUID staffUserId, StaffCreateOrderRequest request);

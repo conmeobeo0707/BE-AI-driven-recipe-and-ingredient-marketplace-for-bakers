@@ -25,6 +25,9 @@ import com.manhnv.capstonebakerai.product.repository.ProductUnitRepository;
 import com.manhnv.capstonebakerai.shipment.dto.response.ShippingRateResponse;
 import com.manhnv.capstonebakerai.shipment.service.ShipmentService;
 import com.manhnv.capstonebakerai.shipment.service.ShippingRateService;
+import com.manhnv.capstonebakerai.voucher.dto.request.ValidateVoucherRequest;
+import com.manhnv.capstonebakerai.voucher.dto.response.VoucherPreviewResponse;
+import com.manhnv.capstonebakerai.voucher.service.VoucherService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +64,7 @@ public class OrderServiceImpl implements OrderService {
     ShipmentService shipmentService;
     ShippingRateService shippingRateService;
     PaymentService paymentService;
+    VoucherService voucherService;
     ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -164,6 +168,15 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public VoucherPreviewResponse previewVoucher(UUID userId, ValidateVoucherRequest request) {
+        Customer customer = findCustomerByUserId(userId);
+        BigDecimal productPrices = resolveLines(request.items()).stream().map(ResolvedLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return voucherService.calculate(request.voucherCode(), customer.getId(), productPrices);
+    }
+
+    @Override
     @Transactional
     public OrderResponse createByStaff(UUID staffUserId, StaffCreateOrderRequest request) {
         Customer customer = customerRepository.findById(request.customerId())
@@ -263,8 +276,15 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         addItems(order, request.items());
+        order.recalculateTotals();
+        applyVoucher(order, customer, request.voucherCode());
         applyShipping(order, request.shippingRateId());
         return order;
+    }
+
+    private void applyVoucher(Order order, Customer customer, String voucherCode) {
+        VoucherPreviewResponse preview = voucherService.calculate(voucherCode, customer.getId(), order.amountAfterDiscount());
+        order.applyVoucher(preview.voucherId(), preview.code(), preview.discountAmount());
     }
 
     private record ResolvedLine(Product product, ProductUnit unit, int quantity,
@@ -332,6 +352,11 @@ public class OrderServiceImpl implements OrderService {
 
     private Order saveWithPayment(Order order) {
         Order saved = orderRepository.save(order);
+
+        if (saved.getVoucherId() != null) {
+            voucherService.consume(saved.getVoucherId(), saved.getCustomer().getId(), saved.getId(), saved.getVoucherDiscountAmount());
+        }
+
         paymentService.createPending(saved.getId(), saved.getPaymentMethod(), saved.getTotal());
 
         // Notification Configure
@@ -366,7 +391,9 @@ public class OrderServiceImpl implements OrderService {
             case CONFIRMED -> shipmentService.createForOrder(order);
             case DELIVERED -> {
                 order.setDeliveredAt(LocalDateTime.now());
-                order.setRevenue(order.getProductsPrice().subtract(order.getDiscountAmount()));
+                order.setRevenue(order.getProductsPrice()
+                        .subtract(order.getDiscountAmount())
+                        .subtract(order.getVoucherDiscountAmount()));
                 if (order.getPaymentMethod() == PaymentMethod.COD) {
                     paymentService.settleCod(order);
                 }
@@ -398,6 +425,7 @@ public class OrderServiceImpl implements OrderService {
         if (previous != OrderStatus.PENDING && previous != OrderStatus.AWAITING_PAYMENT) {
             shipmentService.cancelForOrder(order.getId());
         }
+        voucherService.refund(order.getId());
         paymentService.onOrderCancelled(order);
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getId(), order.getCode(),
