@@ -7,6 +7,7 @@ import com.manhnv.capstonebakerai.order.dto.request.*;
 import com.manhnv.capstonebakerai.order.dto.response.*;
 import com.manhnv.capstonebakerai.order.entity.Order;
 import com.manhnv.capstonebakerai.order.entity.OrderItem;
+import com.manhnv.capstonebakerai.order.enums.OrderHistoryAction;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
 import com.manhnv.capstonebakerai.order.enums.RevenuePeriodType;
@@ -65,6 +66,7 @@ public class OrderServiceImpl implements OrderService {
     ShippingRateService shippingRateService;
     PaymentService paymentService;
     VoucherService voucherService;
+    OrderHistoryService historyService;
     ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -116,6 +118,7 @@ public class OrderServiceImpl implements OrderService {
         }
         if (order.getReceivedConfirmedAt() == null) {
             order.setReceivedConfirmedAt(LocalDateTime.now());
+            historyService.record(order.getId(), OrderHistoryAction.RECEIVED_CONFIRMED, OrderStatus.DELIVERED, OrderStatus.CONFIRMED, null);
         }
         return mapper.toResponse(orderRepository.save(order));
     }
@@ -125,7 +128,7 @@ public class OrderServiceImpl implements OrderService {
     public void syncStatusFromShipment(UUID orderId, OrderStatus next) {
         Order order = findOrThrow(orderId);
         if (order.getStatus() == next) return;
-        applyTransition(order, next);
+        applyTransition(order, next, "Đồng bộ từ đơn vị vận chuyển");
         orderRepository.save(order);
     }
 
@@ -137,7 +140,7 @@ public class OrderServiceImpl implements OrderService {
             log.warn("Order {} is {} but payment PAID, check manually", order.getCode(), order.getStatus());
             return;
         }
-        applyTransition(order, OrderStatus.PENDING);
+        applyTransition(order, OrderStatus.PENDING, "Thanh toán PAYOS thành công");
         orderRepository.save(order);
     }
 
@@ -174,6 +177,13 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal productPrices = resolveLines(request.items()).stream().map(ResolvedLine::lineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return voucherService.calculate(request.voucherCode(), customer.getId(), productPrices);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderHistoryResponse> getMyOrderHistory(UUID userId, UUID orderId) {
+        findOwnedOrder(userId, orderId);
+        return historyService.getForCustomer(orderId);
     }
 
     @Override
@@ -215,7 +225,7 @@ public class OrderServiceImpl implements OrderService {
         if (order.getStatus() == OrderStatus.AWAITING_PAYMENT) {
             throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
         }
-        applyTransition(order, next);
+        applyTransition(order, next, null);
         return mapper.toResponse(orderRepository.save(order));
     }
 
@@ -257,6 +267,15 @@ public class OrderServiceImpl implements OrderService {
                 return new RevenueReportResponse(type, from, to, sumRevenue(orders), orders.size(), points);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderHistoryStaffResponse> getOrderHistoryForStaff(UUID orderId) {
+        if (!orderRepository.existsById(orderId)) {
+            throw new AppException(OrderErrorCode.ORDER_NOT_FOUND);
+        }
+        return historyService.getForStaff(orderId);
+    }
+
     private Order buildOrder(Customer customer, UUID createdBy, CreateOrderRequest request, BigDecimal discountPercent) {
         Order order = Order.builder()
                 .code(generateCode())
@@ -283,6 +302,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void applyVoucher(Order order, Customer customer, String voucherCode) {
+        if (voucherCode == null || voucherCode.isBlank()) return;
         VoucherPreviewResponse preview = voucherService.calculate(voucherCode, customer.getId(), order.amountAfterDiscount());
         order.applyVoucher(preview.voucherId(), preview.code(), preview.discountAmount());
     }
@@ -353,6 +373,8 @@ public class OrderServiceImpl implements OrderService {
     private Order saveWithPayment(Order order) {
         Order saved = orderRepository.save(order);
 
+        historyService.record(saved.getId(), OrderHistoryAction.CREATED, null, saved.getStatus(), saved.getCreatedBy().equals(saved.getCustomer().getUser().getUserId()) ? null : "Nhân viên tạo đơn hộ khách");
+
         if (saved.getVoucherId() != null) {
             voucherService.consume(saved.getVoucherId(), saved.getCustomer().getId(), saved.getId(), saved.getVoucherDiscountAmount());
         }
@@ -382,10 +404,12 @@ public class OrderServiceImpl implements OrderService {
         return order.getPaymentMethod() == PaymentMethod.COD ? order.getProductsPrice() : BigDecimal.ZERO;
     }
 
-    private void applyTransition(Order order, OrderStatus next) {
+    private void applyTransition(Order order, OrderStatus next, String note) {
         if (!order.getStatus().canTransitionTo(next)) {
             throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
         }
+        OrderStatus previous = order.getStatus();
+
         switch (next) {
             // TODO: gọi InventoryService.deduct(...) trừ kho (quantity x conversionFactor)
             case CONFIRMED -> shipmentService.createForOrder(order);
@@ -401,6 +425,8 @@ public class OrderServiceImpl implements OrderService {
             default -> { }
         }
         order.setStatus(next);
+
+        historyService.record(order.getId(), OrderHistoryAction.STATUS_CHANGED, previous, next, note);
 
         // Notification configure
         if (next == OrderStatus.PENDING) {
@@ -419,6 +445,7 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelledAt(LocalDateTime.now());
         order.setCancelReason(request != null ? request.reason() : null);
+        historyService.record(order.getId(), OrderHistoryAction.CANCELLED, previous, OrderStatus.CANCELLED, order.getCancelReason());
         if (previous != OrderStatus.AWAITING_PAYMENT) {
             // TODO: hoàn kho (InventoryService.restock)
         }
