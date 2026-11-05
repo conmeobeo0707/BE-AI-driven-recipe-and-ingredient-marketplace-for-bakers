@@ -7,5 +7,5 @@ import java.util.List;
 import java.util.UUID;
 
 public interface SupplierPaymentDetailRepository extends JpaRepository<SupplierPaymentDetail, UUID> {
-    List<SupplierPaymentDetail> findBySupplierPaymentsIdOrderById(UUID supplierPaymentsId);
+    List<SupplierPaymentDetail> findByPaymentIdOrderById(UUID paymentId);
 }

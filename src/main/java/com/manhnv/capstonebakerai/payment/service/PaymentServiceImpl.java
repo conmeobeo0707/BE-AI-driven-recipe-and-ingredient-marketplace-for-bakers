@@ -10,15 +10,10 @@ import com.manhnv.capstonebakerai.order.exception.OrderErrorCode;
 import com.manhnv.capstonebakerai.order.repository.OrderRepository;
 import com.manhnv.capstonebakerai.payment.dto.response.PayosLinkResponse;
 import com.manhnv.capstonebakerai.payment.entity.Payment;
-import com.manhnv.capstonebakerai.payment.entity.PaymentTransaction;
-import com.manhnv.capstonebakerai.payment.enums.PaymentStatus;
-import com.manhnv.capstonebakerai.payment.enums.TransactionDirection;
-import com.manhnv.capstonebakerai.payment.enums.TransactionMethod;
-import com.manhnv.capstonebakerai.payment.enums.TransactionRefType;
+import com.manhnv.capstonebakerai.payment.enums.*;
 import com.manhnv.capstonebakerai.payment.event.PaymentPaidEvent;
 import com.manhnv.capstonebakerai.payment.exception.PaymentErrorCode;
 import com.manhnv.capstonebakerai.payment.repository.PaymentRepository;
-import com.manhnv.capstonebakerai.payment.repository.PaymentTransactionRepository;
 import com.manhnv.capstonebakerai.receipt.enums.ReceiptCategoryType;
 import com.manhnv.capstonebakerai.receipt.service.ReceiptVoucherService;
 import lombok.AccessLevel;
@@ -50,7 +45,6 @@ import java.util.concurrent.ThreadLocalRandom;
 public class PaymentServiceImpl implements PaymentService {
 
     PaymentRepository paymentRepository;
-    PaymentTransactionRepository transactionRepository;
     OrderRepository orderRepository;
     CustomerRepository customerRepository;
     ReceiptVoucherService receiptVoucherService;
@@ -66,6 +60,8 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public void createPending(UUID orderId, PaymentMethod method, BigDecimal amount) {
         paymentRepository.save(Payment.builder()
+                        .type(PaymentType.SALE)
+                        .direction(PaymentDirection.IN)
                         .orderId(orderId)
                         .method(method)
                         .amount(amount)
@@ -103,7 +99,7 @@ public class PaymentServiceImpl implements PaymentService {
                     return new PayosLinkResponse(payment.getId(), payment.getCheckoutUrl());
                 }
                 case PAID -> {
-                    markPaid(payment, TransactionMethod.BANK_TRANSFER, ReceiptCategoryType.SALE,
+                    markPaid(payment, ReceiptCategoryType.SALE,
                             null, "Thanh toán PayOS (đồng bộ), orderCode=" + payment.getExternalId());
                     eventPublisher.publishEvent(new PaymentPaidEvent(payment.getOrderId()));
                     return new PayosLinkResponse(payment.getId(), null);   // null = đã thanh toán rồi
@@ -166,7 +162,7 @@ public class PaymentServiceImpl implements PaymentService {
             return true;                                   // không đánh dấu PAID, cần đối soát tay
         }
 
-        markPaid(payment, TransactionMethod.BANK_TRANSFER, ReceiptCategoryType.SALE,
+        markPaid(payment, ReceiptCategoryType.SALE,
                 data.getReference(), "Thanh toán PayOS, orderCode=" + data.getOrderCode());
         eventPublisher.publishEvent(new PaymentPaidEvent(payment.getOrderId()));
         return true;
@@ -177,10 +173,12 @@ public class PaymentServiceImpl implements PaymentService {
     public void settleCod(Order order) {
         Payment payment = paymentRepository.findByOrderId(order.getId())
                 .orElseGet(() -> paymentRepository.save(Payment.builder()
+                                .type(PaymentType.SALE)
+                                .direction(PaymentDirection.IN)
                         .orderId(order.getId()).method(PaymentMethod.COD)
                         .amount(order.getTotal()).status(PaymentStatus.PENDING).build()));
         if (payment.getStatus() == PaymentStatus.PAID) return;   // webhook Goship bắn lặp
-        markPaid(payment, TransactionMethod.BANK_TRANSFER, ReceiptCategoryType.SETTLEMENT,
+        markPaid(payment, ReceiptCategoryType.SETTLEMENT,
                 null, "Goship thu hộ đơn COD " + order.getCode());
     }
 
@@ -238,16 +236,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
-    private void markPaid(Payment payment, TransactionMethod method, ReceiptCategoryType receiptType,
-                          String externalRef, String note) {
+    private void markPaid(Payment payment, ReceiptCategoryType receiptType, String bankReference, String note) {
         payment.setStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDateTime.now());
+        payment.setBankReference(bankReference);
+        payment.setNote(note);
         paymentRepository.save(payment);
-
-        transactionRepository.save(PaymentTransaction.builder()
-                .refType(TransactionRefType.PAYMENT).refId(payment.getId())
-                .direction(TransactionDirection.IN).method(method)
-                .amount(payment.getAmount()).externalId(externalRef).note(note).build());
 
         receiptVoucherService.createFromPayment(payment.getId(), payment.getAmount(), receiptType, note);
     }
