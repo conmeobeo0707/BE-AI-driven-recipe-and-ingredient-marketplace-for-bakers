@@ -38,7 +38,7 @@ Validation thường trả HTTP 400; lỗi nghiệp vụ của Product/Warehouse
 | `POST /api/products` | Tạo sản phẩm cùng danh sách unit nếu được gửi. | JSON `ProductUpsertRequest` xem bên dưới. | `201`, `ApiResponse<ProductResponse>` | `400` dữ liệu/đơn vị không hợp lệ; `404` category không tồn tại; `409` SKU trùng hoặc xung đột dữ liệu. |
 | `PUT /api/products/{productId}` | Cập nhật sản phẩm và các unit. | Path `productId`; JSON cùng cấu trúc tạo. Danh sách `units`, khi được gửi, là toàn bộ danh sách mong muốn; unit cũ bị bỏ khỏi danh sách chuyển sang `INACTIVE`. | `200`, `ApiResponse<ProductResponse>` | `400` dữ liệu không hợp lệ; `404` sản phẩm/category không tồn tại; `409` SKU hoặc trạng thái unit xung đột. |
 | `GET /api/products/{productId}` | Lấy một sản phẩm kèm unit. | Path `productId`. | `200`, `ApiResponse<ProductResponse>` | `404` không tìm thấy sản phẩm. |
-| `GET /api/products` | Phân trang sản phẩm, lọc tùy chọn theo category và brand. | Query tùy chọn: `categoryId`, `brand`, cùng tham số Spring `page`, `size`, `sort` (ví dụ `?page=0&size=20&sort=name,asc`). | `200`, `ApiResponse<Page<ProductResponse>>` | `400` UUID hoặc tham số phân trang/sort không hợp lệ. |
+| `GET /api/products` | Phân trang sản phẩm, tìm theo tên và lọc tùy chọn theo category, brand, status. | Query tùy chọn: `name` (tìm theo tên), `categoryId`, `brand`, `status` (`ACTIVE`, `INACTIVE`, `DISCONTINUE`), cùng tham số Spring `page`, `size`, `sort` (ví dụ `?name=bột&page=0&size=20&sort=name,asc`). | `200`, `ApiResponse<Page<ProductResponse>>` | `400` UUID, status hoặc tham số phân trang/sort không hợp lệ. |
 | `DELETE /api/products/{productId}` | Ngừng kích hoạt sản phẩm (deactivate). | Path `productId`. | `200`, `{"success":true}` | `404` không tìm thấy; `409` không thể ngừng kích hoạt do ràng buộc nghiệp vụ. |
 | `GET /api/products/{productId}/units/{unitId}/price-history` | Xem lịch sử giá bán của một unit. | Path `productId`, `unitId`. | `200`, `ApiResponse<List<UnitPriceHistoryResponse>>` | `404` sản phẩm/unit không tồn tại hoặc không thuộc sản phẩm. |
 | `PUT /api/products/{productId}/combo-items` | Thay danh sách thành phần combo. Các sản phẩm con có thể dùng chung ở nhiều combo. | Path `productId`; JSON array `[{"productId":"uuid","quantity":2}]`. Số lượng phải lớn hơn 0. | `200`, `ApiResponse<List<ComboItemRequest>>` | `400` danh sách/thành phần không hợp lệ; `404` sản phẩm/combo/con không tồn tại; `409` quan hệ combo xung đột. |
@@ -83,17 +83,16 @@ Validation thường trả HTTP 400; lỗi nghiệp vụ của Product/Warehouse
 
 | Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |
 |---|---|---|---|---|
-| `GET /api/warehouse/inventory/available?productId={uuid}` | Xem số lượng hiện có thể bán; sản phẩm combo được tính từ tồn khả dụng của các thành phần. | Query bắt buộc `productId`. | `200`, `ApiResponse<AvailableInventoryResponse>` gồm `productId`, `availableQuantity`. | `400` thiếu/sai UUID; `404` không tìm thấy sản phẩm. |
 | `GET /api/warehouse/inventory/lots?productId={uuid}` | Xem các lô của sản phẩm, sắp theo hạn dùng rồi thời điểm tạo. | Query bắt buộc `productId`. | `200`, `ApiResponse<List<StockLot>>` | `400` thiếu/sai UUID; `404` sản phẩm không tồn tại. |
-| `GET /api/warehouse/inventory/low-stock` | Danh sách sản phẩm dưới ngưỡng tồn tối thiểu. | Không có. | `200`, `ApiResponse<List<ProductResponse>>` | `500` lỗi ngoài dự kiến. |
 | `GET /api/warehouse/inventory/expiring-lots?withinDays=30` | Tìm các lô sắp hết hạn trong số ngày chỉ định (mặc định 30). | Query tùy chọn `withinDays`, từ 0 đến 3650. | `200`, `ApiResponse<List<StockLot>>` | `400` giá trị ngoài khoảng hoặc không phải số. |
+| `GET /api/warehouse/inventory/expired-lots` | Tìm các lô đã hết hạn nhưng vẫn còn số lượng trong kho. | Không có. | `200`, `ApiResponse<List<StockLot>>` | — |
 
 ### Phiếu nhập — `/api/warehouse/stock-in`
 
 | Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |
 |---|---|---|---|---|
-| `POST /api/warehouse/stock-in` | Tạo phiếu nhập ở trạng thái chờ xử lý. | Body `StockInCreateRequest` bên dưới. | `201`, `ApiResponse<StockInNote>` | `400` body/chi tiết không hợp lệ; `404` supplier, product hoặc unit không tồn tại; `409` trạng thái/ràng buộc nghiệp vụ xung đột. |
-| `POST /api/warehouse/stock-in/{id}/complete` | Hoàn tất phiếu; tạo lô và cộng tồn theo các dòng nhập. | Path `id`. | `200`, `ApiResponse<StockInNote>` | `404` phiếu không tồn tại; `409` phiếu không ở trạng thái cho phép hoàn tất hoặc dữ liệu đã được xử lý. |
+| `POST /api/warehouse/stock-in` | Tạo phiếu nhập ở trạng thái chờ xử lý. | Body `StockInCreateRequest` bên dưới. Ngày nhập phải từ thời điểm hiện tại trở đi; mỗi dòng bắt buộc có hạn sử dụng từ hôm nay trở đi, số lượng và đơn giá lớn hơn 0. | `201`, `ApiResponse<StockInNote>` | `400` body/chi tiết/ngày nhập không hợp lệ; `404` supplier, product hoặc unit không tồn tại; `409` trạng thái/ràng buộc nghiệp vụ xung đột. |
+| `POST /api/warehouse/stock-in/{id}/complete` | Hoàn tất phiếu; tạo lô và cộng tồn theo các dòng nhập. | Path `id`. Tất cả dòng phải có hạn sử dụng từ hôm nay trở đi. | `200`, `ApiResponse<StockInNote>` | `404` phiếu không tồn tại; `400` thiếu hạn sử dụng hoặc hạn đã qua; `409` phiếu không ở trạng thái cho phép hoàn tất hoặc dữ liệu đã được xử lý. |
 | `POST /api/warehouse/stock-in/{id}/cancel` | Hủy phiếu nhập chưa hoàn tất. | Path `id`. | `200`, `ApiResponse<StockInNote>` | `404` không tìm thấy; `409` phiếu đã hoàn tất/không thể hủy. |
 | `GET /api/warehouse/stock-in` | Danh sách phiếu nhập có phân trang, tùy chọn lọc trạng thái. | Query `status` (`PENDING`, `COMPLETED`, `CANCELLED`), `page`, `size`, `sort`; mặc định size 20, `createdAt DESC`. | `200`, `ApiResponse<Page<StockInNote>>` | `400` status hoặc tham số phân trang không hợp lệ. |
 | `GET /api/warehouse/stock-in/{id}` | Chi tiết phiếu nhập và các dòng hàng. | Path `id`. | `200`, `ApiResponse<StockInDetailResponse>` | `404` không tìm thấy phiếu. |
@@ -110,7 +109,7 @@ Body tạo phiếu nhập:
 }
 ```
 
-`supplierId` và ít nhất một `items` bắt buộc. Mỗi dòng cần `productId`, `unitId`, `quantity` > 0 và `unitPrice` không âm; `expiryDate` có thể bỏ trống với hàng không hạn sử dụng. `receiptDate`, `paidAmount`, `note` tùy chọn.
+`supplierId` và ít nhất một `items` bắt buộc. `receiptDate` nếu được gửi phải từ thời điểm hiện tại trở đi. Mỗi dòng cần `productId`, `unitId`, `quantity` > 0, `unitPrice` > 0 và `expiryDate` không được để trống hoặc nằm trước hôm nay. `paidAmount` và `note` tùy chọn.
 
 ### Phiếu xuất — `/api/warehouse/stock-out`
 
@@ -119,6 +118,7 @@ Body tạo phiếu nhập:
 | `POST /api/warehouse/stock-out` | Tạo phiếu xuất chờ xử lý. Với SALE, lô được phân bổ FEFO khi hoàn tất; với DISPOSAL, chỉ định lô ở từng dòng. | Body `StockOutCreateRequest` bên dưới. | `201`, `ApiResponse<StockOutNote>` | `400` body sai; `404` sản phẩm/unit/lô không tồn tại; `409` loại phiếu/dữ liệu xung đột. |
 | `POST /api/warehouse/stock-out/{id}/complete` | Hoàn tất phiếu và trừ tồn theo lô. | Path `id`. | `200`, `ApiResponse<StockOutNote>` | `404` không tìm thấy; `409` tồn không đủ hoặc trạng thái không cho phép. |
 | `POST /api/warehouse/stock-out/{id}/cancel` | Hủy phiếu xuất chưa hoàn tất. | Path `id`. | `200`, `ApiResponse<StockOutNote>` | `404` không tìm thấy; `409` phiếu đã hoàn tất/không thể hủy. |
+| `POST /api/warehouse/stock-out/expired-lots/{lotId}/dispose` | Tạo và hoàn tất phiếu xuất hủy toàn bộ số lượng còn lại của một lô đã hết hạn, với lý do `EXPIRED`. Thao tác được xử lý trong một transaction. | Path `lotId`. | `200`, `ApiResponse<StockOutNote>` ở trạng thái `COMPLETED`. | `404` không tìm thấy lô; `400` lô chưa hết hạn; `409` lô không còn hàng hoặc đang bị khóa bởi phiên kiểm kê. |
 | `GET /api/warehouse/stock-out` | Danh sách phiếu xuất, lọc tùy chọn theo trạng thái/loại. | Query `status` (`PENDING`, `COMPLETED`, `CANCELLED`), `type` (`SALE`, `DISPOSAL`), `page`, `size`, `sort`; mặc định size 20, `createdAt DESC`. | `200`, `ApiResponse<Page<StockOutNote>>` | `400` enum hoặc tham số phân trang không hợp lệ. |
 | `GET /api/warehouse/stock-out/{id}` | Chi tiết phiếu xuất và các dòng hàng. | Path `id`. | `200`, `ApiResponse<StockOutDetailResponse>` | `404` không tìm thấy phiếu. |
 

@@ -346,8 +346,8 @@ Auth note: no `@PreAuthorize` — Global default (authenticated, any role).
 | Method | Path | Request Body / Query | Response Body | Auth | Purpose |
 |---|---|---|---|---|---|
 | GET | `/lots` | query `productId` | `List<StockLot>` — **raw JPA entity** (`lotId, productId, stockInNoteId, lotCode, initialQuantity, currentQuantity, unitCost, expiryDate, status(STORAGE\|EXPIRED\|CANCELED\|EMPTY), createdAt`), not a DTO | Global default | List stock lots for a product, ordered by expiry then created date |
-| GET | `/low-stock` | — | `List<ProductResponse>` (same shape as section 15's `ProductResponse`) | Global default | List products currently below `minStock` |
 | GET | `/expiring-lots` | query `withinDays=30` (0-3650) | `List<StockLot>` — raw entity | Global default | Lots with status `STORAGE` expiring within N days |
+| GET | `/expired-lots` | — | `List<StockLot>` — raw entity | Global default | Expired lots with positive remaining quantity |
 
 ## 30. Warehouse — `warehouse/controller/StockInController.java`
 Base path: `/api/warehouse/stock-in` (note: **no `/v1` prefix**)
@@ -355,8 +355,8 @@ Auth note: no `@PreAuthorize` — Global default (authenticated, any role).
 
 | Method | Path | Request Body / Query | Response Body | Auth | Purpose |
 |---|---|---|---|---|---|
-| POST | `` | `StockInCreateRequest{supplierId, receiptDate?, paidAmount?(≥0, 2dp), note?, items: StockInItemRequest[]{productId, unitId, quantity(≥0.01, 2dp), unitPrice(≥0, 2dp), expiryDate?}}` | `StockInNote` — **raw JPA entity** (`noteId, code, supplierId, receiptDate, totalAmount, paidAmount, debtAmount, paymentStatus(UNPAID\|PARTIAL\|PAID), note, status(PENDING\|COMPLETED\|CANCELLED), updatedAt, createdAt`) (201) | Global default | Create stock-in note (status `PENDING`) |
-| POST | `/{id}/complete` | path `id` | `StockInNote` (raw) | Global default | Complete stock-in note; generates `StockLot` rows |
+| POST | `` | `StockInCreateRequest{supplierId, receiptDate? (must be now or later), paidAmount?(≥0, 2dp), note?, items: StockInItemRequest[]{productId, unitId, quantity(>0, 2dp), unitPrice(>0, 2dp), expiryDate(required; today or later)}}` | `StockInNote` — **raw JPA entity** (`noteId, code, supplierId, receiptDate, totalAmount, paidAmount, debtAmount, paymentStatus(UNPAID\|PARTIAL\|PAID), note, status(PENDING\|COMPLETED\|CANCELLED), updatedAt, createdAt`) (201) | Global default | Create stock-in note (status `PENDING`) |
+| POST | `/{id}/complete` | path `id`; every item must have `expiryDate` today or later | `StockInNote` (raw) | Global default | Complete stock-in note; generates `StockLot` rows |
 | POST | `/{id}/cancel` | path `id` | `StockInNote` (raw) | Global default | Cancel stock-in note |
 | GET | `` | query `status?(PENDING\|COMPLETED\|CANCELLED)`, `Pageable` (default `size=20, sort=createdAt DESC`) | `Page<StockInNote>` (raw) | Global default | List stock-in notes |
 | GET | `/{id}` | path `id` | `StockInDetailResponse{note: StockInNote, items: List<StockInItem>}` — both nested types are **raw JPA entities** | Global default | Get stock-in note with its line items |
@@ -370,6 +370,7 @@ Auth note: no `@PreAuthorize` — Global default (authenticated, any role).
 | POST | `` | `StockOutCreateRequest{type(SALE\|DISPOSAL), referenceOrderId?, note?, items: StockOutItemRequest[]{productId, unitId, lotId?, quantity(≥0.01, 2dp)}}` | `StockOutNote` — **raw entity** (`noteId, code, type, referenceOrderId, totalCost, note, status(PENDING\|COMPLETED\|CANCELLED), updatedAt, createdAt`) (201) | Global default | Create stock-out note (sale or disposal) |
 | POST | `/{id}/complete` | path `id` | `StockOutNote` (raw) | Global default | Complete stock-out note; deducts lot quantities |
 | POST | `/{id}/cancel` | path `id` | `StockOutNote` (raw) | Global default | Cancel stock-out note |
+| POST | `/expired-lots/{lotId}/dispose` | path `lotId` | `StockOutNote` (raw, `COMPLETED`) | Global default | Create and complete an `EXPIRED` disposal note for the lot's entire remaining quantity |
 | GET | `` | query `status?`, `type?(SALE\|DISPOSAL)`, `Pageable` (default `size=20, sort=createdAt DESC`) | `Page<StockOutNote>` (raw) | Global default | List stock-out notes |
 | GET | `/{id}` | path `id` | `StockOutDetailResponse{note: StockOutNote, items: List<StockOutItem>}` — raw entities | Global default | Get stock-out note with line items |
 

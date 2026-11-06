@@ -17,6 +17,7 @@ public interface StockOutService {
     StockOutNote create(StockOutCreateRequest request);
     StockOutNote complete(UUID noteId);
     StockOutNote cancel(UUID noteId);
+    StockOutNote disposeExpiredLot(UUID lotId);
     StockOutNote processSaleOrder(UUID orderId, List<StockLine> orderItems);
     void cancelSaleOrder(UUID orderId);
 }

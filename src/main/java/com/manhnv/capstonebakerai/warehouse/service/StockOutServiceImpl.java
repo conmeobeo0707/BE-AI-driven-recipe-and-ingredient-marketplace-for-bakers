@@ -247,4 +247,32 @@ public class StockOutServiceImpl implements StockOutService {
         stockOutNote.setUpdatedAt(LocalDateTime.now());
         return notes.save(stockOutNote);
     }
+
+    @Override
+    @Transactional
+    public StockOutNote disposeExpiredLot(UUID lotId) {
+        StockLot existingLot = lots.findById(lotId)
+                .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Lot not found"));
+        UUID productId = existingLot.getProductId();
+        products.lockInventoryProducts(List.of(productId));
+        StockLot expiredLot = lots.lockByLotIds(List.of(lotId)).stream().findFirst()
+                .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Lot not found"));
+
+        if (expiredLot.getExpiryDate() == null || !expiredLot.getExpiryDate().isBefore(LocalDate.now())) {
+            throw WarehouseSupport.error("Only lots with an expiry date earlier than today can be disposed as expired");
+        }
+        if (expiredLot.getCurrentQuantity().signum() <= 0
+                || expiredLot.getStatus() == LotStatus.EMPTY || expiredLot.getStatus() == LotStatus.CANCELED) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "Lot has no remaining quantity to dispose");
+        }
+
+        InventoryUnit baseUnit = products.getActiveBaseInventoryUnit(productId);
+        StockOutCreateRequest request = new StockOutCreateRequest(
+                StockOutType.DISPOSAL,
+                null,
+                "EXPIRED: Hủy toàn bộ lô " + expiredLot.getLotCode(),
+                List.of(new StockOutItemRequest(productId, baseUnit.unitId(), lotId, expiredLot.getCurrentQuantity())));
+        StockOutNote pendingNote = create(request);
+        return complete(pendingNote.getNoteId());
+    }
 }
