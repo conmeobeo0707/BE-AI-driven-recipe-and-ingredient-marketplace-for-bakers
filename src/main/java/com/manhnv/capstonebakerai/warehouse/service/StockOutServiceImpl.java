@@ -25,10 +25,13 @@ public class StockOutServiceImpl implements StockOutService {
     private final StockLotRepository lots;
     private final WarehouseSupport support;
     private final ProductService products;
+    private final StockTransactionService stockTransactions;
 
     public StockOutServiceImpl(StockOutNoteRepository notes, StockOutItemRepository items, StockLotRepository lots,
-                               WarehouseSupport support, ProductService products) {
+                               WarehouseSupport support, ProductService products,
+                               StockTransactionService stockTransactions) {
         this.notes = notes; this.items = items; this.lots = lots; this.support = support; this.products = products;
+        this.stockTransactions = stockTransactions;
     }
 
     @Override @Transactional(readOnly = true)
@@ -154,6 +157,9 @@ public class StockOutServiceImpl implements StockOutService {
             stockLot.setCurrentQuantity(stockLot.getCurrentQuantity().add(stockOutItem.getQuantity()));
             stockLot.setStatus(stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(today)
                     ? LotStatus.EXPIRED : LotStatus.STORAGE);
+            stockTransactions.record(stockLot.getLotId(), stockLot.getProductId(), StockTransactionType.SALE_REVERSAL,
+                    stockOutItem.getQuantity(), stockLot.getCurrentQuantity(), StockTransactionRefType.STOCK_OUT_NOTE,
+                    stockOutNote.getNoteId());
             stockDeltas.merge(stockOutItem.getProductId(), stockOutItem.getQuantity(), BigDecimal::add);
         }
         support.adjustStock(stockDeltas);
@@ -223,6 +229,11 @@ public class StockOutServiceImpl implements StockOutService {
                 items.save(outputItem);
                 stockLot.setCurrentQuantity(stockLot.getCurrentQuantity().subtract(deductedQuantity));
                 stockLot.setStatus(stockLot.getCurrentQuantity().signum() == 0 ? LotStatus.EMPTY : stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(today) ? LotStatus.EXPIRED : LotStatus.STORAGE);
+                StockTransactionType transactionType = stockOutNote.getType() == StockOutType.SALE
+                        ? StockTransactionType.SALE : StockTransactionType.DISPOSAL;
+                stockTransactions.record(stockLot.getLotId(), stockLot.getProductId(), transactionType,
+                        deductedQuantity.negate(), stockLot.getCurrentQuantity(), StockTransactionRefType.STOCK_OUT_NOTE,
+                        stockOutNote.getNoteId());
                 remainingQuantity = remainingQuantity.subtract(deductedQuantity);
                 totalCost = totalCost.add(outputItem.getTotalPrice());
                 if (remainingQuantity.signum() == 0) break;

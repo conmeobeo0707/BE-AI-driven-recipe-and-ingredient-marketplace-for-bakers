@@ -161,6 +161,14 @@ Mẫu cập nhật số đếm. `itemId` là ID dòng kiểm kê do API chi ti�
 
 `actualQuantity` không âm. `reason` tối đa 255 ký tự, `note` tối đa 5000 ký tự.
 
+### Lịch sử giao dịch kho — `/api/warehouse/stock-transactions`
+
+| Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |
+|---|---|---|---|---|
+| `GET /api/warehouse/stock-transactions` | Manager/Staff xem lịch sử thay đổi tồn theo từng lô, có thể lọc và phân trang. | Query tùy chọn: `productId`, `stockLotId`, `transactionType` (`STOCK_IN`, `SALE`, `DISPOSAL`, `STOCKTAKE_INCREASE`, `STOCKTAKE_DECREASE`, `SALE_REVERSAL`), `refType` (`STOCK_IN_NOTE`, `STOCK_OUT_NOTE`, `STOCKTAKE_NOTE`), `refId`, `from`, `to` (ISO date-time); cùng `page`, `size`, `sort`. Mặc định size 20, `createdAt DESC`. | `200`, `ApiResponse<Page<StockTransactionResponse>>` | `400` UUID, enum, ngày giờ, khoảng ngày hoặc tham số phân trang không hợp lệ; `403` role không được phép. |
+
+`from` và `to` là mốc thời gian bao gồm cả hai đầu khoảng. `from` không được sau `to`. Mỗi response chứa `quantityChange` có dấu và `balanceAfter` của lô sau giao dịch.
+
 ### Nhà cung cấp — `/api/suppliers`
 
 | Method & path | Chức năng | Input | Thành công | Lỗi có thể gặp |

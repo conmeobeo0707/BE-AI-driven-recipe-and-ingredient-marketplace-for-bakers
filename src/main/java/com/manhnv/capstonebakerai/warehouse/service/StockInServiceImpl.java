@@ -23,14 +23,17 @@ public class StockInServiceImpl implements StockInService {
     private final StockLotRepository lots;
     private final SupplierRepository suppliers;
     private final WarehouseSupport support;
+    private final StockTransactionService stockTransactions;
 
     public StockInServiceImpl(StockInNoteRepository notes, StockInItemRepository items, StockLotRepository lots,
-                              SupplierRepository suppliers, WarehouseSupport support) {
+                              SupplierRepository suppliers, WarehouseSupport support,
+                              StockTransactionService stockTransactions) {
         this.notes = notes;
         this.items = items;
         this.lots = lots;
         this.suppliers = suppliers;
         this.support = support;
+        this.stockTransactions = stockTransactions;
     }
 
     @Override @Transactional(readOnly = true)
@@ -181,7 +184,9 @@ public class StockInServiceImpl implements StockInService {
             stockLot.setUnitCost(baseUnitCost);
             stockLot.setExpiryDate(stockInItem.getExpiryDate());
             stockLot.setStatus(stockInItem.getExpiryDate() != null && stockInItem.getExpiryDate().isBefore(LocalDate.now()) ? LotStatus.EXPIRED : LotStatus.STORAGE);
-            lots.save(stockLot);
+            StockLot savedLot = lots.save(stockLot);
+            stockTransactions.record(savedLot.getLotId(), savedLot.getProductId(), StockTransactionType.STOCK_IN,
+                    baseQuantity, savedLot.getCurrentQuantity(), StockTransactionRefType.STOCK_IN_NOTE, noteId);
             stockDeltas.merge(stockInItem.getProductId(), baseQuantity, BigDecimal::add);
         }
         support.adjustStock(stockDeltas);
