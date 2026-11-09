@@ -166,6 +166,8 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
             throw new RuntimeException("RecipeRating not found");
         }
         repository.delete(existing);
+        repository.flush();
+        refreshRecipeAverageRating(existing.getRecipe().getId());
         interactionService.remove(customer.getId(), existing.getRecipe().getId(), RecipeInteractionType.RATING);
     }
 
