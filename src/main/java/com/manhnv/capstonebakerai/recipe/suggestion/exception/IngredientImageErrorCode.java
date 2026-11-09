@@ -60,7 +60,7 @@ public enum IngredientImageErrorCode implements ErrorCode {
     ),
 
     IMAGE_RATE_LIMIT_EXCEEDED(
-            "Too many image recognition requests. Please try again later",
+            "Daily image recognition limit reached. Please try again tomorrow or enter ingredients manually",
             HttpStatus.TOO_MANY_REQUESTS
     );
 

@@ -14,4 +14,5 @@ public interface IngredientCatalogService {
     IngredientAliasResponse addAlias(UUID id, SaveIngredientAliasRequest request);
     IngredientAliasResponse updateAlias(UUID id, UUID aliasId, SaveIngredientAliasRequest request);
     void deleteAlias(UUID id, UUID aliasId);
+    LinkByNameResponse linkByName(LinkByNameRequest request);
 }

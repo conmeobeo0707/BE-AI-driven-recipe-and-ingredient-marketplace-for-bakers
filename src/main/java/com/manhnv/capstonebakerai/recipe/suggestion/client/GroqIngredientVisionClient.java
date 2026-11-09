@@ -57,35 +57,9 @@ public class GroqIngredientVisionClient {
             - If a container's contents cannot be identified, omit it.
             - Set uncertain=true when the exact ingredient cannot be
               distinguished reliably from appearance.
-            """;
 
-    private static final String OUTPUT_SCHEMA = """
-            {
-              "type": "object",
-              "properties": {
-                "ingredients": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "nameVi": {
-                        "type": "string"
-                      },
-                      "uncertain": {
-                        "type": "boolean"
-                      }
-                    },
-                    "required": ["name", "nameVi", "uncertain"],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": ["ingredients"],
-              "additionalProperties": false
-            }
+            Reply with only one JSON object of this exact shape and nothing else:
+            {"ingredients":[{"name":"egg","nameVi":"trứng gà","uncertain":false}]}
             """;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -96,8 +70,13 @@ public class GroqIngredientVisionClient {
         try {
             Map<String, Object> payload = Map.of(
                     "model", properties.getModel(),
-                    "reasoning_effort", "none",
-                    "max_completion_tokens", 2000,
+                    // With reasoning off the model often answers in plain text and Groq rejects it (json_validate_failed).
+                    "reasoning_effort", "default",
+                    "reasoning_format", "hidden",
+                    // Room for the hidden reasoning plus the JSON answer.
+                    "max_completion_tokens", 4000,
+                    // Qwen's recommended sampling with reasoning on; greedy decoding tends to loop.
+                    "temperature", 0.6,
                     "messages", List.of(
                             Map.of(
                                     "role", "system",
@@ -120,15 +99,9 @@ public class GroqIngredientVisionClient {
                                     )
                             )
                     ),
-                    "response_format", Map.of(
-                            "type", "json_schema",
-                            "json_schema", Map.of(
-                                    "name", "ingredient_detection",
-                                    "strict", true,
-                                    "schema",
-                                    objectMapper.readTree(OUTPUT_SCHEMA)
-                            )
-                    )
+                    // Strict json_schema makes this model loop on busy photos ("[butcher],[butcher],..."),
+                    // so ask for plain JSON and validate the shape in parseResponse.
+                    "response_format", Map.of("type", "json_object")
             );
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -169,6 +142,13 @@ public class GroqIngredientVisionClient {
                             IngredientImageErrorCode.VISION_UNAVAILABLE,
                             "Image recognition quota has been reached. Please try later or enter ingredients manually"
                     );
+                }
+
+                // The model answered but not in the required JSON shape: a bad result, not an outage.
+                if (response.statusCode() == 400
+                        && response.body() != null
+                        && response.body().contains("json_validate_failed")) {
+                    throw invalidResponse();
                 }
 
                 throw new AppException(
@@ -254,28 +234,24 @@ public class GroqIngredientVisionClient {
                 DetectionResult.class
         );
 
-        if (result == null
-                || result.ingredients() == null
-                || result.ingredients().size() > 20) {
+        if (result == null || result.ingredients() == null) {
+            log.warn("Groq ingredient recognition returned JSON without an ingredients list");
             throw invalidResponse();
         }
 
-        for (DetectedIngredient ingredient : result.ingredients()) {
-            if (ingredient == null
-                    || ingredient.name() == null
-                    || ingredient.name().isBlank()
-                    || ingredient.name().length() > 120
-                    || (ingredient.nameVi() != null && ingredient.nameVi().length() > 120)
-                    || ingredient.uncertain() == null) {
-                throw invalidResponse();
-            }
-        }
-
+        // Without a strict schema, drop malformed items instead of failing the whole image.
+        // A missing uncertain flag counts as uncertain so the customer double-checks it.
         return result.ingredients().stream()
+                .filter(item -> item != null
+                        && item.name() != null
+                        && !item.name().isBlank()
+                        && item.name().length() <= 120
+                        && (item.nameVi() == null || item.nameVi().length() <= 120))
+                .limit(20)
                 .map(item -> new DetectedIngredient(
                         item.name().trim(),
                         item.nameVi() == null ? "" : item.nameVi().trim(),
-                        item.uncertain()
+                        item.uncertain() == null || item.uncertain()
                 ))
                 .toList();
     }
@@ -293,6 +269,8 @@ public class GroqIngredientVisionClient {
         );
     }
 
+    // Plain JSON mode may add extra keys; ignore them.
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record DetectedIngredient(
             String name,
             String nameVi,
@@ -300,6 +278,7 @@ public class GroqIngredientVisionClient {
     ) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record DetectionResult(
             List<DetectedIngredient> ingredients
     ) {

@@ -20,9 +20,7 @@ public enum IngredientCatalogErrorCode implements ErrorCode {
     CANONICAL_ALIAS_REQUIRED("The current canonical name alias cannot be deleted", HttpStatus.CONFLICT),
     CATALOG_USED_BY_PUBLISHED_RECIPE("Cannot deactivate an ingredient used by a published recipe", HttpStatus.CONFLICT),
     INVALID_SEARCH("Keyword must be at most 150 characters and limit must be between 1 and 20", HttpStatus.BAD_REQUEST),
-    INVALID_BACKFILL("Provide 1 to 200 distinct ingredient mappings", HttpStatus.BAD_REQUEST),
-    INVALID_BACKFILL_LIMIT("Backfill preview limit must be between 1 and 200", HttpStatus.BAD_REQUEST),
-    BACKFILL_CONFLICT("An ingredient no longer exists or has already been mapped. Refresh the preview", HttpStatus.CONFLICT),
+    INVALID_LINK_PAGE("Page must be at least 0, size between 1 and 100, and keyword at most 150 characters", HttpStatus.BAD_REQUEST),
     CATALOG_INACTIVE("The selected ingredient catalog does not exist or is inactive", HttpStatus.BAD_REQUEST);
 
     private final String message;

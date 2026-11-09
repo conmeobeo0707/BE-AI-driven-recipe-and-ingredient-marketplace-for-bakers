@@ -5,8 +5,7 @@ import java.util.UUID;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate;
 
 public record IngredientImageRecognitionResponse(
-        String inputMode,
-        boolean requiresConfirmation,
+        int remainingDailyQuota,
         List<Item> ingredients
 ) {
 

@@ -8,7 +8,6 @@ import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeBookmarkResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeBookmark;
-import com.manhnv.capstonebakerai.recipe.enums.InteractionSource;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeBookmarkMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeBookmarkRepository;
@@ -76,7 +75,7 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         RecipeBookmark saved = repository.save(entity);
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
-                null, request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                null,
                 request.getRecommId()
         );
         return RecipeBookmarkMapper.toDTO(saved);
@@ -105,7 +104,7 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
             interactionService.remove(customer.getId(), previousRecipeId, RecipeInteractionType.BOOKMARK);
             interactionService.record(
                     customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
-                    null, request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                    null,
                     request.getRecommId()
             );
         }

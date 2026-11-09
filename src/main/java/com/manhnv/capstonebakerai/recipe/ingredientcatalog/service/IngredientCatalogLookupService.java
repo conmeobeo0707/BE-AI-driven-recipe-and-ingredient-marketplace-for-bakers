@@ -42,7 +42,7 @@ public class IngredientCatalogLookupService {
             return catalogRepository.findAllByActiveTrueOrderByCanonicalNameAsc().stream()
                     .limit(limit)
                     .map(c -> new IngredientCatalogCandidate(
-                            c.getId(), c.getCanonicalName(), c.getCanonicalName(), 0, MatchType.PARTIAL
+                            c.getId(), c.getCanonicalName(), c.getCanonicalName(), 0, null
                     ))
                     .toList();
         }

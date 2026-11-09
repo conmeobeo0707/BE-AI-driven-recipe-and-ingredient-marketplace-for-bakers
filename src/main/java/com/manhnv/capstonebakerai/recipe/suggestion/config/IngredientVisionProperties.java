@@ -16,4 +16,7 @@ public class IngredientVisionProperties {
     private String apiKey = "";
 
     private String model = "qwen/qwen3.8-27b";
+
+    // Image recognitions each customer may run per calendar day (Asia/Ho_Chi_Minh).
+    private int dailyLimit = 5;
 }

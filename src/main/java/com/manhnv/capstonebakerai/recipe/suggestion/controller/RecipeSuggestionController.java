@@ -1,10 +1,11 @@
 package com.manhnv.capstonebakerai.recipe.suggestion.controller;
 
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
+import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate;
+import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientCatalogLookupService;
 import com.manhnv.capstonebakerai.recipe.suggestion.dto.IngredientImageRecognitionResponse;
-import com.manhnv.capstonebakerai.recipe.suggestion.dto.IngredientSuggestionRequest;
-import com.manhnv.capstonebakerai.recipe.suggestion.dto.IngredientSuggestionResponse;
-import com.manhnv.capstonebakerai.recipe.suggestion.dto.ConfirmIngredientSuggestionRequest;
+import com.manhnv.capstonebakerai.recipe.suggestion.dto.RecipeSuggestionRequest;
+import com.manhnv.capstonebakerai.recipe.suggestion.dto.RecipeSuggestionResponse;
 import com.manhnv.capstonebakerai.recipe.suggestion.service.IngredientImageService;
 import com.manhnv.capstonebakerai.recipe.suggestion.service.RecipeSuggestionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/recipe-suggestions")
@@ -26,32 +29,46 @@ public class RecipeSuggestionController {
 
     private final RecipeSuggestionService recipeSuggestionService;
     private final IngredientImageService ingredientImageService;
+    private final IngredientCatalogLookupService lookupService;
 
-    @PostMapping("/ingredients")
+    @GetMapping("/catalog-ingredients")
     @Operation(
-            summary = "Tìm recipe từ tên nguyên liệu",
+            summary = "Tìm nguyên liệu chuẩn",
             description = """
-                    Chỉ CUSTOMER được gọi.
-                    ingredients gồm 1 đến 20 tên nguyên liệu.
-                    limit có thể bỏ qua, mặc định 3, tối đa 5.
-                    Tên được resolve bằng catalog và alias.
-                    Nguyên liệu chưa nhận ra được trả trong unmatchedIngredients.
-                    Mỗi nguyên liệu chưa khớp có candidates để chọn lại; fuzzy không tự gán.
-                    allowPartial mặc định false: còn unmatched sẽ trả requiresResolution=true
-                    và recipes rỗng. Chỉ đặt true khi người dùng chấp nhận bỏ qua phần chưa khớp.
-                    Coverage tính theo loại nguyên liệu, không tính số lượng.
+                    Chỉ CUSTOMER được gọi. Ô gợi ý khi customer gõ nguyên liệu, hoặc khi chọn lại món ảnh chưa matched;
+                    người dùng tìm và chọn catalogIngredientId rồi gửi sang POST /api/v1/recipe-suggestions.
+                    keyword tùy chọn, tối đa 150 ký tự; bỏ trống để xem danh sách active theo tên,
+                    khi đó matchType=null và similarity=0 vì không có so khớp.
+                    limit mặc định 10, từ 1 đến 20. Tìm tên chuẩn và alias theo EXACT, PARTIAL, FUZZY;
+                    mỗi catalog chỉ xuất hiện một lần. similarity là điểm giống tên, không phải xác suất AI nhận diện đúng.
+                    Fuzzy không tự gán nguyên liệu.
                     """
     )
-    public ApiResponse<IngredientSuggestionResponse> suggestFromIngredients(
-            @Valid @RequestBody IngredientSuggestionRequest request
+    public ApiResponse<List<IngredientCatalogCandidate>> searchCatalogIngredients(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        return ApiResponse.success(lookupService.search(keyword, limit));
+    }
+
+    @PostMapping
+    @Operation(
+            summary = "Tìm recipe từ nguyên liệu đã chọn",
+            description = """
+                    Chỉ CUSTOMER được gọi. Không gọi AI.
+                    catalogIngredientIds gồm 1 đến 20 UUID nguyên liệu chuẩn, lấy từ
+                    GET /catalog-ingredients (gõ tay) hoặc kết quả /images/recognize (ảnh).
+                    ID trùng được gộp; ID không tồn tại hoặc inactive trả 400.
+                    limit có thể bỏ qua, mặc định 3, tối đa 5.
+                    Recipe xếp theo coverage = số loại nguyên liệu có / tổng loại nguyên liệu của recipe;
+                    không so số lượng.
+                    """
+    )
+    public ApiResponse<RecipeSuggestionResponse> suggest(
+            @Valid @RequestBody RecipeSuggestionRequest request
     ) {
         return ApiResponse.success(
-                recipeSuggestionService.suggest(
-                        request.ingredients(),
-                        request.limit(),
-                        "TEXT",
-                        Boolean.TRUE.equals(request.allowPartial())
-                )
+                recipeSuggestionService.suggest(request.catalogIngredientIds(), request.limit())
         );
     }
 
@@ -65,9 +82,13 @@ public class RecipeSuggestionController {
                 Chỉ CUSTOMER được gọi.
                 Gửi multipart/form-data với field file.
                 Hỗ trợ JPEG/PNG, tối đa 5 MB và 16 triệu pixel.
+                Mỗi customer được nhận diện tối đa 5 ảnh/ngày (reset 0h giờ Việt Nam);
+                hết lượt trả 429. remainingDailyQuota là số lượt còn lại trong ngày.
+                Ảnh lỗi định dạng hoặc lỗi kết nối tới AI không bị trừ lượt.
                 Ảnh không được lưu lên R2.
-                Kết quả có thể chưa chính xác; Customer cần kiểm tra,
-                sửa và xác nhận trước khi tìm recipe.
+                Kết quả có thể chưa chính xác; Customer kiểm tra, bỏ món nhầm,
+                chọn lại món chưa matched (qua candidates hoặc GET /catalog-ingredients)
+                rồi gửi các catalogIngredientId sang POST /api/v1/recipe-suggestions.
                 matched chỉ thể hiện tên resolve được trong catalog.
                 Item chưa matched có candidates để người dùng chọn catalog ID.
                 Danh sách rỗng nghĩa là chưa nhận diện được nguyên liệu.
@@ -79,46 +100,5 @@ public class RecipeSuggestionController {
         return ApiResponse.success(
                 ingredientImageService.recognize(file)
         );
-    }
-
-    @PostMapping("/images/confirm")
-    @Operation(
-            summary = "Tìm recipe từ nguyên liệu đã xác nhận sau nhận diện ảnh",
-            description = """
-                Customer kiểm tra ảnh và gửi catalogIngredientIds gồm 1 đến 20 UUID
-                đã chọn, không gửi tên để resolve lại. Có thể lấy ID từ kết quả ảnh
-                hoặc GET /api/v1/ingredient-catalog. ID thiếu/inactive trả 400.
-                unmatchedIngredients tùy chọn là các tên còn chưa chọn được, mỗi tên
-                tối đa 120 ký tự. Tổng số ID và tên chưa chọn không quá 20.
-                allowPartial mặc định false. Nếu còn unmatched thì trả
-                requiresResolution=true và recipes rỗng. Đặt true khi người dùng
-                chấp nhận tìm chỉ bằng các ID đã chọn. Tên unmatched không tham gia matching.
-                limit mặc định 3, tối đa 5.
-                API này dùng lại logic tìm recipe hiện có và không gọi AI.
-                """
-    )
-    public ApiResponse<IngredientSuggestionResponse> confirmImageIngredients(
-            @Valid @RequestBody ConfirmIngredientSuggestionRequest request
-    ) {
-        return ApiResponse.success(
-                recipeSuggestionService.suggestByIds(
-                        request.catalogIngredientIds(),
-                        request.unmatchedIngredients(),
-                        request.limit(),
-                        "IMAGE",
-                        Boolean.TRUE.equals(request.allowPartial())
-                )
-        );
-    }
-
-    @PostMapping("/ingredients/confirm")
-    @Operation(summary = "Tìm recipe bằng catalog ID sau khi sửa input text", description = "Body và quy tắc giống /images/confirm; inputMode trả về là TEXT. Không gọi AI. allowPartial mặc định false.")
-    public ApiResponse<IngredientSuggestionResponse> confirmTextIngredients(
-            @Valid @RequestBody ConfirmIngredientSuggestionRequest request
-    ) {
-        return ApiResponse.success(recipeSuggestionService.suggestByIds(
-                request.catalogIngredientIds(), request.unmatchedIngredients(), request.limit(),
-                "TEXT", Boolean.TRUE.equals(request.allowPartial())
-        ));
     }
 }

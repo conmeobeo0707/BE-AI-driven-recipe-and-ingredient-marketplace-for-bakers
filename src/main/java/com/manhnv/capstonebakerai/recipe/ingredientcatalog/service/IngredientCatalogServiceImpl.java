@@ -27,6 +27,7 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
     private final IngredientAliasRepository aliasRepository;
     private final IngredientRepository ingredientRepository;
     private final IngredientNormalizer normalizer;
+    private final IngredientAutoLinker autoLinker;
 
     @Override
     public List<IngredientCatalogResponse> getAll(Boolean active) {
@@ -53,6 +54,7 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
         catalog.setActive(true);
         saveCatalog(catalog);
         ensureSelfAlias(catalog, name, normalized);
+        autoLinker.linkUnlinked(catalog, List.of(normalized));
         return response(catalog);
     }
 
@@ -69,6 +71,7 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
         catalog.setNormalizedName(normalized);
         saveCatalog(catalog);
         ensureSelfAlias(catalog, name, normalized);
+        autoLinker.linkUnlinked(catalog, List.of(normalized));
         return response(catalog);
     }
 
@@ -81,7 +84,12 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
             throw new AppException(IngredientCatalogErrorCode.CATALOG_USED_BY_PUBLISHED_RECIPE);
         }
         catalog.setActive(active);
-        return response(saveCatalog(catalog));
+        saveCatalog(catalog);
+        if (active) {
+            autoLinker.linkUnlinked(catalog, aliasRepository.findAllByIngredient_IdOrderByAliasAsc(id).stream()
+                    .map(IngredientAlias::getNormalizedAlias).toList());
+        }
+        return response(catalog);
     }
 
     @Override
@@ -98,16 +106,10 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
         IngredientCatalog catalog = find(id);
         String name = validName(request.alias());
         String normalized = normalizer.normalize(name);
-        ensureAvailable(normalized, id);
-        if (aliasRepository.findByNormalizedAlias(normalized).isPresent()) {
-            throw new AppException(IngredientCatalogErrorCode.ALIAS_ALREADY_EXISTS);
-        }
-        IngredientAlias alias = new IngredientAlias();
-        alias.setIngredient(catalog);
-        alias.setAlias(name);
-        alias.setNormalizedAlias(normalized);
-        alias.setLanguageCode(request.languageCode() == null ? null : request.languageCode().toLowerCase(Locale.ROOT));
-        return aliasResponse(saveAlias(alias));
+        ensureAliasAvailable(normalized, id, null);
+        IngredientAlias alias = saveAlias(newAlias(catalog, name, normalized, request.languageCode()));
+        autoLinker.linkUnlinked(catalog, List.of(normalized));
+        return aliasResponse(alias);
     }
 
     @Override
@@ -123,16 +125,13 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
                 && !normalized.equals(catalog.getNormalizedName())) {
             throw new AppException(IngredientCatalogErrorCode.CANONICAL_ALIAS_REQUIRED);
         }
-        ensureAvailable(normalized, id);
-        aliasRepository.findByNormalizedAlias(normalized).ifPresent(existing -> {
-            if (!existing.getId().equals(aliasId)) {
-                throw new AppException(IngredientCatalogErrorCode.ALIAS_ALREADY_EXISTS);
-            }
-        });
+        ensureAliasAvailable(normalized, id, aliasId);
         alias.setAlias(name);
         alias.setNormalizedAlias(normalized);
-        alias.setLanguageCode(request.languageCode() == null ? null : request.languageCode().toLowerCase(Locale.ROOT));
-        return aliasResponse(saveAlias(alias));
+        alias.setLanguageCode(languageCode(request.languageCode()));
+        IngredientAlias saved = saveAlias(alias);
+        autoLinker.linkUnlinked(catalog, List.of(normalized));
+        return aliasResponse(saved);
     }
 
     @Override
@@ -147,6 +146,38 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
         }
         aliasRepository.delete(alias);
         aliasRepository.flush();
+    }
+
+    @Override
+    @Transactional
+    public LinkByNameResponse linkByName(LinkByNameRequest request) {
+        catalogRepository.lockNameRegistry();
+        IngredientCatalog catalog = catalogRepository.findActiveForBinding(request.catalogIngredientId())
+                .orElseThrow(() -> new AppException(IngredientCatalogErrorCode.CATALOG_INACTIVE));
+        String name = validName(request.name());
+        String normalized = normalizer.normalize(name);
+        boolean known = catalog.getNormalizedName().equals(normalized)
+                || aliasRepository.findByNormalizedAlias(normalized)
+                .filter(a -> a.getIngredient().getId().equals(catalog.getId())).isPresent();
+        if (!known) {
+            ensureAliasAvailable(normalized, catalog.getId(), null);
+            saveAlias(newAlias(catalog, name, normalized, null));
+        }
+        int linked = autoLinker.linkUnlinked(catalog, List.of(normalized));
+        return new LinkByNameResponse(catalog.getId(), catalog.getCanonicalName(), name, !known, linked);
+    }
+
+    private IngredientAlias newAlias(IngredientCatalog catalog, String name, String normalized, String languageCode) {
+        IngredientAlias alias = new IngredientAlias();
+        alias.setIngredient(catalog);
+        alias.setAlias(name);
+        alias.setNormalizedAlias(normalized);
+        alias.setLanguageCode(languageCode(languageCode));
+        return alias;
+    }
+
+    private String languageCode(String value) {
+        return value == null ? null : value.toLowerCase(Locale.ROOT);
     }
 
     private String validName(String name) {
@@ -169,16 +200,29 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
         });
     }
 
+    // One lookup per table: another catalog's name/alias is NAME_ALREADY_IN_USE, another alias of this catalog is ALIAS_ALREADY_EXISTS.
+    private void ensureAliasAvailable(String normalized, UUID catalogId, UUID aliasId) {
+        catalogRepository.findByNormalizedName(normalized).ifPresent(c -> {
+            if (!c.getId().equals(catalogId)) {
+                throw new AppException(IngredientCatalogErrorCode.NAME_ALREADY_IN_USE);
+            }
+        });
+        aliasRepository.findByNormalizedAlias(normalized).ifPresent(a -> {
+            if (a.getId().equals(aliasId)) {
+                return;
+            }
+            throw new AppException(a.getIngredient().getId().equals(catalogId)
+                    ? IngredientCatalogErrorCode.ALIAS_ALREADY_EXISTS
+                    : IngredientCatalogErrorCode.NAME_ALREADY_IN_USE);
+        });
+    }
+
     private void ensureSelfAlias(IngredientCatalog catalog, String name, String normalized) {
         ensureAvailable(normalized, catalog.getId());
         if (aliasRepository.findByNormalizedAlias(normalized).isPresent()) {
             return;
         }
-        IngredientAlias alias = new IngredientAlias();
-        alias.setIngredient(catalog);
-        alias.setAlias(name);
-        alias.setNormalizedAlias(normalized);
-        saveAlias(alias);
+        saveAlias(newAlias(catalog, name, normalized, null));
     }
 
     private IngredientCatalog find(UUID id) {
