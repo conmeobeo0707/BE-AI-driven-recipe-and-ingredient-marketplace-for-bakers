@@ -34,6 +34,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
+    @Transactional(readOnly = true)
     public PageResponse<RecipeCommentResponse> getAll(String search, Pageable pageable) {
         Pageable validatedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort());
 
@@ -52,6 +53,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public RecipeCommentResponse getById(UUID id) {
         RecipeComment entity = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeComment not found"));
@@ -129,6 +131,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PageResponse<RecipeCommentResponse> getByRecipeId(UUID recipeId, String search, Pageable pageable) {
         Pageable validatedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort());
 
@@ -147,6 +150,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PageResponse<RecipeCommentResponse> getByUserId(UUID userId, String search, Pageable pageable) {
         Pageable validatedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort());
 
@@ -165,6 +169,7 @@ public class RecipeCommentServiceImpl implements RecipeCommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PageResponse<RecipeCommentResponse> getReplies(UUID parentId, String search, Pageable pageable) {
         Pageable validatedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort());
 

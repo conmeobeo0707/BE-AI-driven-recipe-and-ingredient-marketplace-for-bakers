@@ -20,6 +20,7 @@ public record CreateOrderRequest(
         @NotBlank @Size(max = 255) String addressDetail,
         @NotBlank @Size(max = 500) String fullAddress,
         @NotBlank @Size(max = 100) String shippingRateId,
+        @Size(max = 50) String voucherCode,
         @NotEmpty @Valid List<OrderItemRequest> items
         ) {
 }

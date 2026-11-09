@@ -5,6 +5,7 @@ import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.order.dto.request.CancelOrderRequest;
 import com.manhnv.capstonebakerai.order.dto.request.StaffCreateOrderRequest;
 import com.manhnv.capstonebakerai.order.dto.request.UpdateOrderStatusRequest;
+import com.manhnv.capstonebakerai.order.dto.response.OrderHistoryStaffResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderSummaryResponse;
 import com.manhnv.capstonebakerai.order.dto.response.RevenueReportResponse;
@@ -25,6 +26,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -84,5 +86,11 @@ public class StaffOrderController {
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) CancelOrderRequest request) {
         return ResponseEntity.ok(ApiResponse.success(service.cancelByStaff(id, request)));
+    }
+
+    @Operation(summary = "API xem lịch sử đơn hàng (staff)", description = "Có thêm actorId của người thực hiện")
+    @GetMapping("/{id}/history")
+    public ResponseEntity<ApiResponse<List<OrderHistoryStaffResponse>>> history(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(service.getOrderHistoryForStaff(id)));
     }
 }

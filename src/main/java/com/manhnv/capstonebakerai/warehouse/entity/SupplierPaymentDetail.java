@@ -25,8 +25,8 @@ public class SupplierPaymentDetail {
     @Column(name = "id")
     private UUID id;
 
-    @Column(name = "supplier_payments_id", nullable = false)
-    private UUID supplierPaymentsId;
+    @Column(name = "payment_id", nullable = false)
+    private UUID paymentId;
 
     @Column(name = "stock_in_note_id", nullable = false)
     private UUID stockInNoteId;

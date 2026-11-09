@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.order.dto.request.CancelOrderRequest;
 import com.manhnv.capstonebakerai.order.dto.request.CreateOrderRequest;
+import com.manhnv.capstonebakerai.order.dto.response.OrderHistoryResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderSummaryResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderTrackingResponse;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -76,5 +78,12 @@ public class CustomerOrderController {
     public ResponseEntity<ApiResponse<OrderResponse>> confirmReceived(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(
                 service.confirmReceived(SecurityUtils.getCurrentUserId(), id)));
+    }
+
+    @Operation(summary = "API xem lịch sử đơn hàng của customer", description = "Sắp xếp theo thời gian tăng dần, dùng để vẽ timeline. Không phân trang")
+    @GetMapping("/{id}/history")
+    public ResponseEntity<ApiResponse<List<OrderHistoryResponse>>> history(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                service.getMyOrderHistory(SecurityUtils.getCurrentUserId(), id)));
     }
 }

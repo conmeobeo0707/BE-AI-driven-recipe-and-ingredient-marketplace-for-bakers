@@ -19,4 +19,9 @@ public interface StockOutNoteRepository extends JpaRepository<StockOutNote, UUID
     Page<StockOutNote> findByStatusAndType(NoteStatus status, StockOutType type, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select n from StockOutNote n where n.noteId=:id")
     Optional<StockOutNote> lockById(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select n from StockOutNote n where n.referenceOrderId = :orderId and n.type = :type")
+    Optional<StockOutNote> lockByReferenceOrderIdAndType(@Param("orderId") UUID orderId,
+            @Param("type") StockOutType type);
 }

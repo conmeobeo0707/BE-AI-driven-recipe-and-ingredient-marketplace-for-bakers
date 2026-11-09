@@ -192,11 +192,11 @@ Base path: `/api/v1/recipes`
 
 | Method | Path | Request Body / Query | Response Body | Auth | Purpose |
 |---|---|---|---|---|---|
-| GET | `/{recipeId}` | path `recipeId` | `RecipeResponse{id, userId, categoryId, title, description, videoId, videoUrl, imageIds, imageUrls, difficulty(EASY\|MEDIUM\|HARD), prepTimeMinutes, cookTimeMinutes, servings, recipeStatus(DRAFT\|PUBLISHED\|HIDDEN), createdAt, tools: ToolResponse[], ingredients: IngredientResponse[], steps: RecipeStepResponse[]}` | Global default | Get recipe detail (with nested tools/ingredients/steps) |
+| GET | `/{recipeId}` | path `recipeId` | `RecipeResponse{id, userId, categoryId, title, description, videoId, videoUrl, imageIds, imageUrls, difficulty(EASY\|MEDIUM\|HARD), prepTimeMinutes, cookTimeMinutes, servings, averageRating, recipeStatus(DRAFT\|PUBLISHED\|HIDDEN), createdAt, tools: ToolResponse[], ingredients: IngredientResponse[], steps: RecipeStepResponse[]}` | Global default | Get recipe detail (with nested tools/ingredients/steps) |
 | POST | `` | `RecipeRequest{categoryId?, title, description?, videoId?, imageIds?, difficulty?, prepTimeMinutes?, cookTimeMinutes?, servings?, recipeStatus?, tools: ToolEmbeddedRequest[]{name}, ingredients: IngredientEmbeddedRequest[]{name, unit, quantity}, steps: RecipeStepEmbeddedRequest[]{stepNumber, instruction, imageIds}}` | `RecipeResponse` | Global default | Create recipe with nested tools/ingredients/steps in one call |
 | PUT | `/{recipeId}` | `RecipeRequest` | `RecipeResponse` | Global default | Update recipe (full replace of nested lists) |
 | DELETE | `/{recipeId}` | — | `String` `"Deleted"` | Global default | Delete recipe |
-| GET | `/search` | query `userId?`, `categoryId?`, `search?`, `difficulty?`, `recipeStatus?`, `Pageable` (default sort createdAt desc) | `PageResponse<RecipeResponse>` where `PageResponse<T>{content, totalElements, totalPages, currentPage}` | Global default | Search/filter recipes |
+| GET | `/search` | query `userId?`, `categoryId?`, `search?`, `difficulty?`, `recipeStatus?`, `Pageable` (default sort createdAt desc) | `PageResponse<RecipeResponse>`; each recipe includes `averageRating` | Global default | Search/filter recipes |
 
 ## 17. Recipe — `recipe/controller/RecipeCategoryController.java`
 Base path: `/api/v1/recipe-categories`
@@ -250,11 +250,11 @@ Base path: `/api/v1/recipe-comments`
 
 | Method | Path | Request/Query | Response Body | Auth | Purpose |
 |---|---|---|---|---|---|
-| GET | `` | query `search?`, `Pageable` (default sort createdAt desc) | `PageResponse<RecipeCommentResponse{id, recipeId, userId, content, parentId, createdAt, updatedAt}>` | Global default | List all comments |
-| GET | `/{commentId}` | path | `RecipeCommentResponse` | Global default | Get comment |
-| GET | `/recipe/{recipeId}` | path `recipeId`; query `search?`, `Pageable` | `PageResponse<RecipeCommentResponse>` | Global default | Comments for a recipe |
-| GET | `/user/{userId}` | path `userId`; query `search?`, `Pageable` | `PageResponse<RecipeCommentResponse>` | Global default | Comments by a user |
-| GET | `/reply/{parentId}` | path `parentId`; query `search?`, `Pageable` | `PageResponse<RecipeCommentResponse>` | Global default | Replies to a comment |
+| GET | `` | query `search?`, `Pageable` (default sort createdAt desc) | `PageResponse<RecipeCommentResponse{id, recipeId, userId, user: UserSummaryResponse{id, avatar_url, full_name}, content, parentId, createdAt, updatedAt}>` | Global default | List all comments |
+| GET | `/{commentId}` | path | `RecipeCommentResponse` (includes nested `user`) | Global default | Get comment |
+| GET | `/recipe/{recipeId}` | path `recipeId`; query `search?`, `Pageable` | `PageResponse<RecipeCommentResponse>` (includes nested `user`) | Global default | Comments for a recipe |
+| GET | `/user/{userId}` | path `userId`; query `search?`, `Pageable` | `PageResponse<RecipeCommentResponse>` (includes nested `user`) | Global default | Comments by a user |
+| GET | `/reply/{parentId}` | path `parentId`; query `search?`, `Pageable` | `PageResponse<RecipeCommentResponse>` (includes nested `user`) | Global default | Replies to a comment |
 | POST | `` | `RecipeCommentRequest{recipeId, content, parentId?}` | `RecipeCommentResponse` | Global default | Create comment/reply |
 | PUT | `/{commentId}` | `RecipeCommentRequest` | `RecipeCommentResponse` | Global default | Update comment |
 | DELETE | `/{commentId}` | — | `String` `"Deleted"` | Global default | Delete comment |
@@ -264,7 +264,7 @@ Base path: `/api/v1/recipe-ratings`
 
 | Method | Path | Request/Query | Response Body | Auth | Purpose |
 |---|---|---|---|---|---|
-| GET | `` | query `search?`, `Pageable` (default sort createdAt desc) | `PageResponse<RecipeRatingResponse{id, recipeId, customerId, score, createdAt}>` | Global default | List all ratings |
+| GET | `` | query `search?`, `Pageable` (default sort createdAt desc) | `PageResponse<RecipeRatingResponse{id, recipeId, userId, score, createdAt}>` | Global default | List all ratings |
 | GET | `/{ratingId}` | path | `RecipeRatingResponse` | Global default | Get rating |
 | GET | `/user/{customerId}` | path `customerId`; query `search?`, `Pageable` | `PageResponse<RecipeRatingResponse>` | Global default | Ratings by a customer |
 | GET | `/recipe/{recipeId}` | path `recipeId`; query `search?`, `Pageable` | `PageResponse<RecipeRatingResponse>` | Global default | Ratings for a recipe |

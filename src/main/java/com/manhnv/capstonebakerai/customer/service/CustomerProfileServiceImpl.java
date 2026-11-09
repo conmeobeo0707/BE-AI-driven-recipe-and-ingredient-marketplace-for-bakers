@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.customer.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.customer.dto.response.CustomerProfileResponse;
+import com.manhnv.capstonebakerai.customer.dto.response.CustomerPublicProfileResponse;
 import com.manhnv.capstonebakerai.hobby.dto.HobbyResponse;
 import com.manhnv.capstonebakerai.customer.dto.request.UpdateCustomerHobbiesRequest;
 import com.manhnv.capstonebakerai.customer.dto.request.UpdateCustomerProfileRequest;
@@ -41,6 +42,24 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 .collect(Collectors.toSet());
         List<HobbyResponse> hobbies = hobbyService.getByIds(hobbyIds);
         return toResponse(customer, hobbies);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CustomerPublicProfileResponse getPublicProfileByUserId(UUID userId) {
+        Customer customer = findCustomer(userId);
+        var user = customer.getUser();
+
+        return new CustomerPublicProfileResponse(
+                user.getUserId(),
+                customer.getId(),
+                user.getFullName(),
+                user.getAvatarUrl(),
+                customer.getSkillLevel(),
+                user.getGender(),
+                user.getBod(),
+                selectedHobbies(customer)
+        );
     }
 
     @Override

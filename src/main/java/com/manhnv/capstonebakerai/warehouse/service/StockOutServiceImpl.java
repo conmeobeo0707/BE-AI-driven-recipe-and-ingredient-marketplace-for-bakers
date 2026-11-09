@@ -1,8 +1,10 @@
 package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.product.dtos.ComboItemRequest;
 import com.manhnv.capstonebakerai.product.dtos.InventoryProduct;
 import com.manhnv.capstonebakerai.product.dtos.InventoryUnit;
+import com.manhnv.capstonebakerai.product.service.ProductService;
 import com.manhnv.capstonebakerai.warehouse.dto.*;
 import com.manhnv.capstonebakerai.warehouse.entity.*;
 import com.manhnv.capstonebakerai.warehouse.enums.*;
@@ -22,9 +24,11 @@ public class StockOutServiceImpl implements StockOutService {
     private final StockOutItemRepository items;
     private final StockLotRepository lots;
     private final WarehouseSupport support;
+    private final ProductService products;
 
-    public StockOutServiceImpl(StockOutNoteRepository notes, StockOutItemRepository items, StockLotRepository lots, WarehouseSupport support) {
-        this.notes = notes; this.items = items; this.lots = lots; this.support = support;
+    public StockOutServiceImpl(StockOutNoteRepository notes, StockOutItemRepository items, StockLotRepository lots,
+                               WarehouseSupport support, ProductService products) {
+        this.notes = notes; this.items = items; this.lots = lots; this.support = support; this.products = products;
     }
 
     @Override @Transactional(readOnly = true)
@@ -80,6 +84,104 @@ public class StockOutServiceImpl implements StockOutService {
         }
         items.saveAll(pendingItems);
         return savedNote;
+    }
+
+    @Override
+    @Transactional
+    public StockOutNote processSaleOrder(UUID orderId, List<StockLine> orderItems) {
+        if (orderItems == null || orderItems.isEmpty()) throw WarehouseSupport.error("A sale order must contain items");
+
+        StockOutNote existingNote = notes.lockByReferenceOrderIdAndType(orderId, StockOutType.SALE).orElse(null);
+        if (existingNote != null) {
+            if (existingNote.getStatus() == NoteStatus.COMPLETED) return existingNote;
+            if (existingNote.getStatus() == NoteStatus.PENDING) return complete(existingNote.getNoteId());
+            throw new AppException(WarehouseErrorCode.CONFLICT, "A cancelled sale stock-out already exists for this order");
+        }
+
+        Map<UUID, BigDecimal> baseQuantitiesByProduct = new TreeMap<>();
+        Map<UUID, UUID> baseUnitsByProduct = new HashMap<>();
+        for (StockLine orderItem : orderItems) {
+            InventoryProduct inventoryProduct = products.getInventoryProduct(orderItem.productId());
+            InventoryUnit selectedUnit = products.getActiveInventoryUnit(orderItem.productId(), orderItem.productUnitId());
+            BigDecimal baseQuantity = BigDecimal.valueOf(orderItem.quantity()).multiply(selectedUnit.conversionFactor())
+                    .setScale(2, java.math.RoundingMode.HALF_UP);
+            if (baseQuantity.signum() <= 0 || baseQuantity.precision() - baseQuantity.scale() > 8) {
+                throw WarehouseSupport.error("Converted stock quantity exceeds the database precision limit");
+            }
+            expandSaleProduct(inventoryProduct.productId(), baseQuantity, new HashSet<>(),
+                    baseQuantitiesByProduct, baseUnitsByProduct);
+        }
+
+        List<StockOutItemRequest> expandedItems = baseQuantitiesByProduct.entrySet().stream()
+                .map(entry -> new StockOutItemRequest(entry.getKey(), baseUnitsByProduct.get(entry.getKey()), null, entry.getValue()))
+                .toList();
+        StockOutCreateRequest stockOutRequest = new StockOutCreateRequest(StockOutType.SALE, orderId,
+                "Sale order " + orderId, expandedItems);
+        StockOutNote pendingNote = create(stockOutRequest);
+        return complete(pendingNote.getNoteId());
+    }
+
+    @Override
+    @Transactional
+    public void cancelSaleOrder(UUID orderId) {
+        StockOutNote stockOutNote = notes.lockByReferenceOrderIdAndType(orderId, StockOutType.SALE).orElse(null);
+        if (stockOutNote == null || stockOutNote.getStatus() == NoteStatus.CANCELLED) return;
+        if (stockOutNote.getStatus() == NoteStatus.PENDING) {
+            stockOutNote.setStatus(NoteStatus.CANCELLED);
+            stockOutNote.setUpdatedAt(LocalDateTime.now());
+            notes.save(stockOutNote);
+            return;
+        }
+        if (stockOutNote.getStatus() != NoteStatus.COMPLETED) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "Only a completed sale stock-out can be reversed");
+        }
+
+        List<StockOutItem> stockOutItems = items.findByNoteIdOrderByItemId(stockOutNote.getNoteId());
+        List<UUID> lotIds = stockOutItems.stream().map(StockOutItem::getLotId).filter(Objects::nonNull).distinct().sorted().toList();
+        List<UUID> productIds = stockOutItems.stream().map(StockOutItem::getProductId).distinct().sorted().toList();
+        products.lockInventoryProducts(productIds);
+        support.ensureLotsNotInDraftStocktake(lotIds);
+        Map<UUID, StockLot> lotsById = lots.lockByLotIds(lotIds).stream()
+                .collect(java.util.stream.Collectors.toMap(StockLot::getLotId, stockLot -> stockLot));
+
+        Map<UUID, BigDecimal> stockDeltas = new HashMap<>();
+        LocalDate today = LocalDate.now();
+        for (StockOutItem stockOutItem : stockOutItems) {
+            StockLot stockLot = lotsById.get(stockOutItem.getLotId());
+            if (stockLot == null || !stockLot.getProductId().equals(stockOutItem.getProductId())) {
+                throw new AppException(WarehouseErrorCode.CONFLICT, "A stock-out lot is missing; inventory cannot be restored safely");
+            }
+            stockLot.setCurrentQuantity(stockLot.getCurrentQuantity().add(stockOutItem.getQuantity()));
+            stockLot.setStatus(stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(today)
+                    ? LotStatus.EXPIRED : LotStatus.STORAGE);
+            stockDeltas.merge(stockOutItem.getProductId(), stockOutItem.getQuantity(), BigDecimal::add);
+        }
+        support.adjustStock(stockDeltas);
+        stockOutNote.setStatus(NoteStatus.CANCELLED);
+        stockOutNote.setUpdatedAt(LocalDateTime.now());
+        notes.save(stockOutNote);
+    }
+
+    private void expandSaleProduct(UUID productId, BigDecimal quantity, Set<UUID> productsInPath,
+                                   Map<UUID, BigDecimal> baseQuantitiesByProduct,
+                                   Map<UUID, UUID> baseUnitsByProduct) {
+        if (!productsInPath.add(productId)) throw WarehouseSupport.error("Combo composition contains a cycle");
+        InventoryProduct inventoryProduct = products.getInventoryProduct(productId);
+        if (inventoryProduct.combo()) {
+            List<ComboItemRequest> comboItems = products.getComboItems(productId);
+            if (comboItems.isEmpty()) throw WarehouseSupport.error("Combo has no components: " + productId);
+            for (ComboItemRequest comboItem : comboItems) {
+                BigDecimal componentQuantity = quantity.multiply(comboItem.quantity())
+                        .setScale(2, java.math.RoundingMode.HALF_UP);
+                expandSaleProduct(comboItem.productId(), componentQuantity, productsInPath,
+                        baseQuantitiesByProduct, baseUnitsByProduct);
+            }
+        } else {
+            InventoryUnit baseUnit = products.getActiveBaseInventoryUnit(productId);
+            baseQuantitiesByProduct.merge(productId, quantity, BigDecimal::add);
+            baseUnitsByProduct.put(productId, baseUnit.unitId());
+        }
+        productsInPath.remove(productId);
     }
 
     @Override @Transactional
