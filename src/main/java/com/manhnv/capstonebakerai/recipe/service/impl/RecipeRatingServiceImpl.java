@@ -9,7 +9,6 @@ import com.manhnv.capstonebakerai.recipe.dto.response.RecipeRatingResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeRating;
 import com.manhnv.capstonebakerai.recipe.event.RatingCreatedEvent;
-import com.manhnv.capstonebakerai.recipe.enums.InteractionSource;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeRatingMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRatingRepository;
@@ -98,7 +97,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         refreshRecipeAverageRating(recipe.getId());
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
-                request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getScore(),
                 request.getRecommId());
 
         eventPublisher.publishEvent(new RatingCreatedEvent(
@@ -148,7 +147,7 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
         }
         interactionService.record(
                 customer.getId(), recipe.getId(), RecipeInteractionType.RATING,
-                request.getScore(), request.getRecommId() == null ? InteractionSource.DIRECT : InteractionSource.RECOMMENDATION,
+                request.getScore(),
                 request.getRecommId());
         if (!previousRecipeId.equals(recipe.getId())) {
             interactionService.remove(customer.getId(), previousRecipeId, RecipeInteractionType.RATING);
@@ -167,6 +166,8 @@ public class RecipeRatingServiceImpl implements RecipeRatingService {
             throw new RuntimeException("RecipeRating not found");
         }
         repository.delete(existing);
+        repository.flush();
+        refreshRecipeAverageRating(existing.getRecipe().getId());
         interactionService.remove(customer.getId(), existing.getRecipe().getId(), RecipeInteractionType.RATING);
     }
 

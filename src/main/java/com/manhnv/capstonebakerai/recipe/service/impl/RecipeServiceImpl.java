@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
+import com.manhnv.capstonebakerai.recipe.helper.IngredientCatalogBindingHelper;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
@@ -27,8 +28,6 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeImageRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepImageRepository;
 import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeService;
-import com.manhnv.capstonebakerai.recommendation.event.RecipeChangedEvent;
-import org.springframework.context.ApplicationEventPublisher;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.Predicate;
@@ -56,7 +55,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeImageRepository recipeImageRepository;
     private final RecipeStepImageRepository recipeStepImageRepository;
     private final RecipeMediaHelper mediaHelper;
-    private final ApplicationEventPublisher eventPublisher;
+    private final IngredientCatalogBindingHelper catalogBindingHelper;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -117,7 +116,13 @@ public class RecipeServiceImpl implements RecipeService {
         if (request.getIngredients() != null) {
             List<Ingredient> ingredients = request.getIngredients().stream().map(ingredientRequest -> {
                 Ingredient ingredient = new Ingredient();
-                ingredient.setName(ingredientRequest.getName());
+//                ingredient.setName(ingredientRequest.getName());
+
+                catalogBindingHelper.bind(
+                        ingredient,
+                        ingredientRequest.getName()
+                );
+
                 ingredient.setUnit(ingredientRequest.getUnit());
                 ingredient.setQuantity(ingredientRequest.getQuantity());
                 ingredient.setRecipe(savedRecipe);
@@ -146,8 +151,6 @@ public class RecipeServiceImpl implements RecipeService {
 
         Recipe detail = repository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
-
-        eventPublisher.publishEvent(new RecipeChangedEvent(recipeId));
 
         return RecipeMapper.toDTO(detail);
     }
@@ -218,7 +221,13 @@ public class RecipeServiceImpl implements RecipeService {
         ingredientRepository.flush();
         ingredientRepository.saveAll(ingredients.stream().map(ingReq -> {
             Ingredient newIngredient = new Ingredient();
-            newIngredient.setName(ingReq.getName());
+//            newIngredient.setName(ingReq.getName());
+
+            catalogBindingHelper.bind(
+                    newIngredient,
+                    ingReq.getName()
+            );
+
             newIngredient.setUnit(ingReq.getUnit());
             newIngredient.setQuantity(ingReq.getQuantity());
             newIngredient.setRecipe(existing);
@@ -269,8 +278,6 @@ public class RecipeServiceImpl implements RecipeService {
         Recipe detail = repository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
-        eventPublisher.publishEvent(new RecipeChangedEvent(recipeId));
-
         return RecipeMapper.toDTO(detail);
     }
 
@@ -286,7 +293,6 @@ public class RecipeServiceImpl implements RecipeService {
 
         recipe.setRecipeStatus(RecipeStatus.HIDDEN);
         repository.save(recipe);
-        eventPublisher.publishEvent(new RecipeChangedEvent(id));
     }
 
     @Override
