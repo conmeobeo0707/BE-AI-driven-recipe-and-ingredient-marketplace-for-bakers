@@ -77,7 +77,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
             throw new AppException(ExpenseVoucherErrorCode.EXPENSE_VOUCHER_ALREADY_CANCELLED);
         }
         voucher.setStatus(ExpenseVoucherStatus.CANCELLED);
-        voucher.setCancelReason(request.cancelReason());
+        voucher.setCancelReason(request != null ? request.cancelReason() : null);
         voucher.setCancelledAt(LocalDateTime.now());
         return mapper.toResponse(voucherRepository.save(voucher));
     }
@@ -129,7 +129,9 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
         LocalDateTime from = target.atDay(1).atStartOfDay();
         LocalDateTime to = target.plusMonths(1).atDay(1).atStartOfDay();
 
-        return voucherRepository.findVouchersByMonth(ExpenseVoucherStatus.ACTIVE, from, to, categoryId, pageable);
+        // Unlike getReport() (active-only totals), this backs the voucher management table, which
+        // needs both ACTIVE and CANCELLED rows so the UI's status tabs have something to filter.
+        return voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
     }
 
     private String generateCode() {
