@@ -7,7 +7,9 @@ import java.util.UUID;
 
 // Result of POST /api/v1/admin/recommendations/models/train.
 // baseline = rating + popularity only, defaultWeights = configured weights, trained = learned weights.
-// active = true when the learned weights beat the default weights and were switched on.
+// current = the weights customers had when training ran (the active model, or the default weights);
+// comparedWithVersion = that model's version, null when it was the default weights.
+// active = true when the learned weights were strictly better than current and were switched on.
 public record TrainingResponse(
         UUID modelId,
         int modelVersion,
@@ -21,6 +23,8 @@ public record TrainingResponse(
         Metrics baseline,
         Metrics defaultWeights,
         Metrics trained,
+        Metrics current,
+        Integer comparedWithVersion,
         String note
 ) {
 }

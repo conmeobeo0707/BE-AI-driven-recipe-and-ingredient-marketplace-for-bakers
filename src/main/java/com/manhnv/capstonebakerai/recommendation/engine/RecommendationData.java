@@ -52,6 +52,13 @@ public final class RecommendationData {
             return new CustomerData(id, skillLevel, hobbyIds,
                     signals.stream().filter(signal -> signal.at().isBefore(cutoff)).toList());
         }
+
+        // The same customer as if they had never touched this recipe. Used by training and evaluation:
+        // a recipe is usually viewed just before it is liked, and that view must not help predict the like.
+        public CustomerData without(UUID recipeId) {
+            return new CustomerData(id, skillLevel, hobbyIds,
+                    signals.stream().filter(signal -> !signal.recipeId().equals(recipeId)).toList());
+        }
     }
 
     // Everything loaded from the database in one go: recipes, every customer's signals and the knowledge base.
@@ -62,6 +69,7 @@ public final class RecommendationData {
             Map<UUID, CustomerData> customers,
             Map<SkillLevel, Map<DifficultyEnum, Double>> skillFit,
             Map<UUID, String> hobbyNames,
+            Map<UUID, Double> ingredientRarity,
             Instant loadedAt
     ) {
         public static Snapshot of(
@@ -88,7 +96,20 @@ public final class RecommendationData {
                 customers.put(id, new CustomerData(id, skillLevels.get(id), hobbies.getOrDefault(id, Set.of()),
                         byCustomer.getOrDefault(id, List.of())));
             }
-            return new Snapshot(List.copyOf(recipes), byId, List.copyOf(sorted), customers, skillFit, hobbyNames, loadedAt);
+            // Rarity of an ingredient = ln(1 + recipes / recipes that use it): about 0.7 for one used everywhere
+            // (flour, sugar), higher for a distinctive one (matcha), so common ingredients do not dominate taste.
+            Map<UUID, Integer> usedIn = new HashMap<>();
+            recipes.forEach(recipe -> recipe.ingredients().keySet().forEach(id -> usedIn.merge(id, 1, Integer::sum)));
+            Map<UUID, Double> rarity = new HashMap<>();
+            usedIn.forEach((id, count) -> rarity.put(id, Math.log(1 + (double) recipes.size() / count)));
+
+            return new Snapshot(List.copyOf(recipes), byId, List.copyOf(sorted), customers, skillFit, hobbyNames,
+                    rarity, loadedAt);
+        }
+
+        // 1 for an ingredient no published recipe uses any more (neutral).
+        public double rarity(UUID ingredientId) {
+            return ingredientRarity.getOrDefault(ingredientId, 1.0);
         }
 
         public CustomerData customer(UUID id) {

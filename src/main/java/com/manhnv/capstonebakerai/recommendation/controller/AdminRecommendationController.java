@@ -25,13 +25,26 @@ public class AdminRecommendationController {
             Học trọng số của 5 đặc trưng (content, skill, hobby, collaborative, quality) bằng logistic regression
             từ lượt thích thật (bookmark hoặc rating 4-5 sao).
             Đánh giá: với customer có từ 3 lượt thích, giấu lượt cuối và kiểm tra recipe đó có nằm trong top k không.
-            So sánh baseline (chỉ đánh giá + độ phổ biến), defaultWeights (cấu hình) và trained (vừa học).
-            Nếu trained tốt hơn defaultWeights (Hit@k, rồi MRR) thì model được kích hoạt ngay (active = true).
+            Recipe bị giấu được chấm như thể customer chưa từng xem nó, để số đo không tính việc nhắc lại món vừa xem.
+            So sánh baseline (chỉ đánh giá + độ phổ biến), defaultWeights (cấu hình), trained (vừa học)
+            và current (trọng số đang dùng: model đang bật hoặc mặc định; comparedWithVersion = null là mặc định).
+            Chỉ khi trained tốt hơn hẳn current (Hit@k, rồi MRR) thì model mới được kích hoạt (active = true);
+            hòa thì giữ nguyên cấu hình đang dùng.
             k từ 1 đến 20, mặc định 10. Thiếu dữ liệu (mặc định cần 20 customer có từ 3 lượt thích
             và 100 lượt thích để học) trả 400 kèm số liệu hiện có.
             """)
     public ApiResponse<TrainingResponse> train(@RequestParam(defaultValue = "10") int k) {
         return ApiResponse.success(adminService.train(k, SecurityUtils.getCurrentUserId()));
+    }
+
+    @PostMapping("/models/deactivate")
+    @Operation(summary = "Tắt model đang dùng", description = """
+            Tắt model đang bật và quay về trọng số mặc định (defaultWeights trong cấu hình).
+            Các model đã huấn luyện vẫn được giữ trong lịch sử. Trả về true nếu có model vừa bị tắt,
+            false nếu hệ thống vốn đang dùng trọng số mặc định.
+            """)
+    public ApiResponse<Boolean> deactivate() {
+        return ApiResponse.success(adminService.deactivate());
     }
 
     @GetMapping("/knowledge")

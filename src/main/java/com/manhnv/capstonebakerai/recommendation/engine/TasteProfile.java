@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recommendation.engine.RecommendationData.CustomerData;
 import com.manhnv.capstonebakerai.recommendation.engine.RecommendationData.RecipeItem;
 import com.manhnv.capstonebakerai.recommendation.engine.RecommendationData.Signal;
+import com.manhnv.capstonebakerai.recommendation.engine.RecommendationData.Snapshot;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -13,7 +14,8 @@ import java.util.*;
 //
 // Every signal gets points: view +1 (at most 3 per recipe), bookmark +4, rating 5/4/3/2/1 -> +4/+2/0/-2/-4.
 // Points halve every 30 days, and only the last 180 days (max 500 signals) count.
-// A recipe's points are added to each of its catalog ingredients, its category and its difficulty.
+// A recipe's points are added to each of its catalog ingredients (times the ingredient's rarity),
+// its category and its difficulty.
 public record TasteProfile(
         Map<UUID, Double> ingredients,      // catalog ingredient -> points
         double ingredientNorm,              // length of the positive part, for cosine similarity
@@ -31,7 +33,8 @@ public record TasteProfile(
     private static final double MAX_VIEW_POINTS = 3;
     private static final int MAX_RECENT_LIKES = 20;
 
-    public static TasteProfile build(CustomerData customer, Map<UUID, RecipeItem> recipes, Instant now) {
+    public static TasteProfile build(CustomerData customer, Snapshot snapshot, Instant now) {
+        Map<UUID, RecipeItem> recipes = snapshot.recipesById();
         List<Signal> newestFirst = new ArrayList<>(customer.signals());
         newestFirst.sort(Comparator.comparing(Signal::at).reversed());
 
@@ -66,7 +69,8 @@ public record TasteProfile(
             }
             hasHistory = true;
             double points = entry.getValue();
-            recipe.ingredients().keySet().forEach(id -> ingredients.merge(id, points, Double::sum));
+            // Rare ingredients say more about taste than the ones every recipe uses.
+            recipe.ingredients().keySet().forEach(id -> ingredients.merge(id, points * snapshot.rarity(id), Double::sum));
             if (recipe.categoryId() != null) {
                 categories.merge(recipe.categoryId(), points, Double::sum);
             }

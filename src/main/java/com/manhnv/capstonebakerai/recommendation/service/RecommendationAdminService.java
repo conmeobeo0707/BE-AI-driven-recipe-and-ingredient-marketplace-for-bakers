@@ -29,11 +29,12 @@ import java.util.*;
 // Training in 4 steps:
 // 1. Split: for each customer with 3+ likes, hide the LAST like as the test case; the other likes are for learning.
 // 2. Samples: each learning like is a positive (label 1) paired with 4 random recipes the customer never liked
-//    (label 0). Features are computed only from data that existed just before that like (no peeking ahead).
+//    and had not touched yet (label 0). Features are computed only from data that existed just before that like
+//    (no peeking ahead), and without the customer's own views of the liked recipe.
 // 3. Learn: logistic regression gives one weight per feature (negatives cut to 0, scaled to sum to 1).
 // 4. Evaluate on the hidden likes: is the liked recipe in the top k? (Hit@k, MRR, coverage), for
-//    baseline (rating + popularity only), the default weights and the learned weights.
-//    The learned weights become active when they beat the default weights.
+//    baseline (rating + popularity only), the default weights, the learned weights and the weights in use now.
+//    The learned weights become active only when they are strictly better than the weights in use now.
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -95,14 +96,20 @@ public class RecommendationAdminService {
         }
 
         // 4. Evaluate
+        // "current" is what customers get right now: the active model, or the default weights when there is none.
         Weights defaults = properties.defaultWeights();
+        Optional<RecommendationModel> active = modelRepository.findFirstByActiveTrue();
+        Integer currentVersion = active.map(RecommendationModel::getVersion).orElse(null);
+        Weights current = active.map(RecommendationModel::weights).orElse(defaults);
         List<Metrics> metrics = evaluate(snapshot, testLikes, k,
-                List.of(Weights.qualityOnly(), defaults, learned));
+                List.of(Weights.qualityOnly(), defaults, learned, current));
         Metrics baseline = metrics.get(0);
         Metrics defaultMetrics = metrics.get(1);
         Metrics trained = metrics.get(2);
-        boolean better = trained.hitRate() > defaultMetrics.hitRate()
-                || (trained.hitRate() == defaultMetrics.hitRate() && trained.mrr() >= defaultMetrics.mrr());
+        Metrics currentMetrics = metrics.get(3);
+        // Strictly better than what is running; a tie keeps the current weights.
+        boolean better = trained.hitRate() > currentMetrics.hitRate()
+                || (trained.hitRate() == currentMetrics.hitRate() && trained.mrr() > currentMetrics.mrr());
 
         RecommendationModel model = transactionTemplate.execute(status -> {
             RecommendationModel saved = new RecommendationModel();
@@ -129,10 +136,23 @@ public class RecommendationAdminService {
         log.info("Trained recommendation model v{} on {} samples ({} iterations, loss {}), active={}",
                 model.getVersion(), samples.size(), result.iterations(), result.loss(), better);
 
+        String running = currentVersion == null ? "trọng số mặc định" : "model v" + currentVersion;
         return new TrainingResponse(model.getId(), model.getVersion(), better, samples.size(), positives,
                 testLikes.size(), k, model.getFinalLoss(), learned, baseline, defaultMetrics, trained,
-                better ? "Model mới tốt hơn trọng số mặc định nên đã được kích hoạt."
-                        : "Model mới không tốt hơn trọng số mặc định nên chưa được kích hoạt; hệ thống giữ cấu hình đang dùng.");
+                currentMetrics, currentVersion,
+                better ? "Model mới tốt hơn " + running + " đang dùng nên đã được kích hoạt."
+                        : "Model mới không tốt hơn " + running + " đang dùng nên chưa được kích hoạt; hệ thống giữ cấu hình đang dùng.");
+    }
+
+    // Switch the active model off: customers get the default weights again. Returns false when none was active.
+    public synchronized boolean deactivate() {
+        Integer changed = transactionTemplate.execute(status -> modelRepository.deactivateAll());
+        boolean wasActive = changed != null && changed > 0;
+        if (wasActive) {
+            recommendationService.clearAll();
+            log.info("Recommendation model deactivated; default weights are used again");
+        }
+        return wasActive;
     }
 
     // First like of each published recipe, oldest first (likes dated before the recipe existed are ignored).
@@ -161,11 +181,14 @@ public class RecommendationAdminService {
                 continue;
             }
             samples.add(new LogisticRegression.Sample(scorer.features(target, context).toArray(), 1));
-            Set<UUID> everLiked = new HashSet<>();
+            // Negatives: recipes the customer never liked AND had not touched yet at that moment. The positive
+            // is scored without its own views (see contextBefore), so the negatives must be unseen too.
+            Set<UUID> unusable = new HashSet<>();
             snapshot.customer(like.customerId()).signals().stream()
-                    .filter(Signal::liked).forEach(signal -> everLiked.add(signal.recipeId()));
+                    .filter(Signal::liked).forEach(signal -> unusable.add(signal.recipeId()));
+            context.customer().signals().forEach(signal -> unusable.add(signal.recipeId()));
             List<RecipeItem> pool = new ArrayList<>(candidates.stream()
-                    .filter(recipe -> !everLiked.contains(recipe.id())).toList());
+                    .filter(recipe -> !unusable.contains(recipe.id()) && !recipe.id().equals(like.recipeId())).toList());
             for (int i = 0; i < NEGATIVES_PER_POSITIVE && !pool.isEmpty(); i++) {
                 RecipeItem negative = pool.remove(random.nextInt(pool.size()));
                 samples.add(new LogisticRegression.Sample(scorer.features(negative, context).toArray(), 0));
@@ -206,10 +229,12 @@ public class RecommendationAdminService {
         return metrics;
     }
 
-    // The customer and the whole community exactly as they were just before the like.
+    // The customer and the whole community exactly as they were just before the like, minus the customer's own
+    // signals on the liked recipe: people open a recipe before saving it, and counting that view would let the
+    // model "predict" the like from the recipe itself.
     private Scorer.Context contextBefore(Snapshot snapshot, Like like) {
         return scorer.prepare(snapshot, CommunityStats.compute(snapshot, like.at()),
-                snapshot.customer(like.customerId()).before(like.at()), like.at());
+                snapshot.customer(like.customerId()).before(like.at()).without(like.recipeId()), like.at());
     }
 
     // ---------- knowledge base overview ----------

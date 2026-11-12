@@ -154,11 +154,10 @@ public final class CommunityStats {
                 }
             }
         }
-        double max = raw.values().stream().mapToDouble(Double::doubleValue).max().orElse(0);
+        // Scaled to 0..1 by the customer's best recipe, but never scaled UP: weak evidence stays a low score.
+        double scale = Math.max(1, raw.values().stream().mapToDouble(Double::doubleValue).max().orElse(0));
         Map<UUID, Double> scores = new HashMap<>();
-        if (max > 0) {
-            raw.forEach((recipe, value) -> scores.put(recipe, value / max));
-        }
+        raw.forEach((recipe, value) -> scores.put(recipe, value / scale));
         return new Collaborative(scores, source);
     }
 
