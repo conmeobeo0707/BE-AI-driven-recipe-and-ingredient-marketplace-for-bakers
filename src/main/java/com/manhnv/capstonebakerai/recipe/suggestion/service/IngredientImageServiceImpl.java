@@ -6,6 +6,9 @@ import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.customer.exception.CustomerErrorCode;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
+import com.manhnv.capstonebakerai.loyalty.enums.AiFeature;
+import com.manhnv.capstonebakerai.loyalty.service.LoyaltyService;
+import com.manhnv.capstonebakerai.loyalty.service.PaidAiRunner;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientNormalizer;
@@ -55,6 +58,10 @@ public class IngredientImageServiceImpl implements IngredientImageService {
     private final IngredientResolver ingredientResolver;
     private final IngredientCatalogLookupService lookupService;
 
+    private final LoyaltyService loyaltyService;
+
+    private final PaidAiRunner paidAiRunner;
+
     private final Semaphore recognitionSlots = new Semaphore(2);
 
     // Key is "<userId>:<date>", so the count starts again at midnight; entries outlive their day by a margin.
@@ -69,10 +76,11 @@ public class IngredientImageServiceImpl implements IngredientImageService {
     ) {
         UUID userId = SecurityUtils.getCurrentUserId();
 
-        customerRepository.findByUser_UserId(userId)
+        UUID customerId = customerRepository.findByUser_UserId(userId)
                 .orElseThrow(() -> new AppException(
                         CustomerErrorCode.CUSTOMER_PROFILE_NOT_FOUND
-                ));
+                ))
+                .getId();
 
         if (!properties.isEnabled()
                 || properties.getApiKey() == null
@@ -91,12 +99,12 @@ public class IngredientImageServiceImpl implements IngredientImageService {
 
         List<DetectedIngredient> detectedIngredients;
         try {
-            acquireSlot();
-            try {
-                detectedIngredients = visionClient.recognize(dataUrl);
-            } finally {
-                recognitionSlots.release();
-            }
+            detectedIngredients = paidAiRunner.run(
+                    customerId,
+                    AiFeature.INGREDIENT_IMAGE,
+                    () -> recognizeWithSlot(dataUrl),
+                    IngredientImageServiceImpl::isRefused
+            );
         } catch (AppException exception) {
             // The customer got no result (busy, network, timeout, Groq-side error or an unusable answer):
             // give the attempt back. A refused image keeps the attempt so it cannot be retried for free.
@@ -111,8 +119,24 @@ public class IngredientImageServiceImpl implements IngredientImageService {
 
         return toResponse(
                 detectedIngredients,
-                Math.max(0, properties.getDailyLimit() - usage.get())
+                Math.max(0, properties.getDailyLimit() - usage.get()),
+                loyaltyService.priceOf(AiFeature.INGREDIENT_IMAGE),
+                loyaltyService.getBalance(customerId)
         );
+    }
+
+    private List<DetectedIngredient> recognizeWithSlot(String dataUrl) {
+        acquireSlot();
+        try {
+            return visionClient.recognize(dataUrl);
+        } finally {
+            recognitionSlots.release();
+        }
+    }
+
+    private static boolean isRefused(RuntimeException exception) {
+        return exception instanceof AppException appException
+                && appException.getErrorCode() == IngredientImageErrorCode.VISION_REFUSED;
     }
 
     private AtomicInteger consumeDailyQuota(UUID userId) {
@@ -147,7 +171,9 @@ public class IngredientImageServiceImpl implements IngredientImageService {
 
     private IngredientImageRecognitionResponse toResponse(
             List<DetectedIngredient> detectedIngredients,
-            int remainingDailyQuota
+            int remainingDailyQuota,
+            int pointsCharged,
+            int pointsBalance
     ) {
         Map<String, DetectedIngredient> uniqueNames = new LinkedHashMap<>();
 
@@ -228,6 +254,8 @@ public class IngredientImageServiceImpl implements IngredientImageService {
 
         return new IngredientImageRecognitionResponse(
                 remainingDailyQuota,
+                pointsCharged,
+                pointsBalance,
                 List.copyOf(items.values())
         );
     }
