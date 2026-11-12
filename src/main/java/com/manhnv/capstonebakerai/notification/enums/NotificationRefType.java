@@ -4,5 +4,6 @@ public enum NotificationRefType {
     ORDER,
     COMMENT,
     RATING,
-    REQUEST_QUOTE
+    REQUEST_QUOTE,
+    PRODUCT
 }
