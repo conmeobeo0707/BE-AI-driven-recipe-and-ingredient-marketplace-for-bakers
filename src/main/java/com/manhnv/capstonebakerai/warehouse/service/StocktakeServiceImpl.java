@@ -21,9 +21,12 @@ public class StocktakeServiceImpl implements StocktakeService {
     private final StocktakeItemRepository items;
     private final StockLotRepository lots;
     private final WarehouseSupport support;
+    private final StockTransactionService stockTransactions;
 
-    public StocktakeServiceImpl(StocktakeNoteRepository notes, StocktakeItemRepository items, StockLotRepository lots, WarehouseSupport support) {
+    public StocktakeServiceImpl(StocktakeNoteRepository notes, StocktakeItemRepository items, StockLotRepository lots,
+                                WarehouseSupport support, StockTransactionService stockTransactions) {
         this.notes = notes; this.items = items; this.lots = lots; this.support = support;
+        this.stockTransactions = stockTransactions;
     }
 
     @Override @Transactional(readOnly = true)
@@ -113,6 +116,13 @@ public class StocktakeServiceImpl implements StocktakeService {
             stockDeltas.merge(stocktakeItem.getProductId(), difference, BigDecimal::add);
             stockLot.setCurrentQuantity(stocktakeItem.getActualQuantity());
             stockLot.setStatus(stockLot.getCurrentQuantity().signum() == 0 ? LotStatus.EMPTY : stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(LocalDate.now()) ? LotStatus.EXPIRED : LotStatus.STORAGE);
+            if (difference.signum() != 0) {
+                StockTransactionType transactionType = difference.signum() > 0
+                        ? StockTransactionType.STOCKTAKE_INCREASE : StockTransactionType.STOCKTAKE_DECREASE;
+                stockTransactions.record(stockLot.getLotId(), stockLot.getProductId(), transactionType,
+                        difference, stockLot.getCurrentQuantity(), StockTransactionRefType.STOCKTAKE_NOTE,
+                        stocktakeNote.getNoteId());
+            }
         }
         items.saveAll(stocktakeItems);
         support.adjustStock(stockDeltas);

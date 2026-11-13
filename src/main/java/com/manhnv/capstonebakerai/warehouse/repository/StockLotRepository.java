@@ -36,4 +36,9 @@ public interface StockLotRepository extends JpaRepository<StockLot, UUID> {
             "and l.expiryDate between :today and :until order by l.expiryDate asc")
     List<StockLot> findExpiringLots(@Param("status") LotStatus status,
             @Param("today") LocalDate today, @Param("until") LocalDate until);
+
+    @Query("select l from StockLot l where l.status in :statuses and l.currentQuantity > 0 " +
+            "and l.expiryDate < :today order by l.expiryDate asc, l.createdAt asc, l.lotId asc")
+    List<StockLot> findExpiredLots(@Param("statuses") Collection<LotStatus> statuses,
+            @Param("today") LocalDate today);
 }

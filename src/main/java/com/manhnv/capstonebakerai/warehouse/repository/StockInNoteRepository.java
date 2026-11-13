@@ -16,6 +16,8 @@ public interface StockInNoteRepository extends JpaRepository<StockInNote, UUID> 
     boolean existsByCode(String code);
     boolean existsBySupplierId(UUID supplierId);
     Page<StockInNote> findByStatus(NoteStatus status, Pageable pageable);
+    Page<StockInNote> findBySupplierId(UUID supplierId, Pageable pageable);
+    Page<StockInNote> findBySupplierIdAndStatus(UUID supplierId, NoteStatus status, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select n from StockInNote n where n.noteId=:id")
     Optional<StockInNote> lockById(@Param("id") UUID id);
 

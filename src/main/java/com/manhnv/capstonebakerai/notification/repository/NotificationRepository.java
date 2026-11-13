@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.notification.repository;
 
 import com.manhnv.capstonebakerai.notification.entity.Notification;
+import com.manhnv.capstonebakerai.notification.enums.NotificationRefType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,6 +20,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     Page<Notification> findByUserIdAndRead(UUID userId, boolean read, Pageable pageable);
     Optional<Notification> findByIdAndUserId(UUID id, UUID userId);
     long countByUserIdAndReadFalse(UUID userId);
+    boolean existsByUserIdAndRefTypeAndRefIdAndCreatedAtAfter(
+            UUID userId, NotificationRefType refType, UUID refId, LocalDateTime createdAt);
     @Modifying(clearAutomatically = true)
     @Query("""
         update Notification n

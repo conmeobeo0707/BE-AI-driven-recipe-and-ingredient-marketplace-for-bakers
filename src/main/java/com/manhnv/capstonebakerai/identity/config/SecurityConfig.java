@@ -99,6 +99,8 @@ public class SecurityConfig {
                                 "/api/v1/admin/customers",
                                 "/api/v1/admin/customers/**"
                         ).hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/products/low-stock/alerts")
+                        .hasAnyRole("MANAGER", "STAFF")
                         .requestMatchers(
                                 "/api/v1/users/me",
                                 "/api/v1/users/me/**"
