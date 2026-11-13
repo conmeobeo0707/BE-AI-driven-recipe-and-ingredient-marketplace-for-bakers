@@ -80,7 +80,7 @@ public class IngredientCatalogServiceImpl implements IngredientCatalogService {
     public IngredientCatalogResponse setActive(UUID id, boolean active) {
         catalogRepository.lockNameRegistry();
         IngredientCatalog catalog = findForUpdate(id);
-        if (!active && ingredientRepository.existsByCatalogIngredient_IdAndRecipe_RecipeStatus(id, RecipeStatus.PUBLISHED)) {
+        if (!active && ingredientRepository.existsByCatalogIdUsedInRecipeStatus(id, RecipeStatus.PUBLISHED)) {
             throw new AppException(IngredientCatalogErrorCode.CATALOG_USED_BY_PUBLISHED_RECIPE);
         }
         catalog.setActive(active);

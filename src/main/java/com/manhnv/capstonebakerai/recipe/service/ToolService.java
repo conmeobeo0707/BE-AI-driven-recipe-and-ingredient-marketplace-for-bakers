@@ -14,5 +14,4 @@ public interface ToolService {
     void delete(UUID id);
 
     PageResponse<ToolResponse> getAll(String search, Pageable pageable);
-    PageResponse<ToolResponse> getByRecipeId(UUID recipeId, String search, Pageable pageable);
 }

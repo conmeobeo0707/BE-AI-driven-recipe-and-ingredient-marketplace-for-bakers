@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -22,18 +21,11 @@ public class Ingredient {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "recipe_id", nullable = false)
-    private Recipe recipe;
-
     @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(name = "unit", nullable = false)
+    @Column(name = "unit")
     private String unit;
-
-    @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
-    private BigDecimal quantity;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "catalog_ingredient_id")

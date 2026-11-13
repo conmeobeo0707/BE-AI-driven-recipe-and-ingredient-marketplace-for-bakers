@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.recipe.dto.response;
 
+import com.manhnv.capstonebakerai.recipe.enums.RecipeStepType;
 import lombok.*;
 
 import java.util.UUID;
@@ -15,6 +16,11 @@ public class RecipeStepResponse {
     private UUID recipeId;
     private Integer stepNumber;
     private String instruction;
+    private Integer durationMinutes;
+    private String notes;
+    private RecipeStepType recipeStepType;
     private List<UUID> imageIds;
     private List<String> imageUrls;
+    private List<RecipeStepIngredientResponse> ingredients;
+    private List<RecipeStepToolResponse> tools;
 }

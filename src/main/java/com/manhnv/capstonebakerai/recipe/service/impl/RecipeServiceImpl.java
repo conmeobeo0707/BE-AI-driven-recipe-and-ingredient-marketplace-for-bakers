@@ -1,8 +1,9 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
-import com.manhnv.capstonebakerai.recipe.helper.IngredientCatalogBindingHelper;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
+import com.manhnv.capstonebakerai.recipe.helper.RecipeStepDurationHelper;
+import com.manhnv.capstonebakerai.recipe.helper.RecipeStepResourceHelper;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeRequest;
@@ -16,6 +17,8 @@ import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
 import com.manhnv.capstonebakerai.media.entity.Media;
 import com.manhnv.capstonebakerai.recipe.entity.Tool;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.media.enums.MediaType;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
@@ -27,6 +30,8 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeStepRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeImageRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepImageRepository;
 import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
+import com.manhnv.capstonebakerai.recipe.repository.RecipeIngredientRepository;
+import com.manhnv.capstonebakerai.recipe.repository.RecipeToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -39,6 +44,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.payos.exception.NotFoundException;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,18 +57,24 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeCategoryRepository categoryRepository;
     private final IngredientRepository ingredientRepository;
     private final ToolRepository toolRepository;
+    private final RecipeIngredientRepository recipeIngredientRepository;
+    private final RecipeToolRepository recipeToolRepository;
     private final RecipeStepRepository recipeStepRepository;
     private final RecipeImageRepository recipeImageRepository;
     private final RecipeStepImageRepository recipeStepImageRepository;
     private final RecipeMediaHelper mediaHelper;
-    private final IngredientCatalogBindingHelper catalogBindingHelper;
+    private final RecipeStepResourceHelper stepResourceHelper;
+    private final RecipeStepDurationHelper durationHelper;
 
     @PersistenceContext
     private EntityManager entityManager;
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public RecipeResponse getById(UUID id) {
+        if (repository.incrementViewCount(id) == 0) {
+            throw new RuntimeException("Recipe not found");
+        }
         Recipe entity = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
         return RecipeMapper.toDTO(entity);
@@ -82,6 +94,8 @@ public class RecipeServiceImpl implements RecipeService {
         mediaHelper.validateContinuousStepNumbers(nullToEmpty(request.getSteps()).stream()
                 .map(RecipeStepEmbeddedRequest::getStepNumber)
                 .toList());
+        durationHelper.validateEmbeddedSteps(request.getPrepTimeMinutes(), request.getCookTimeMinutes(), request.getSteps());
+        stepResourceHelper.validateEmbeddedRecipe(request.getIngredients(), request.getTools(), request.getSteps());
 
         List<UUID> requestedMediaIdList = collectRequestedMediaIds(request);
         mediaHelper.validateUniqueMediaIds(requestedMediaIdList);
@@ -95,6 +109,9 @@ public class RecipeServiceImpl implements RecipeService {
         }
         recipe.setUser(user);
         recipe.setRecipeCategory(category);
+        if (recipe.getRecipeStatus() == RecipeStatus.PUBLISHED) {
+            recipe.setPublishedAt(LocalDateTime.now());
+        }
 
         Recipe savedRecipe = repository.save(recipe);
         UUID recipeId = savedRecipe.getId();
@@ -103,32 +120,16 @@ public class RecipeServiceImpl implements RecipeService {
             saveRecipeImages(savedRecipe, request.getImageIds(), mediaById, noCurrentlyAttachedMedia);
         }
 
-        if (request.getTools() != null) {
-            List<Tool> tools = request.getTools().stream().map(toolRequest -> {
-                Tool tool = new Tool();
-                tool.setName(toolRequest.getName());
-                tool.setRecipe(savedRecipe);
-                return tool;
-            }).collect(Collectors.toList());
-            toolRepository.saveAll(tools);
-        }
+        if (request.getTools() != null) recipeToolRepository.saveAll(request.getTools().stream().map(r -> {
+            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
+            RecipeTool link = new RecipeTool(); link.setRecipe(savedRecipe); link.setTool(tool); link.setQuantity(r.getQuantity()); return link;
+        }).toList());
 
         if (request.getIngredients() != null) {
-            List<Ingredient> ingredients = request.getIngredients().stream().map(ingredientRequest -> {
-                Ingredient ingredient = new Ingredient();
-//                ingredient.setName(ingredientRequest.getName());
-
-                catalogBindingHelper.bind(
-                        ingredient,
-                        ingredientRequest.getName()
-                );
-
-                ingredient.setUnit(ingredientRequest.getUnit());
-                ingredient.setQuantity(ingredientRequest.getQuantity());
-                ingredient.setRecipe(savedRecipe);
-                return ingredient;
-            }).collect(Collectors.toList());
-            ingredientRepository.saveAll(ingredients);
+            recipeIngredientRepository.saveAll(request.getIngredients().stream().map(r -> {
+                Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
+                RecipeIngredient link = new RecipeIngredient(); link.setRecipe(savedRecipe); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); return link;
+            }).toList());
         }
 
         if (request.getSteps() != null) {
@@ -136,12 +137,17 @@ public class RecipeServiceImpl implements RecipeService {
                 RecipeStep step = new RecipeStep();
                 step.setStepNumber(stepRequest.getStepNumber());
                 step.setInstruction(stepRequest.getInstruction());
+                step.setDurationMinutes(stepRequest.getDurationMinutes());
+                step.setNotes(stepRequest.getNotes());
+                step.setRecipeStepType(stepRequest.getRecipeStepType());
                 step.setRecipe(savedRecipe);
                 return step;
             }).collect(Collectors.toList());
             List<RecipeStep> savedSteps = recipeStepRepository.saveAll(steps);
             for (int i = 0; i < savedSteps.size(); i++) {
-                List<UUID> imageIds = request.getSteps().get(i).getImageIds();
+                RecipeStepEmbeddedRequest stepRequest = request.getSteps().get(i);
+                stepResourceHelper.replaceResources(savedSteps.get(i), stepRequest.getIngredients(), stepRequest.getTools());
+                List<UUID> imageIds = stepRequest.getImageIds();
                 if (imageIds != null) mediaHelper.saveStepImages(savedSteps.get(i), imageIds, mediaById, noCurrentlyAttachedMedia);
             }
         }
@@ -151,6 +157,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         Recipe detail = repository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
+
 
         return RecipeMapper.toDTO(detail);
     }
@@ -169,6 +176,8 @@ public class RecipeServiceImpl implements RecipeService {
         mediaHelper.validateContinuousStepNumbers(steps.stream()
                 .map(RecipeStepEmbeddedRequest::getStepNumber)
                 .toList());
+        durationHelper.validateEmbeddedSteps(request.getPrepTimeMinutes(), request.getCookTimeMinutes(), steps);
+        stepResourceHelper.validateEmbeddedRecipe(ingredients, tools, steps);
 
         List<RecipeStep> existingSteps = recipeStepRepository.findByRecipe_IdOrderByStepNumberAsc(recipeId);
 
@@ -198,6 +207,9 @@ public class RecipeServiceImpl implements RecipeService {
         existing.setPrepTimeMinutes(request.getPrepTimeMinutes());
         existing.setCookTimeMinutes(request.getCookTimeMinutes());
         existing.setServings(request.getServings());
+        if (request.getRecipeStatus() == RecipeStatus.PUBLISHED && existing.getRecipeStatus() != RecipeStatus.PUBLISHED) {
+            existing.setPublishedAt(LocalDateTime.now());
+        }
         existing.setRecipeStatus(request.getRecipeStatus());
 
         repository.save(existing);
@@ -207,31 +219,19 @@ public class RecipeServiceImpl implements RecipeService {
         saveRecipeImages(existing, imageIds, mediaById, currentlyAttachedMediaIds);
 
         // ---- Tools ----
-        toolRepository.deleteByRecipeId(recipeId);
-        toolRepository.flush();
-        toolRepository.saveAll(tools.stream().map(toolRequest -> {
-            Tool newTool = new Tool();
-            newTool.setName(toolRequest.getName());
-            newTool.setRecipe(existing);
-            return newTool;
+        recipeToolRepository.deleteByRecipe_Id(recipeId);
+        recipeToolRepository.flush();
+        recipeToolRepository.saveAll(tools.stream().map(r -> {
+            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
+            RecipeTool link = new RecipeTool(); link.setRecipe(existing); link.setTool(tool); link.setQuantity(r.getQuantity()); return link;
         }).toList());
 
         // ---- Ingredients ----
-        ingredientRepository.deleteByRecipeId(recipeId);
-        ingredientRepository.flush();
-        ingredientRepository.saveAll(ingredients.stream().map(ingReq -> {
-            Ingredient newIngredient = new Ingredient();
-//            newIngredient.setName(ingReq.getName());
-
-            catalogBindingHelper.bind(
-                    newIngredient,
-                    ingReq.getName()
-            );
-
-            newIngredient.setUnit(ingReq.getUnit());
-            newIngredient.setQuantity(ingReq.getQuantity());
-            newIngredient.setRecipe(existing);
-            return newIngredient;
+        recipeIngredientRepository.deleteByRecipe_Id(recipeId);
+        recipeIngredientRepository.flush();
+        recipeIngredientRepository.saveAll(ingredients.stream().map(r -> {
+            Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
+            RecipeIngredient link = new RecipeIngredient(); link.setRecipe(existing); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); return link;
         }).toList());
 
         // ---- Steps ----
@@ -246,13 +246,18 @@ public class RecipeServiceImpl implements RecipeService {
                 RecipeStep newStep = new RecipeStep();
                 newStep.setStepNumber(stepRequest.getStepNumber());
                 newStep.setInstruction(stepRequest.getInstruction());
+                newStep.setDurationMinutes(stepRequest.getDurationMinutes());
+                newStep.setNotes(stepRequest.getNotes());
+                newStep.setRecipeStepType(stepRequest.getRecipeStepType());
                 newStep.setRecipe(existing);
                 return newStep;
             }).toList();
 
             List<RecipeStep> savedSteps = recipeStepRepository.saveAll(newSteps);
             for (int i = 0; i < savedSteps.size(); i++) {
-                List<UUID> stepImageIds = nullToEmpty(steps.get(i).getImageIds());
+                RecipeStepEmbeddedRequest stepRequest = steps.get(i);
+                stepResourceHelper.replaceResources(savedSteps.get(i), stepRequest.getIngredients(), stepRequest.getTools());
+                List<UUID> stepImageIds = nullToEmpty(stepRequest.getImageIds());
                 mediaHelper.saveStepImages(savedSteps.get(i), stepImageIds, mediaById, currentlyAttachedMediaIds);
             }
         }
@@ -277,6 +282,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         Recipe detail = repository.findById(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
+
 
         return RecipeMapper.toDTO(detail);
     }

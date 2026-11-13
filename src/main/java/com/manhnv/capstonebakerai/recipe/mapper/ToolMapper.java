@@ -10,7 +10,6 @@ public class ToolMapper {
         if (entity == null) return null;
         return ToolResponse.builder()
                 .id(entity.getId())
-                .recipeId(entity.getRecipe() != null ? entity.getRecipe().getId() : null)
                 .name(entity.getName())
                 .build();
     }
