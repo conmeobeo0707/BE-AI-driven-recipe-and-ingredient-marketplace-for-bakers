@@ -48,7 +48,8 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/forgot-password"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/forgot-password/verify"),
-                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/reset-password"));
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/reset-password"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/media/videos/webhook"));
         var bearerTokenResolver = new DefaultBearerTokenResolver();
         http
                 .cors(Customizer.withDefaults())
@@ -80,6 +81,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/payos/webhook"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/media/videos/webhook").permitAll()
                         // Swagger / OpenAPI cho phép public
                         .requestMatchers(
                                 "/swagger-ui.html",

@@ -6,6 +6,7 @@ import com.manhnv.capstonebakerai.recipe.suggestion.repository.RecipeIngredientM
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,11 +22,32 @@ public interface RecipeRepository extends JpaRepository<Recipe, UUID>, JpaSpecif
     List<Recipe> findByRecipeStatusOrderByCreatedAtDesc(
             com.manhnv.capstonebakerai.recipe.enums.RecipeStatus recipeStatus);
 
+    @Modifying(flushAutomatically = true)
+    @Query("update Recipe r set r.viewCount = r.viewCount + 1 where r.id = :id")
+    int incrementViewCount(@Param("id") UUID id);
+
+    @Modifying(flushAutomatically = true)
+    @Query("update Recipe r set r.bookmarkCount = r.bookmarkCount + 1 where r.id = :id")
+    int incrementBookmarkCount(@Param("id") UUID id);
+
+    @Modifying(flushAutomatically = true)
+    @Query("update Recipe r set r.bookmarkCount = r.bookmarkCount - 1 where r.id = :id and r.bookmarkCount > 0")
+    int decrementBookmarkCount(@Param("id") UUID id);
+
+    @Modifying(flushAutomatically = true)
+    @Query("update Recipe r set r.ratingCount = r.ratingCount + 1 where r.id = :id")
+    int incrementRatingCount(@Param("id") UUID id);
+
+    @Modifying(flushAutomatically = true)
+    @Query("update Recipe r set r.ratingCount = r.ratingCount - 1 where r.id = :id and r.ratingCount > 0")
+    int decrementRatingCount(@Param("id") UUID id);
+
     @Query("""
     select r.id as recipeId,
            count(distinct i.catalogIngredient.id) as matchedCount
     from Recipe r
-    join r.ingredients i
+    join r.ingredients ri
+    join ri.ingredient i
     where r.recipeStatus = :status
       and i.catalogIngredient.id in :catalogIngredientIds
     group by r.id
@@ -37,7 +59,8 @@ public interface RecipeRepository extends JpaRepository<Recipe, UUID>, JpaSpecif
 
     @EntityGraph(attributePaths = {
             "ingredients",
-            "ingredients.catalogIngredient"
+            "ingredients.ingredient",
+            "ingredients.ingredient.catalogIngredient"
     })
     @Query("""
         select distinct r

@@ -43,7 +43,7 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
             v.amount, v.reason, v.status, v.createdBy, v.createdAt)
         from ExpenseVoucher v
         join v.expenseCategory c
-        where v.status = :status
+        where (:status is null or v.status = :status)
           and v.createdAt >= :from
           and v.createdAt < :to
           and (:categoryId is null or c.id = :categoryId)

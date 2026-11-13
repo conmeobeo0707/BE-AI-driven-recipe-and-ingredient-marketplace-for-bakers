@@ -33,13 +33,13 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.success(recipeService.getById(recipeId)));
     }
 
-    @Operation(summary = "Tạo recipe mới", description = "Request body: title, difficulty, prepTimeMinutes, cookTimeMinutes, servings và recipeStatus bắt buộc, không được null. description có thể null. categoryId, videoId, imageIds, tools, ingredients và steps có thể null/không gửi; khi đó không gắn category/video/ảnh và không tạo các mục con. Mỗi step trong steps phải có instruction khác null. Người tạo lấy từ tài khoản đăng nhập, không truyền trong body.")
+    @Operation(summary = "Tạo recipe mới", description = "Request body: title, difficulty, prepTimeMinutes, cookTimeMinutes, servings và recipeStatus bắt buộc. tools nhận danh sách toolId và quantity; ingredients nhận ingredientId và quantity; steps là các bước hướng dẫn; mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. Người tạo lấy từ tài khoản đăng nhập.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeResponse>> create(@Valid @RequestBody RecipeRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe", description = "Request body: title, difficulty, prepTimeMinutes, cookTimeMinutes, servings và recipeStatus bắt buộc, không được null. description có thể null. categoryId hoặc videoId là null để bỏ category/video. imageIds, tools, ingredients hoặc steps nếu null/không gửi sẽ xóa toàn bộ mục tương ứng hiện có; gửi danh sách rỗng cũng xóa chúng. Mỗi step trong steps phải có instruction khác null. Đây là cập nhật toàn bộ recipe, không phải partial update.")
+    @Operation(summary = "Cập nhật recipe", description = "Request body cập nhật toàn bộ recipe. tools nhận danh sách toolId và quantity; ingredients nhận ingredientId và quantity. Mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. Cập nhật thay thế toàn bộ danh sách; null/không gửi hoặc [] sẽ xóa danh sách tương ứng.")
     @PutMapping("/{recipeId}")
     public ResponseEntity<ApiResponse<RecipeResponse>> update(@PathVariable UUID recipeId,
                                                               @Valid @RequestBody RecipeRequest request) {
