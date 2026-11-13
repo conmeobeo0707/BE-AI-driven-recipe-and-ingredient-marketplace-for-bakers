@@ -3,10 +3,8 @@ package com.manhnv.capstonebakerai.recipe.service.impl;
 import com.manhnv.capstonebakerai.recipe.dto.request.ToolRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.ToolResponse;
-import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.Tool;
 import com.manhnv.capstonebakerai.recipe.mapper.ToolMapper;
-import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.ToolService;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +21,6 @@ import java.util.UUID;
 public class ToolServiceImpl implements ToolService {
 
     private final ToolRepository repository;
-    private final RecipeRepository recipeRepository;
 
     @Override
     public PageResponse<ToolResponse> getAll(String search, Pageable pageable) {
@@ -56,11 +53,7 @@ public class ToolServiceImpl implements ToolService {
 
     @Override
     public ToolResponse create(ToolRequest request) {
-        Recipe recipe = recipeRepository.findById(request.getRecipeId())
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
-
         Tool entity = ToolMapper.toEntity(request);
-        entity.setRecipe(recipe);
 
         return ToolMapper.toDTO(repository.save(entity));
     }
@@ -70,10 +63,6 @@ public class ToolServiceImpl implements ToolService {
         Tool existing = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-        Recipe recipe = recipeRepository.findById(request.getRecipeId())
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
-
-        existing.setRecipe(recipe);
         existing.setName(request.getName());
 
         return ToolMapper.toDTO(repository.save(existing));
@@ -87,25 +76,4 @@ public class ToolServiceImpl implements ToolService {
         repository.deleteById(id);
     }
 
-    @Override
-    public PageResponse<ToolResponse> getByRecipeId(UUID recipeId, String search, Pageable pageable) {
-        Pageable validatedPageable = PageRequest.of(
-                pageable.getPageNumber(),
-                pageable.getPageSize(),
-                pageable.getSort()
-        );
-
-        Page<Tool> page = (search != null && !search.isBlank())
-                ? repository.findByRecipe_IdAndNameContainingIgnoreCase(recipeId, search.trim(), validatedPageable)
-                : repository.findByRecipe_Id(recipeId, validatedPageable);
-
-        List<ToolResponse> list = page.map(ToolMapper::toDTO).toList();
-
-        return PageResponse.<ToolResponse>builder()
-                .content(list)
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .currentPage(page.getNumber())
-                .build();
-    }
 }

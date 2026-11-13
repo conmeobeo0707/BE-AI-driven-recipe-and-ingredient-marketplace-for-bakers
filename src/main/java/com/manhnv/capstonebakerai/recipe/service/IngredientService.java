@@ -15,5 +15,4 @@ public interface IngredientService {
     void delete(UUID id);
 
     PageResponse<IngredientResponse> getAll(String search, Pageable pageable);
-    PageResponse<IngredientResponse> getByRecipeId(UUID recipeId, String search, Pageable pageable);
 }

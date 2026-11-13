@@ -61,13 +61,13 @@ public class RecipeStepController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe step mới", description = "Request body: recipeId và stepNumber bắt buộc, không được null. instruction có thể null. imageIds có thể null/không gửi để tạo step không có ảnh. recipeId phải trỏ tới recipe hiện có; stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
+    @Operation(summary = "Tạo recipe step mới", description = "Request body: recipeId và stepNumber bắt buộc, không được null. instruction bắt buộc. Mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. imageIds có thể null/không gửi để tạo step không có ảnh. recipeId phải trỏ tới recipe hiện có; stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeStepResponse>> create(@Valid @RequestBody RecipeStepRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeStepService.createRecipeStep(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe step", description = "Request body dùng RecipeStepEmbeddedRequest: stepNumber và instruction cần có; instruction không được null. imageIds null/không gửi hoặc danh sách rỗng đều xóa toàn bộ ảnh hiện có của step; gửi danh sách có phần tử để thay ảnh. stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
+    @Operation(summary = "Cập nhật recipe step", description = "Request body dùng RecipeStepEmbeddedRequest: stepNumber và instruction cần có; instruction không được null. ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}] thay thế toàn bộ danh sách liên kết của step; null/không gửi hoặc [] sẽ xóa danh sách tương ứng. imageIds null/không gửi hoặc danh sách rỗng đều xóa toàn bộ ảnh hiện có của step; gửi danh sách có phần tử để thay ảnh. stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
     @PutMapping("/{recipeStepId}")
     public ResponseEntity<ApiResponse<RecipeStepResponse>> update(@PathVariable UUID recipeStepId,
                                                                   @Valid @RequestBody RecipeStepEmbeddedRequest request) {

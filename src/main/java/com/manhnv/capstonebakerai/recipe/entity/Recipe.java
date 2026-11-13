@@ -10,7 +10,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicUpdate;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -20,6 +22,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "recipe")
+@DynamicUpdate
 @Data
 @Builder
 @NoArgsConstructor
@@ -75,11 +78,29 @@ public class Recipe {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<Tool> tools;
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    @Builder.Default
+    @ColumnDefault("0")
+    @Column(name = "view_count", nullable = false)
+    private Long viewCount = 0L;
+
+    @Builder.Default
+    @ColumnDefault("0")
+    @Column(name = "bookmark_count", nullable = false)
+    private Long bookmarkCount = 0L;
+
+    @Builder.Default
+    @ColumnDefault("0")
+    @Column(name = "rating_count", nullable = false)
+    private Long ratingCount = 0L;
 
     @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<Ingredient> ingredients;
+    private List<RecipeTool> tools;
+
+    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<RecipeIngredient> ingredients;
 
     @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RecipeStep> steps;

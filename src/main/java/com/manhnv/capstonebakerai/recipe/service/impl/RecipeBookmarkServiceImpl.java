@@ -78,6 +78,7 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
                 null,
                 request.getRecommId()
         );
+        recipeRepository.incrementBookmarkCount(recipe.getId());
         return RecipeBookmarkMapper.toDTO(saved);
     }
 
@@ -98,15 +99,21 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         }
 
         UUID previousRecipeId = existing.getRecipe().getId();
+        boolean recipeChanged = !previousRecipeId.equals(recipe.getId());
+        if (recipeChanged && repository.existsByRecipe_IdAndCustomer_Id(recipe.getId(), customer.getId())) {
+            throw new RuntimeException("Bookmark already exists");
+        }
         existing.setRecipe(recipe);
         RecipeBookmark saved = repository.save(existing);
-        if (!previousRecipeId.equals(recipe.getId())) {
+        if (recipeChanged) {
             interactionService.remove(customer.getId(), previousRecipeId, RecipeInteractionType.BOOKMARK);
             interactionService.record(
                     customer.getId(), recipe.getId(), RecipeInteractionType.BOOKMARK,
                     null,
                     request.getRecommId()
             );
+            recipeRepository.decrementBookmarkCount(previousRecipeId);
+            recipeRepository.incrementBookmarkCount(recipe.getId());
         }
         return RecipeBookmarkMapper.toDTO(saved);
     }
@@ -121,8 +128,10 @@ public class RecipeBookmarkServiceImpl implements RecipeBookmarkService {
         if (!existing.getCustomer().getId().equals(customer.getId())) {
             throw new RuntimeException("RecipeBookmark not found");
         }
+        UUID recipeId = existing.getRecipe().getId();
         repository.delete(existing);
-        interactionService.remove(customer.getId(), existing.getRecipe().getId(), RecipeInteractionType.BOOKMARK);
+        interactionService.remove(customer.getId(), recipeId, RecipeInteractionType.BOOKMARK);
+        recipeRepository.decrementBookmarkCount(recipeId);
     }
 
     @Override

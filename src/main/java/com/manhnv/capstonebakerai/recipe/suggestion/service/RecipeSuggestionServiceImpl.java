@@ -6,6 +6,7 @@ import com.manhnv.capstonebakerai.customer.exception.CustomerErrorCode;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
 import com.manhnv.capstonebakerai.recipe.ingredientcatalog.repository.IngredientCatalogRepository;
@@ -87,7 +88,9 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
     private RecipeSuggestionItem toSuggestion(Recipe recipe, Set<UUID> inputCatalogIds) {
         Map<UUID, IngredientCatalog> mapped = new LinkedHashMap<>();
         Map<String, String> unmapped = new LinkedHashMap<>();
-        for (Ingredient ingredient : recipe.getIngredients()) {
+        for (RecipeIngredient recipeIngredient : recipe.getIngredients()) {
+            Ingredient ingredient = recipeIngredient.getIngredient();
+            if (ingredient == null) continue;
             IngredientCatalog catalog = ingredient.getCatalogIngredient();
             if (catalog != null && catalog.isActive()) {
                 mapped.putIfAbsent(catalog.getId(), catalog);
