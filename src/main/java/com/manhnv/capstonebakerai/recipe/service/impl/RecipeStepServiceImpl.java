@@ -13,6 +13,8 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeStepRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepImageRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeStepService;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
+import com.manhnv.capstonebakerai.recipe.helper.RecipeStepDurationHelper;
+import com.manhnv.capstonebakerai.recipe.helper.RecipeStepResourceHelper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,8 @@ public class RecipeStepServiceImpl implements RecipeStepService {
     private final RecipeRepository recipeRepository;
     private final RecipeStepImageRepository recipeStepImageRepository;
     private final RecipeMediaHelper mediaHelper;
+    private final RecipeStepResourceHelper stepResourceHelper;
+    private final RecipeStepDurationHelper durationHelper;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -86,6 +90,8 @@ public class RecipeStepServiceImpl implements RecipeStepService {
         allStepNumbers.add(request.getStepNumber());
 
         mediaHelper.validateContinuousStepNumbers(allStepNumbers);
+        stepResourceHelper.validateStepAgainstRecipe(recipe.getId(), null, request.getStepNumber(),
+                request.getIngredients(), request.getTools());
 
         List<UUID> imageIds = request.getImageIds() == null ? List.of() : request.getImageIds();
         mediaHelper.validateUniqueMediaIds(imageIds);
@@ -95,6 +101,13 @@ public class RecipeStepServiceImpl implements RecipeStepService {
         entity.setRecipe(recipe);
 
         RecipeStep saved = recipeStepRepository.save(entity);
+
+        List<RecipeStep> stepsAfterCreate = new ArrayList<>(existingSteps);
+        stepsAfterCreate.add(saved);
+        durationHelper.syncRecipeTimes(recipe, stepsAfterCreate);
+        recipeRepository.save(recipe);
+
+        stepResourceHelper.replaceResources(saved, request.getIngredients(), request.getTools());
         if (request.getImageIds() != null) mediaHelper.saveStepImages(saved, imageIds, mediaById, Set.of());
         return RecipeStepMapper.toDTO(saved);
     }
@@ -123,9 +136,20 @@ public class RecipeStepServiceImpl implements RecipeStepService {
         }
         allStepNumbers.add(request.getStepNumber());
         mediaHelper.validateContinuousStepNumbers(allStepNumbers);
+        stepResourceHelper.validateStepAgainstRecipe(recipeId, id, request.getStepNumber(),
+                request.getIngredients(), request.getTools());
 
         existing.setStepNumber(request.getStepNumber());
         existing.setInstruction(request.getInstruction());
+        existing.setDurationMinutes(request.getDurationMinutes());
+        existing.setNotes(request.getNotes());
+        existing.setRecipeStepType(request.getRecipeStepType());
+
+        Recipe recipe = existing.getRecipe();
+        durationHelper.syncRecipeTimes(recipe, existingSteps);
+        recipeRepository.save(recipe);
+
+        stepResourceHelper.replaceResources(existing, request.getIngredients(), request.getTools());
 
         mediaHelper.validateUniqueMediaIds(requestedImageIds);
         recipeStepImageRepository.deleteByRecipeStepIds(List.of(id));
@@ -162,11 +186,17 @@ public class RecipeStepServiceImpl implements RecipeStepService {
 
         List<RecipeStep> existingSteps =
                 recipeStepRepository.findByRecipe_IdOrderByStepNumberAsc(existing.getRecipe().getId());
-        List<Integer> remaining = existingSteps.stream()
+        List<RecipeStep> remainingSteps = existingSteps.stream()
                 .filter(step -> !step.getId().equals(id))
+                .toList();
+        List<Integer> remaining = remainingSteps.stream()
                 .map(RecipeStep::getStepNumber)
                 .toList();
         if (!remaining.isEmpty()) mediaHelper.validateContinuousStepNumbers(remaining);
+
+        Recipe recipe = existing.getRecipe();
+        durationHelper.syncRecipeTimes(recipe, remainingSteps);
+        recipeRepository.save(recipe);
 
         if (!mediaIds.isEmpty()) {
             mediaHelper.detachMedia(mediaHelper.loadMediaMap(mediaIds).values());
