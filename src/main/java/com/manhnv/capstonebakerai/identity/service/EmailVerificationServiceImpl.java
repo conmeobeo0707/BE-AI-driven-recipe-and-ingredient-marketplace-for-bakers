@@ -6,6 +6,7 @@ import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.identity.dto.MessageResponse;
 import com.manhnv.capstonebakerai.identity.entity.VerificationCode;
 import com.manhnv.capstonebakerai.identity.enums.VerificationPurpose;
+import com.manhnv.capstonebakerai.identity.event.EmailVerifiedEvent;
 import com.manhnv.capstonebakerai.identity.exception.IdentityErrorCode;
 import com.manhnv.capstonebakerai.identity.exception.InvalidVerificationCodeException;
 import com.manhnv.capstonebakerai.identity.exception.VerificationEmailDeliveryException;
@@ -14,6 +15,7 @@ import com.manhnv.capstonebakerai.identity.security.AuthRateLimiter;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -40,6 +42,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private final PasswordEncoder passwordEncoder;
     private final EmailTemplateService emailTemplateService;
     private final AuthRateLimiter authRateLimiter;
+    private final ApplicationEventPublisher eventPublisher;
     private final Duration codeExpiration;
 
     public EmailVerificationServiceImpl(
@@ -49,6 +52,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             PasswordEncoder passwordEncoder,
             EmailTemplateService emailTemplateService,
             AuthRateLimiter authRateLimiter,
+            ApplicationEventPublisher eventPublisher,
             @Value("${app.verification-code-expiration}") Duration codeExpiration
     ) {
         this.userRepository = userRepository;
@@ -57,6 +61,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         this.passwordEncoder = passwordEncoder;
         this.emailTemplateService = emailTemplateService;
         this.authRateLimiter = authRateLimiter;
+        this.eventPublisher = eventPublisher;
         this.codeExpiration = codeExpiration;
     }
 
@@ -131,6 +136,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         customerRepository.save(customer);
         userRepository.save(user);
         verificationCodeRepository.delete(verification);
+        eventPublisher.publishEvent(new EmailVerifiedEvent(user.getUserId(), customer.getId()));
         return new MessageResponse("Email verified successfully");
     }
 
