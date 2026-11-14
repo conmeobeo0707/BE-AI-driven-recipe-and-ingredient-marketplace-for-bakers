@@ -1,9 +1,6 @@
 package com.manhnv.capstonebakerai.order.service;
 
-import com.manhnv.capstonebakerai.order.dto.request.CancelOrderRequest;
-import com.manhnv.capstonebakerai.order.dto.request.CreateOrderRequest;
-import com.manhnv.capstonebakerai.order.dto.request.ShippingRatesRequest;
-import com.manhnv.capstonebakerai.order.dto.request.StaffCreateOrderRequest;
+import com.manhnv.capstonebakerai.order.dto.request.*;
 import com.manhnv.capstonebakerai.order.dto.response.*;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
@@ -32,6 +29,8 @@ public interface OrderService {
     List<ShippingRateResponse> previewShippingRates(ShippingRatesRequest request);
     VoucherPreviewResponse previewVoucher(UUID userId, ValidateVoucherRequest request);
     List<OrderHistoryResponse> getMyOrderHistory(UUID userId, UUID orderId);
+    ExpectedPointsResponse previewExpectedPoints(UUID userId, PreviewPointsRequest request);
+
     // Staff/Manager
     OrderResponse createByStaff(UUID staffUserId, StaffCreateOrderRequest request);
     Page<OrderSummaryResponse> getAllForStaff(OrderStatus status, PaymentMethod paymentMethod, Pageable pageable);

@@ -13,6 +13,7 @@ public record VoucherPreviewResponse(
         BigDecimal discountValue,
         BigDecimal orderValue,        // tiền hàng dùng để tính (sau giảm tay của staff)
         BigDecimal discountAmount,    // số tiền voucher giảm
-        BigDecimal amountAfterVoucher // orderValue - discountAmount
+        BigDecimal amountAfterVoucher// orderValue - discountAmount
 ) {
+
 }

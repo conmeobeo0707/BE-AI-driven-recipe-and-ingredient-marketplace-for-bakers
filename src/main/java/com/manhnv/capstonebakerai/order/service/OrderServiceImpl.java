@@ -3,6 +3,7 @@ package com.manhnv.capstonebakerai.order.service;
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
+import com.manhnv.capstonebakerai.loyalty.service.LoyaltyService;
 import com.manhnv.capstonebakerai.order.dto.request.*;
 import com.manhnv.capstonebakerai.order.dto.response.*;
 import com.manhnv.capstonebakerai.order.entity.Order;
@@ -29,6 +30,8 @@ import com.manhnv.capstonebakerai.shipment.service.ShippingRateService;
 import com.manhnv.capstonebakerai.voucher.dto.request.ValidateVoucherRequest;
 import com.manhnv.capstonebakerai.voucher.dto.response.VoucherPreviewResponse;
 import com.manhnv.capstonebakerai.voucher.service.VoucherService;
+import com.manhnv.capstonebakerai.warehouse.dto.StockLine;
+import com.manhnv.capstonebakerai.warehouse.service.InventoryService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +70,8 @@ public class OrderServiceImpl implements OrderService {
     PaymentService paymentService;
     VoucherService voucherService;
     OrderHistoryService historyService;
+    InventoryService inventoryService;
+    LoyaltyService loyaltyService;
     ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -184,6 +189,27 @@ public class OrderServiceImpl implements OrderService {
     public List<OrderHistoryResponse> getMyOrderHistory(UUID userId, UUID orderId) {
         findOwnedOrder(userId, orderId);
         return historyService.getForCustomer(orderId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExpectedPointsResponse previewExpectedPoints(UUID userId, PreviewPointsRequest request) {
+        Customer customer = findCustomerByUserId(userId);
+
+        BigDecimal productsPrice = resolveLines(request.items()).stream().map(ResolvedLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal voucherDiscount = BigDecimal.ZERO;
+        String code = request.voucherCode();
+        if (code != null && !code.isBlank()) {
+            voucherDiscount = voucherService
+                    .calculate(code, customer.getId(), productsPrice)
+                    .discountAmount();
+        }
+
+        BigDecimal pointBase = productsPrice.subtract(voucherDiscount).max(BigDecimal.ZERO);
+        int points = loyaltyService.expectedOrderPoints(customer.getId(), pointBase);
+        return new ExpectedPointsResponse(points, pointBase);
     }
 
     @Override
@@ -383,7 +409,8 @@ public class OrderServiceImpl implements OrderService {
 
         // Notification Configure
         if (saved.getStatus() == OrderStatus.PENDING) {
-            // TODO: DEDCUT STOCK
+            // DEDCUT STOCK
+            deductStock(saved);
             eventPublisher.publishEvent(new OrderCreatedEvent(saved.getId(), saved.getCode()));
         }
         return saved;
@@ -411,7 +438,7 @@ public class OrderServiceImpl implements OrderService {
         OrderStatus previous = order.getStatus();
 
         switch (next) {
-            // TODO: gọi InventoryService.deduct(...) trừ kho (quantity x conversionFactor)
+            case PENDING -> deductStock(order);
             case CONFIRMED -> shipmentService.createForOrder(order);
             case DELIVERED -> {
                 order.setDeliveredAt(LocalDateTime.now());
@@ -447,7 +474,7 @@ public class OrderServiceImpl implements OrderService {
         order.setCancelReason(request != null ? request.reason() : null);
         historyService.record(order.getId(), OrderHistoryAction.CANCELLED, previous, OrderStatus.CANCELLED, order.getCancelReason());
         if (previous != OrderStatus.AWAITING_PAYMENT) {
-            // TODO: hoàn kho (InventoryService.restock)
+            inventoryService.restockForOrder(order.getId());
         }
         if (previous != OrderStatus.PENDING && previous != OrderStatus.AWAITING_PAYMENT) {
             shipmentService.cancelForOrder(order.getId());
@@ -502,6 +529,12 @@ public class OrderServiceImpl implements OrderService {
             code = "OD-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         } while (orderRepository.existsByCode(code));
         return code;
+    }
+
+    private void deductStock(Order order) {
+        List<StockLine> lines = order.getItems().stream()
+                .map(i -> new StockLine(i.getProductId(), i.getProductUnitId(), i.getQuantity())).toList();
+        inventoryService.deductForOrder(order.getId(), lines);
     }
 
 }

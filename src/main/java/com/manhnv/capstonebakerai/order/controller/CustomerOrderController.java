@@ -4,10 +4,8 @@ import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.order.dto.request.CancelOrderRequest;
 import com.manhnv.capstonebakerai.order.dto.request.CreateOrderRequest;
-import com.manhnv.capstonebakerai.order.dto.response.OrderHistoryResponse;
-import com.manhnv.capstonebakerai.order.dto.response.OrderResponse;
-import com.manhnv.capstonebakerai.order.dto.response.OrderSummaryResponse;
-import com.manhnv.capstonebakerai.order.dto.response.OrderTrackingResponse;
+import com.manhnv.capstonebakerai.order.dto.request.PreviewPointsRequest;
+import com.manhnv.capstonebakerai.order.dto.response.*;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -85,5 +83,20 @@ public class CustomerOrderController {
     public ResponseEntity<ApiResponse<List<OrderHistoryResponse>>> history(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(
                 service.getMyOrderHistory(SecurityUtils.getCurrentUserId(), id)));
+    }
+    @Operation(
+            summary = "API xem trước điểm dự kiến của đơn hàng",
+            description = "Dùng ở giỏ hàng và màn đặt hàng để hiển thị \"Đơn này dự kiến mang về cho bạn X điểm\". "
+                    + "Truyền danh sách items (productUnitId, quantity). voucherCode cho phép null hoặc rỗng. "
+                    + "Điểm = tiền hàng sau khi trừ voucher (không gồm phí ship) / 10.000đ, làm tròn xuống. "
+                    + "Đã tính nhân đôi nếu là đơn giao thành công đầu tiên và áp trần 500 điểm/đơn. "
+                    + "Điểm chỉ được cộng thật khi đơn chuyển sang DELIVERED. "
+                    + "Trả về expectedPoints (điểm dự kiến) và pointBase (tiền tính điểm). "
+                    + "Nếu voucherCode không hợp lệ thì trả lỗi giống API kiểm tra voucher."
+    )
+    @PostMapping("/preview-points")
+    public ResponseEntity<ApiResponse<ExpectedPointsResponse>> previewPoints(@Valid @RequestBody PreviewPointsRequest request) {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.success(service.previewExpectedPoints(userId, request)));
     }
 }

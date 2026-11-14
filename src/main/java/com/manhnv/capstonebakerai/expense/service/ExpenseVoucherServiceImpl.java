@@ -9,6 +9,7 @@ import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseCategory;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
+import com.manhnv.capstonebakerai.expense.enums.ExpenseCategoryType;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseVoucherStatus;
 import com.manhnv.capstonebakerai.expense.exception.ExpenseCategoryErrorCode;
 import com.manhnv.capstonebakerai.expense.exception.ExpenseVoucherErrorCode;
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,10 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     @Transactional
     public ExpenseVoucherResponse create(UUID userId, CreateExpenseVoucherRequest request) {
         ExpenseCategory category = findCategoryOrThrow(request.expenseCategoryId());
+
+        if (!isManager() && category.getType() == ExpenseCategoryType.SALARY) {
+            throw new AppException(ExpenseVoucherErrorCode.REQUIRE_MANAGER_ROLE);
+        }
 
         ExpenseVoucher voucher = ExpenseVoucher.builder()
                 .code(generateCode())
@@ -150,5 +156,10 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     private ExpenseCategory findCategoryOrThrow(UUID id) {
         return categoryRepository.findById(id)
                 .orElseThrow(() -> new AppException(ExpenseCategoryErrorCode.EXPENSE_CATEGORY_NOT_FOUND));
+    }
+
+    private boolean isManager() {
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_MANAGER"));
     }
 }
