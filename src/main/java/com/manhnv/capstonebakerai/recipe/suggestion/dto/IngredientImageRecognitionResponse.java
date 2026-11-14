@@ -6,6 +6,8 @@ import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalog
 
 public record IngredientImageRecognitionResponse(
         int remainingDailyQuota,
+        int pointsCharged,
+        int pointsBalance,
         List<Item> ingredients
 ) {
 

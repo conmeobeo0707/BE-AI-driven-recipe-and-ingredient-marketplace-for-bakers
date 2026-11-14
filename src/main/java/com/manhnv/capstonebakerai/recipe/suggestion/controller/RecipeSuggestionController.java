@@ -85,6 +85,10 @@ public class RecipeSuggestionController {
                 Mỗi customer được nhận diện tối đa 5 ảnh/ngày (reset 0h giờ Việt Nam);
                 hết lượt trả 429. remainingDailyQuota là số lượt còn lại trong ngày.
                 Ảnh lỗi định dạng hoặc lỗi kết nối tới AI không bị trừ lượt.
+                Mỗi lần nhận diện tốn điểm thưởng (giá xem ở GET /api/v1/customers/me/loyalty).
+                Không đủ điểm trả 402 và không bị trừ lượt. AI lỗi, quá tải hoặc quá thời gian thì điểm được hoàn;
+                AI từ chối ảnh hoặc không nhận ra nguyên liệu nào thì không hoàn.
+                pointsCharged là số điểm vừa trừ, pointsBalance là số dư còn lại.
                 Ảnh không được lưu lên R2.
                 Kết quả có thể chưa chính xác; Customer kiểm tra, bỏ món nhầm,
                 chọn lại món chưa matched (qua candidates hoặc GET /catalog-ingredients)
