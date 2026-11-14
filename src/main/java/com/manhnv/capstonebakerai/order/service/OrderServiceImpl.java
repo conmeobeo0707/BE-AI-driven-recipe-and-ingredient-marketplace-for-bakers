@@ -378,6 +378,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void addItems(Order order, List<OrderItemRequest> lines) {
+        List<ResolvedLine> resolved = resolveLines(lines);
+        ensureStock(resolved);
+
         BigDecimal productsPrice = BigDecimal.ZERO;
         for (ResolvedLine l : resolveLines(lines)) {
             order.addItem(OrderItem.builder()
@@ -535,6 +538,29 @@ public class OrderServiceImpl implements OrderService {
         List<StockLine> lines = order.getItems().stream()
                 .map(i -> new StockLine(i.getProductId(), i.getProductUnitId(), i.getQuantity())).toList();
         inventoryService.deductForOrder(order.getId(), lines);
+    }
+
+    private void ensureStock(List<ResolvedLine> lines) {
+        Map<UUID, BigDecimal> required = new HashMap<>();
+        Map<UUID, String> names = new HashMap<>();
+
+        for (ResolvedLine l : lines) {
+            BigDecimal baseQty = BigDecimal.valueOf(l.quantity())
+                    .multiply(l.unit().getConversionFactor());
+            UUID productId = l.product().getProductId();
+            required.merge(productId, baseQty, BigDecimal::add);
+            names.putIfAbsent(productId, l.product().getName());
+        }
+
+        required.forEach((productId, need) -> {
+            BigDecimal available = inventoryService.getAvailableInventory(productId).availableQuantity();
+            if (available == null || available.compareTo(need) < 0) {
+                throw new AppException(
+                        OrderErrorCode.INSUFFICIENT_STOCK,
+                        "Sản phẩm " + names.get(productId) + " không đủ hàng (còn "
+                                + (available == null ? BigDecimal.ZERO : available.stripTrailingZeros().toPlainString()) + ")");
+            }
+        });
     }
 
 }
