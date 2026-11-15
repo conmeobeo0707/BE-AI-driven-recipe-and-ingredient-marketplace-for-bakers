@@ -95,6 +95,12 @@ public class NotificationServiceImpl implements NotificationService {
         repository.saveAll(list);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsForUserAfter(UUID userId, NotificationRefType refType, UUID refId, LocalDateTime createdAt) {
+        return repository.existsByUserIdAndRefTypeAndRefIdAndCreatedAtAfter(userId, refType, refId, createdAt);
+    }
+
     private Notification findOrThrow(UUID userId, UUID id) {
         return repository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new AppException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));

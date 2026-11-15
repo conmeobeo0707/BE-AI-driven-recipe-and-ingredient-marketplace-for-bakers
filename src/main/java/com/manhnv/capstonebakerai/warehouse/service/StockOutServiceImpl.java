@@ -25,10 +25,13 @@ public class StockOutServiceImpl implements StockOutService {
     private final StockLotRepository lots;
     private final WarehouseSupport support;
     private final ProductService products;
+    private final StockTransactionService stockTransactions;
 
     public StockOutServiceImpl(StockOutNoteRepository notes, StockOutItemRepository items, StockLotRepository lots,
-                               WarehouseSupport support, ProductService products) {
+                               WarehouseSupport support, ProductService products,
+                               StockTransactionService stockTransactions) {
         this.notes = notes; this.items = items; this.lots = lots; this.support = support; this.products = products;
+        this.stockTransactions = stockTransactions;
     }
 
     @Override @Transactional(readOnly = true)
@@ -154,6 +157,9 @@ public class StockOutServiceImpl implements StockOutService {
             stockLot.setCurrentQuantity(stockLot.getCurrentQuantity().add(stockOutItem.getQuantity()));
             stockLot.setStatus(stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(today)
                     ? LotStatus.EXPIRED : LotStatus.STORAGE);
+            stockTransactions.record(stockLot.getLotId(), stockLot.getProductId(), StockTransactionType.SALE_REVERSAL,
+                    stockOutItem.getQuantity(), stockLot.getCurrentQuantity(), StockTransactionRefType.STOCK_OUT_NOTE,
+                    stockOutNote.getNoteId());
             stockDeltas.merge(stockOutItem.getProductId(), stockOutItem.getQuantity(), BigDecimal::add);
         }
         support.adjustStock(stockDeltas);
@@ -223,6 +229,11 @@ public class StockOutServiceImpl implements StockOutService {
                 items.save(outputItem);
                 stockLot.setCurrentQuantity(stockLot.getCurrentQuantity().subtract(deductedQuantity));
                 stockLot.setStatus(stockLot.getCurrentQuantity().signum() == 0 ? LotStatus.EMPTY : stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(today) ? LotStatus.EXPIRED : LotStatus.STORAGE);
+                StockTransactionType transactionType = stockOutNote.getType() == StockOutType.SALE
+                        ? StockTransactionType.SALE : StockTransactionType.DISPOSAL;
+                stockTransactions.record(stockLot.getLotId(), stockLot.getProductId(), transactionType,
+                        deductedQuantity.negate(), stockLot.getCurrentQuantity(), StockTransactionRefType.STOCK_OUT_NOTE,
+                        stockOutNote.getNoteId());
                 remainingQuantity = remainingQuantity.subtract(deductedQuantity);
                 totalCost = totalCost.add(outputItem.getTotalPrice());
                 if (remainingQuantity.signum() == 0) break;
@@ -246,5 +257,33 @@ public class StockOutServiceImpl implements StockOutService {
         stockOutNote.setStatus(NoteStatus.CANCELLED);
         stockOutNote.setUpdatedAt(LocalDateTime.now());
         return notes.save(stockOutNote);
+    }
+
+    @Override
+    @Transactional
+    public StockOutNote disposeExpiredLot(UUID lotId) {
+        StockLot existingLot = lots.findById(lotId)
+                .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Lot not found"));
+        UUID productId = existingLot.getProductId();
+        products.lockInventoryProducts(List.of(productId));
+        StockLot expiredLot = lots.lockByLotIds(List.of(lotId)).stream().findFirst()
+                .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Lot not found"));
+
+        if (expiredLot.getExpiryDate() == null || !expiredLot.getExpiryDate().isBefore(LocalDate.now())) {
+            throw WarehouseSupport.error("Only lots with an expiry date earlier than today can be disposed as expired");
+        }
+        if (expiredLot.getCurrentQuantity().signum() <= 0
+                || expiredLot.getStatus() == LotStatus.EMPTY || expiredLot.getStatus() == LotStatus.CANCELED) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "Lot has no remaining quantity to dispose");
+        }
+
+        InventoryUnit baseUnit = products.getActiveBaseInventoryUnit(productId);
+        StockOutCreateRequest request = new StockOutCreateRequest(
+                StockOutType.DISPOSAL,
+                null,
+                "EXPIRED: Hủy toàn bộ lô " + expiredLot.getLotCode(),
+                List.of(new StockOutItemRequest(productId, baseUnit.unitId(), lotId, expiredLot.getCurrentQuantity())));
+        StockOutNote pendingNote = create(request);
+        return complete(pendingNote.getNoteId());
     }
 }

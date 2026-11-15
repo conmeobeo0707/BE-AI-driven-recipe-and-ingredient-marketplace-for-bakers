@@ -20,6 +20,7 @@ public class StockOutController {
  @PostMapping @ResponseStatus(HttpStatus.CREATED) public ApiResponse<StockOutNote> create(@Valid @RequestBody StockOutCreateRequest request){return ApiResponse.success(service.create(request));}
  @PostMapping("/{id}/complete") public ApiResponse<StockOutNote> complete(@PathVariable UUID id){return ApiResponse.success(service.complete(id));}
  @PostMapping("/{id}/cancel") public ApiResponse<StockOutNote> cancel(@PathVariable UUID id){return ApiResponse.success(service.cancel(id));}
+ @PostMapping("/expired-lots/{lotId}/dispose") public ApiResponse<StockOutNote> disposeExpiredLot(@PathVariable UUID lotId){return ApiResponse.success(service.disposeExpiredLot(lotId));}
  @GetMapping public ApiResponse<Page<StockOutNote>> list(@RequestParam(required=false) NoteStatus status,
          @RequestParam(required=false) StockOutType type,
          @PageableDefault(size=20,sort="createdAt",direction=Sort.Direction.DESC) Pageable pageable){return ApiResponse.success(service.list(status,type,pageable));}

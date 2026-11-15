@@ -13,7 +13,7 @@ public interface ProductService {
     ProductResponse create(ProductUpsertRequest request);
     ProductResponse update(UUID productId, ProductUpsertRequest request);
     ProductResponse get(UUID productId);
-    Page<ProductResponse> list(UUID categoryId, String brand, Pageable pageable);
+    Page<ProductResponse> list(UUID categoryId, String brand, String name, com.manhnv.capstonebakerai.product.enums.ProductStatus status, Pageable pageable);
     void deactivate(UUID productId);
     List<UnitPriceHistoryResponse> getUnitPriceHistory(UUID productId, UUID unitId);
     List<ComboItemRequest> setComboItems(UUID productId, List<ComboItemRequest> items);

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="2100" viewBox="0 0 1200 2100">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#ef4444"/>
+    </marker>
+    <style>
+      .bg{fill:#fff}.frame{fill:#fff;stroke:#555;stroke-width:2}.head{fill:#f7f7f7;stroke:#555;stroke-width:1.5}
+      .title{font: bold 22px Arial,sans-serif;fill:#222}.lane{font:bold 18px Arial,sans-serif;fill:#222}
+      .activity{fill:#fff8bf;stroke:#ff5a5f;stroke-width:2}.decision{fill:#fff;stroke:#ff5a5f;stroke-width:2}
+      .txt{font:15px Arial,sans-serif;fill:#222;text-anchor:middle;dominant-baseline:middle}
+      .edge{fill:none;stroke:#ef4444;stroke-width:2;marker-end:url(#arrow)}
+      .label{font:13px Arial,sans-serif;fill:#333}.start{fill:#111}.endOuter{fill:#fff;stroke:#111;stroke-width:2}.endInner{fill:#111}
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="2100"/>
+  <rect class="frame" x="35" y="25" width="1130" height="2040"/>
+  <rect class="head" x="35" y="25" width="1130" height="42"/>
+  <text class="title" x="600" y="53" text-anchor="middle">Order &amp; Payment Flow</text>
+  <rect class="head" x="35" y="67" width="280" height="42"/><rect class="head" x="315" y="67" width="560" height="42"/><rect class="head" x="875" y="67" width="290" height="42"/>
+  <text class="lane" x="175" y="94" text-anchor="middle">Customer</text><text class="lane" x="595" y="94" text-anchor="middle">System</text><text class="lane" x="1020" y="94" text-anchor="middle">Staff / Carrier</text>
+  <line x1="315" y1="109" x2="315" y2="2065" stroke="#555" stroke-width="2"/><line x1="875" y1="109" x2="875" y2="2065" stroke="#555" stroke-width="2"/>
+
+  <!-- Customer lane -->
+  <circle class="start" cx="175" cy="145" r="11"/>
+  <path class="edge" d="M175 157 V178"/>
+  <rect class="activity" x="95" y="180" width="160" height="55" rx="19"/><text class="txt" x="175" y="207">Browse products</text>
+  <path class="edge" d="M175 235 V258"/>
+  <rect class="activity" x="95" y="260" width="160" height="55" rx="19"/><text class="txt" x="175" y="287">Add items to Cart</text>
+  <path class="edge" d="M175 315 V338"/>
+  <polygon class="decision" points="175,340 235,380 175,420 115,380"/><text class="txt" x="175" y="380">Continue shopping?</text>
+  <path class="edge" d="M115 380 H70 V205 H94"/><text class="label" x="78" y="365">Yes</text>
+  <path class="edge" d="M235 380 H280 V455 H220"/><text class="label" x="244" y="370">No</text>
+  <rect class="activity" x="95" y="455" width="160" height="55" rx="19"/><text class="txt" x="175" y="482">Checkout</text>
+  <path class="edge" d="M175 510 V533"/>
+  <rect class="activity" x="75" y="535" width="200" height="65" rx="19"/><text class="txt" x="175" y="558">Enter shipping address</text><text class="txt" x="175" y="578">and select payment method</text>
+
+  <!-- System validation -->
+  <path class="edge" d="M275 568 H355"/>
+  <rect class="activity" x="355" y="535" width="205" height="65" rx="19"/><text class="txt" x="457" y="558">Validate Cart and</text><text class="txt" x="457" y="578">check stock availability</text>
+  <path class="edge" d="M560 568 H610"/>
+  <polygon class="decision" points="675,528 740,568 675,608 610,568"/><text class="txt" x="675" y="568">Valid and in stock?</text>
+  <path class="edge" d="M610 568 H315 V287 H255"/><text class="label" x="320" y="554">No: revise Cart</text>
+  <path class="edge" d="M675 608 V650"/><text class="label" x="685" y="634">Yes</text>
+  <rect class="activity" x="565" y="652" width="220" height="65" rx="19"/><text class="txt" x="675" y="675">Calculate order total,</text><text class="txt" x="675" y="695">discount and shipping</text>
+  <path class="edge" d="M675 717 V750"/>
+  <polygon class="decision" points="675,750 745,795 675,840 605,795"/><text class="txt" x="675" y="795">Payment method?</text>
+
+  <!-- Order creation branches -->
+  <path class="edge" d="M605 795 H485 V875"/><text class="label" x="505" y="784">PayOS</text>
+  <rect class="activity" x="390" y="875" width="190" height="65" rx="19"/><text class="txt" x="485" y="898">Create Order:</text><text class="txt" x="485" y="918">AWAITING_PAYMENT</text>
+  <path class="edge" d="M745 795 H810 V875"/><text class="label" x="765" y="784">COD</text>
+  <rect class="activity" x="715" y="875" width="190" height="65" rx="19"/><text class="txt" x="810" y="898">Create Order:</text><text class="txt" x="810" y="918">PENDING</text>
+  <path class="edge" d="M485 940 V978 H675 V1000"/><path class="edge" d="M810 940 V978 H675"/>
+  <rect class="activity" x="565" y="1000" width="220" height="60" rx="19"/><text class="txt" x="675" y="1030">Create Payment: PENDING</text>
+  <path class="edge" d="M675 1060 V1090"/>
+  <rect class="activity" x="565" y="1092" width="220" height="65" rx="19"/><text class="txt" x="675" y="1115">Create Stock-out note</text><text class="txt" x="675" y="1135">and deduct inventory</text>
+  <path class="edge" d="M675 1157 V1190"/>
+  <polygon class="decision" points="675,1190 750,1235 675,1280 600,1235"/><text class="txt" x="675" y="1235">Stock deduction succeeds?</text>
+  <path class="edge" d="M600 1235 H350 V1028 H565"/><text class="label" x="402" y="1220">No: rollback order and payment</text>
+
+  <!-- Payment branch -->
+  <path class="edge" d="M750 1235 H820 V1320"/><text class="label" x="764" y="1220">Yes</text>
+  <polygon class="decision" points="820,1320 885,1360 820,1400 755,1360"/><text class="txt" x="820" y="1360">PayOS?</text>
+  <path class="edge" d="M755 1360 H675 V1420"/><text class="label" x="700" y="1345">Yes</text>
+  <rect class="activity" x="565" y="1420" width="220" height="60" rx="19"/><text class="txt" x="675" y="1450">Create PayOS payment link</text>
+  <path class="edge" d="M675 1480 V1510"/>
+  <polygon class="decision" points="675,1510 750,1555 675,1600 600,1555"/><text class="txt" x="675" y="1555">Payment succeeds?</text>
+  <path class="edge" d="M750 1555 H815 V1635"/><text class="label" x="760" y="1540">Yes</text>
+  <rect class="activity" x="710" y="1635" width="210" height="65" rx="19"/><text class="txt" x="815" y="1658">Mark payment PAID;</text><text class="txt" x="815" y="1678">Order becomes PENDING</text>
+  <path class="edge" d="M600 1555 H510 V1635"/><text class="label" x="525" y="1540">No / expired</text>
+  <rect class="activity" x="405" y="1635" width="210" height="65" rx="19"/><text class="txt" x="510" y="1658">Cancel Order and</text><text class="txt" x="510" y="1678">Stock-out; restore stock</text>
+  <circle class="endOuter" cx="510" cy="1745" r="13"/><circle class="endInner" cx="510" cy="1745" r="7"/><path class="edge" d="M510 1700 V1728"/>
+
+  <!-- COD path merges to staff processing -->
+  <path class="edge" d="M820 1400 V1718 H1015 V1740"/><text class="label" x="830" y="1420">No: COD order is PENDING</text>
+  <path class="edge" d="M815 1700 V1740 H1015"/>
+
+  <!-- Staff / carrier flow -->
+  <rect class="activity" x="920" y="1742" width="190" height="55" rx="19"/><text class="txt" x="1015" y="1769">Staff reviews order</text>
+  <path class="edge" d="M1015 1797 V1820"/>
+  <polygon class="decision" points="1015,1820 1080,1860 1015,1900 950,1860"/><text class="txt" x="1015" y="1860">Accept order?</text>
+  <path class="edge" d="M950 1860 H900 V1680 H615"/><text class="label" x="907" y="1845">No: cancel and restore stock</text>
+  <path class="edge" d="M1015 1900 V1920"/><text class="label" x="1028" y="1912">Yes</text>
+  <rect class="activity" x="920" y="1922" width="190" height="55" rx="19"/><text class="txt" x="1015" y="1949">Prepare and ship</text>
+  <path class="edge" d="M920 1949 H860 V1988 H920"/>
+  <rect class="activity" x="920" y="1988" width="190" height="55" rx="19"/><text class="txt" x="1015" y="2015">Deliver to Customer</text>
+  <path class="edge" d="M920 2015 H875 V2050 H275 V635"/>
+  <text class="label" x="445" y="2038">Successful delivery → Customer confirms receipt</text>
+</svg>

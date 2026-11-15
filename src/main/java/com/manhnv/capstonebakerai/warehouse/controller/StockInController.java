@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.warehouse.controller;
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInCreateRequest;
+import com.manhnv.capstonebakerai.warehouse.dto.StockInUpdateRequest;
 import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInDetailResponse;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class StockInController {
  private final StockInService service; public StockInController(StockInService service){this.service=service;}
  @PostMapping @ResponseStatus(HttpStatus.CREATED) public ApiResponse<StockInNote> create(@Valid @RequestBody StockInCreateRequest request){return ApiResponse.success(service.create(request));}
+ @PutMapping("/{id}") public ApiResponse<StockInDetailResponse> update(@PathVariable UUID id,@Valid @RequestBody StockInUpdateRequest request){return ApiResponse.success(service.update(id,request));}
  @PostMapping("/{id}/complete") public ApiResponse<StockInNote> complete(@PathVariable UUID id){return ApiResponse.success(service.complete(id));}
  @PostMapping("/{id}/cancel") public ApiResponse<StockInNote> cancel(@PathVariable UUID id){return ApiResponse.success(service.cancel(id));}
  @GetMapping public ApiResponse<Page<StockInNote>> list(@RequestParam(required=false) NoteStatus status,

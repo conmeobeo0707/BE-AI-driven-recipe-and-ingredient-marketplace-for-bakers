@@ -3,6 +3,8 @@ package com.manhnv.capstonebakerai.warehouse.controller;
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierRequest;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierResponse;
+import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
+import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.service.SupplierService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -24,6 +26,12 @@ public class SupplierController {
     public ApiResponse<SupplierResponse> update(@PathVariable UUID id,@Valid @RequestBody SupplierRequest request){return ApiResponse.success(service.update(id,request));}
     @GetMapping("/{id}")
     public ApiResponse<SupplierResponse> get(@PathVariable UUID id){return ApiResponse.success(service.get(id));}
+    @GetMapping("/{id}/stock-in-notes")
+    public ApiResponse<Page<StockInNote>> stockInHistory(@PathVariable UUID id,
+            @RequestParam(required=false) NoteStatus status,
+            @PageableDefault(size=20,sort="createdAt",direction=Sort.Direction.DESC) Pageable pageable){
+        return ApiResponse.success(service.getStockInHistory(id,status,pageable));
+    }
     @GetMapping
     public ApiResponse<Page<SupplierResponse>> list(@RequestParam(required=false) String keyword,
             @PageableDefault(size=20,sort="supplierName",direction=Sort.Direction.ASC) Pageable pageable){return ApiResponse.success(service.list(keyword,pageable));}
