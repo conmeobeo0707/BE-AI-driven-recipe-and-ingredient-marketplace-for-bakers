@@ -9,7 +9,6 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.Collection;
 import java.util.UUID;
-import java.time.LocalDateTime;
 
 public interface NotificationService {
     Page<NotificationResponse> getAll(UUID userId, Boolean read, Pageable pageable);
@@ -19,6 +18,5 @@ public interface NotificationService {
     UnreadCountResponse countUnread(UUID userId);
     void create(UUID userId, String title, String content, NotificationRefType refType, UUID refId);
     void createForUsers(Collection<UUID> userIds, String title, String content, NotificationRefType refType, UUID refId);
-    boolean existsForUserAfter(UUID userId, NotificationRefType refType, UUID refId, LocalDateTime createdAt);
 
 }

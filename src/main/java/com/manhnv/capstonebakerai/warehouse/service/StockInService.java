@@ -2,7 +2,6 @@ package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.warehouse.dto.StockInCreateRequest;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInDetailResponse;
-import com.manhnv.capstonebakerai.warehouse.dto.StockInUpdateRequest;
 import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import org.springframework.data.domain.Page;
@@ -13,7 +12,6 @@ public interface StockInService {
     Page<StockInNote> list(NoteStatus status, Pageable pageable);
     StockInDetailResponse get(UUID noteId);
     StockInNote create(StockInCreateRequest request);
-    StockInDetailResponse update(UUID noteId, StockInUpdateRequest request);
     StockInNote complete(UUID noteId);
     StockInNote cancel(UUID noteId);
 }
