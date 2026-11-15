@@ -4,6 +4,8 @@ import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierRequest;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierResponse;
 import com.manhnv.capstonebakerai.warehouse.entity.Supplier;
+import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
+import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.exception.WarehouseErrorCode;
 import com.manhnv.capstonebakerai.warehouse.repository.StockInNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.SupplierRepository;
@@ -48,6 +50,14 @@ public class SupplierServiceImpl implements SupplierService {
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
         Page<Supplier> results = normalizedKeyword == null ? suppliers.findAll(pageable) : suppliers.search(normalizedKeyword, pageable);
         return results.map(this::response);
+    }
+
+    @Override @Transactional(readOnly = true)
+    public Page<StockInNote> getStockInHistory(UUID supplierId, NoteStatus status, Pageable pageable) {
+        if (!suppliers.existsById(supplierId)) throw notFound(supplierId);
+        return status == null
+                ? stockInNotes.findBySupplierId(supplierId, pageable)
+                : stockInNotes.findBySupplierIdAndStatus(supplierId, status, pageable);
     }
 
     @Override

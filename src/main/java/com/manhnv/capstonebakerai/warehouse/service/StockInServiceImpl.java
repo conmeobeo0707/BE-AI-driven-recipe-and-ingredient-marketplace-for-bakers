@@ -23,14 +23,17 @@ public class StockInServiceImpl implements StockInService {
     private final StockLotRepository lots;
     private final SupplierRepository suppliers;
     private final WarehouseSupport support;
+    private final StockTransactionService stockTransactions;
 
     public StockInServiceImpl(StockInNoteRepository notes, StockInItemRepository items, StockLotRepository lots,
-                              SupplierRepository suppliers, WarehouseSupport support) {
+                              SupplierRepository suppliers, WarehouseSupport support,
+                              StockTransactionService stockTransactions) {
         this.notes = notes;
         this.items = items;
         this.lots = lots;
         this.suppliers = suppliers;
         this.support = support;
+        this.stockTransactions = stockTransactions;
     }
 
     @Override @Transactional(readOnly = true)
@@ -90,11 +93,81 @@ public class StockInServiceImpl implements StockInService {
     }
 
     @Override @Transactional
+    public StockInDetailResponse update(UUID noteId, StockInUpdateRequest request) {
+        StockInNote stockInNote = notes.lockById(noteId)
+                .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stock-in note not found"));
+        if (stockInNote.getStatus() != NoteStatus.PENDING) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "Only PENDING stock-in notes can be updated");
+        }
+        if (!suppliers.existsById(request.supplierId())) {
+            throw new AppException(WarehouseErrorCode.NOT_FOUND, "Supplier not found");
+        }
+
+        List<UUID> productIds = request.items().stream()
+                .map(StockInItemRequest::productId)
+                .distinct()
+                .sorted()
+                .toList();
+        support.lockProducts(productIds);
+
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        List<StockInItem> replacementItems = new ArrayList<>();
+        for (StockInItemRequest itemRequest : request.items()) {
+            InventoryUnit inventoryUnit = support.unit(itemRequest.productId(), itemRequest.unitId());
+            BigDecimal lineTotal = WarehouseSupport.money(itemRequest.quantity().multiply(itemRequest.unitPrice()));
+            if (lineTotal.precision() - lineTotal.scale() > 13) {
+                throw WarehouseSupport.error("Stock-in line total exceeds the database precision limit");
+            }
+            totalAmount = totalAmount.add(lineTotal);
+
+            StockInItem stockInItem = new StockInItem();
+            stockInItem.setNoteId(noteId);
+            stockInItem.setProductId(itemRequest.productId());
+            stockInItem.setUnitId(inventoryUnit.unitId());
+            stockInItem.setQuantity(itemRequest.quantity());
+            stockInItem.setConversionFactor(inventoryUnit.conversionFactor());
+            stockInItem.setUnitPrice(itemRequest.unitPrice());
+            stockInItem.setTotalPrice(lineTotal);
+            stockInItem.setExpiryDate(itemRequest.expiryDate());
+            replacementItems.add(stockInItem);
+        }
+
+        totalAmount = WarehouseSupport.money(totalAmount);
+        BigDecimal paidAmount = request.paidAmount() == null
+                ? BigDecimal.ZERO : WarehouseSupport.money(request.paidAmount());
+        if (paidAmount.compareTo(totalAmount) > 0) {
+            throw WarehouseSupport.error("Paid amount cannot exceed total amount");
+        }
+
+        stockInNote.setSupplierId(request.supplierId());
+        stockInNote.setReceiptDate(request.receiptDate() == null ? LocalDateTime.now() : request.receiptDate());
+        stockInNote.setNote(request.note());
+        stockInNote.setTotalAmount(totalAmount);
+        stockInNote.setPaidAmount(paidAmount);
+        stockInNote.setDebtAmount(totalAmount.subtract(paidAmount));
+        stockInNote.setPaymentStatus(paidAmount.signum() == 0 ? PaymentStatus.UNPAID
+                : paidAmount.compareTo(totalAmount) == 0 ? PaymentStatus.PAID : PaymentStatus.PARTIAL);
+        stockInNote.setUpdatedAt(LocalDateTime.now());
+
+        List<StockInItem> existingItems = items.findByNoteIdOrderByItemId(noteId);
+        items.deleteAll(existingItems);
+        items.saveAll(replacementItems);
+        StockInNote updatedNote = notes.save(stockInNote);
+        return new StockInDetailResponse(updatedNote, items.findByNoteIdOrderByItemId(noteId));
+    }
+
+    @Override @Transactional
     public StockInNote complete(UUID noteId) {
         StockInNote stockInNote = notes.lockById(noteId)
                 .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stock-in note not found"));
         if (stockInNote.getStatus() != NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT, "Only PENDING stock-in notes can be completed");
         List<StockInItem> stockInItems = items.findByNoteIdOrderByItemId(noteId);
+        if (stockInItems.stream().anyMatch(stockInItem -> stockInItem.getExpiryDate() == null)) {
+            throw WarehouseSupport.error("Expiry date is required for every stock-in item before completion");
+        }
+        if (stockInItems.stream().anyMatch(stockInItem -> stockInItem.getExpiryDate().isBefore(LocalDate.now()))) {
+            throw WarehouseSupport.error("Expiry date cannot be earlier than today");
+        }
         List<UUID> productIds = stockInItems.stream().map(StockInItem::getProductId).distinct().toList();
         support.lockProducts(productIds);
         Map<UUID, BigDecimal> stockDeltas = new HashMap<>();
@@ -111,7 +184,9 @@ public class StockInServiceImpl implements StockInService {
             stockLot.setUnitCost(baseUnitCost);
             stockLot.setExpiryDate(stockInItem.getExpiryDate());
             stockLot.setStatus(stockInItem.getExpiryDate() != null && stockInItem.getExpiryDate().isBefore(LocalDate.now()) ? LotStatus.EXPIRED : LotStatus.STORAGE);
-            lots.save(stockLot);
+            StockLot savedLot = lots.save(stockLot);
+            stockTransactions.record(savedLot.getLotId(), savedLot.getProductId(), StockTransactionType.STOCK_IN,
+                    baseQuantity, savedLot.getCurrentQuantity(), StockTransactionRefType.STOCK_IN_NOTE, noteId);
             stockDeltas.merge(stockInItem.getProductId(), baseQuantity, BigDecimal::add);
         }
         support.adjustStock(stockDeltas);

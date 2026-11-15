@@ -75,11 +75,12 @@ public class ProductServiceImpl implements ProductService {
     public ProductResponse get(UUID productId) { return toResponse(getEntity(productId)); }
 
     @Override @Transactional(readOnly = true)
-    public Page<ProductResponse> list(UUID categoryId, String brand, Pageable pageable) {
+    public Page<ProductResponse> list(UUID categoryId, String brand, String name, ProductStatus status, Pageable pageable) {
         if (pageable == null || pageable.isUnpaged() || pageable.getPageNumber() < 0
                 || pageable.getPageSize() < 1 || pageable.getPageSize() > 100)
             throw invalid("Page must be non-negative and page size cannot exceed 100");
         if (brand != null && brand.length() > 255) throw invalid("Brand filter cannot exceed 255 characters");
+        if (name != null && name.length() > 255) throw invalid("Product name search cannot exceed 255 characters");
         Set<String> sortableFields = Set.of("productId", "sku", "name", "brand", "status", "createdAt", "updatedAt", "stockQuantity");
         for (Sort.Order order : pageable.getSort()) {
             if (!sortableFields.contains(order.getProperty())) throw invalid("Unsupported product sort field");
@@ -89,6 +90,12 @@ public class ProductServiceImpl implements ProductService {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("categoryId"), categoryId));
         if (brand != null && !brand.isBlank())
             spec = spec.and((root, query, cb) -> cb.equal(cb.lower(root.get("brand")), brand.trim().toLowerCase()));
+        if (name != null && !name.isBlank()) {
+            String nameKeyword = "%" + name.trim().toLowerCase(Locale.ROOT) + "%";
+            spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("name")), nameKeyword));
+        }
+        if (status != null)
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
         return products.findAll(spec, pageable).map(this::toResponse);
     }
 
