@@ -70,6 +70,7 @@ public class CartServiceImpl implements CartService{
                     .cart(cart)
                     .product(product)
                     .uom(unit)
+                    .quantity(request.quantity())
                     .build();
         }
         cartItemRepository.save(item);

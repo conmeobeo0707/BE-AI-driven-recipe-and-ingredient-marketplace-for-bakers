@@ -1,6 +1,11 @@
 package com.manhnv.capstonebakerai.warehouse.repository;
+import com.manhnv.capstonebakerai.order.enums.OrderStatus;
+import com.manhnv.capstonebakerai.report.dto.response.MonthAmount;
 import com.manhnv.capstonebakerai.warehouse.entity.StockOutNote;
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
@@ -24,4 +29,40 @@ public interface StockOutNoteRepository extends JpaRepository<StockOutNote, UUID
     @Query("select n from StockOutNote n where n.referenceOrderId = :orderId and n.type = :type")
     Optional<StockOutNote> lockByReferenceOrderIdAndType(@Param("orderId") UUID orderId,
             @Param("type") StockOutType type);
+    // Giá vốn: tính theo tháng giao hàng của đơn
+    @Query("""
+    select new com.manhnv.capstonebakerai.report.dto.response.MonthAmount(
+        extract(year from o.deliveredAt),
+        extract(month from o.deliveredAt),
+        sum(n.totalCost))
+    from StockOutNote n
+    join Order o on o.id = n.referenceOrderId
+    where n.type = :type
+      and n.status = :noteStatus
+      and o.status = :orderStatus
+      and o.deliveredAt >= :from and o.deliveredAt < :to
+    group by extract(year from o.deliveredAt), extract(month from o.deliveredAt)
+    """)
+    List<MonthAmount> cogsByMonth(@Param("type") StockOutType type,
+                                  @Param("noteStatus") NoteStatus noteStatus,
+                                  @Param("orderStatus") OrderStatus orderStatus,
+                                  @Param("from") LocalDateTime from,
+                                  @Param("to") LocalDateTime to);
+
+    // Hao hụt do hủy hàng
+    @Query("""
+    select new com.manhnv.capstonebakerai.report.dto.response.MonthAmount(
+        extract(year from n.updatedAt),
+        extract(month from n.updatedAt),
+        sum(n.totalCost))
+    from StockOutNote n
+    where n.type = :type
+      and n.status = :noteStatus
+      and n.updatedAt >= :from and n.updatedAt < :to
+    group by extract(year from n.updatedAt), extract(month from n.updatedAt)
+    """)
+    List<MonthAmount> disposalByMonth(@Param("type") StockOutType type,
+                                      @Param("noteStatus") NoteStatus noteStatus,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to);
 }
