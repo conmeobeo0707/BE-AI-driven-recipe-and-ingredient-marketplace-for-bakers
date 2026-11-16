@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     NotificationRepository repository;
     NotificationMapper mapper;
+    SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Transactional(readOnly = true)
@@ -78,7 +80,8 @@ public class NotificationServiceImpl implements NotificationService {
                 .refType(refType)
                 .refId(refId)
                 .build();
-        repository.save(notification);
+        notification = repository.save(notification);
+        pushToUser(notification);
     }
 
     @Override
@@ -92,7 +95,16 @@ public class NotificationServiceImpl implements NotificationService {
                         .refId(refId)
                         .build())
                 .toList();
-        repository.saveAll(list);
+        repository.saveAll(list).forEach(this::pushToUser);
+    }
+
+    /** Fan the saved notification out over WebSocket so it shows up live;
+     * the REST endpoints above remain the source of truth/history. */
+    private void pushToUser(Notification notification) {
+        messagingTemplate.convertAndSendToUser(
+                notification.getUserId().toString(),
+                "/queue/notifications",
+                mapper.toResponse(notification));
     }
 
     @Override
