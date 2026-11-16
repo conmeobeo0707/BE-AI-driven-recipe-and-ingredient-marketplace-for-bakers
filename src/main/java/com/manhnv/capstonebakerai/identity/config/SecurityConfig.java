@@ -82,6 +82,9 @@ public class SecurityConfig {
                                 "/api/v1/payos/webhook"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/media/videos/webhook").permitAll()
+                        .requestMatchers(
+                                "/ws/**"
+                        ).permitAll()
                         // Swagger / OpenAPI cho phép public
                         .requestMatchers(
                                 "/swagger-ui.html",
