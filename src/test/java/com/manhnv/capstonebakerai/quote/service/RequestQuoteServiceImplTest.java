@@ -139,11 +139,6 @@ public class RequestQuoteServiceImplTest {
         when(user.getUserId()).thenReturn(userId);
     }
 
-    private RequestQuoteSummaryResponse summaryOf(UUID handledBy) {
-        return new RequestQuoteSummaryResponse(quoteId, customerId, "0900000000", "Old Name",
-                RequestQuoteStatus.IN_PROGRESS, 1, handledBy, LocalDateTime.now());
-    }
-
     // Create
     // UTCID01
     @org.testng.annotations.Test

@@ -8,6 +8,7 @@ import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherSummaryResponse;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseCategory;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseCategoryType;
@@ -29,6 +30,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
@@ -153,6 +156,24 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
                 rows.getContent().stream().map(ExpenseVoucherRow::createdBy).filter(Objects::nonNull).distinct().toList());
         return rows.map(row -> new ExpenseVoucherResponse(row.id(), row.code(), row.expenseCategoryId(), row.expenseCategoryName(),
                 row.amount(), row.reason(), row.status(), resolveCreator(creators, row.createdBy()), row.createdAt()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExpenseVoucherSummaryResponse getSummary(LocalDate from, LocalDate to) {
+        LocalDateTime fromDateTime = from.atStartOfDay();
+        LocalDateTime toDateTime = to.atStartOfDay();
+
+        BigDecimal totalAmount = voucherRepository.sumAmountByStatusAndCreatedAtBetween(
+                ExpenseVoucherStatus.ACTIVE, fromDateTime, toDateTime);
+        long voucherCount = voucherRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                ExpenseVoucherStatus.ACTIVE, fromDateTime, toDateTime);
+        long cancelledCount = voucherRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                ExpenseVoucherStatus.CANCELLED, fromDateTime, toDateTime);
+        BigDecimal averagePerVoucher = voucherCount == 0 ? BigDecimal.ZERO
+                : totalAmount.divide(BigDecimal.valueOf(voucherCount), 2, RoundingMode.HALF_UP);
+
+        return new ExpenseVoucherSummaryResponse(totalAmount, voucherCount, cancelledCount, averagePerVoucher);
     }
 
     /** Fills in the mapper-skipped `createdBy` with a resolved name/avatar for a single entity. */

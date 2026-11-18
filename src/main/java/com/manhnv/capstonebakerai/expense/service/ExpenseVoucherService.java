@@ -5,9 +5,11 @@ import com.manhnv.capstonebakerai.expense.dto.request.CreateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherRequest;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherSummaryResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.UUID;
 
@@ -20,4 +22,5 @@ public interface ExpenseVoucherService {
 
     ExpenseReportResponse getReport(YearMonth month, UUID categoryId);
     Page<ExpenseVoucherResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable);
+    ExpenseVoucherSummaryResponse getSummary(LocalDate from, LocalDate to);
 }
