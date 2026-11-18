@@ -1,7 +1,7 @@
 package com.manhnv.capstonebakerai.expense.repository;
 
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
-import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseVoucherStatus;
 import org.springframework.data.domain.Page;
@@ -38,7 +38,7 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
             @Param("to") LocalDateTime to,
             @Param("categoryId") UUID categoryId);
     @Query("""
-        select new com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse(
+        select new com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow(
             v.id, v.code, c.id, c.name,
             v.amount, v.reason, v.status, v.createdBy, v.createdAt)
         from ExpenseVoucher v
@@ -49,7 +49,7 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
           and (:categoryId is null or c.id = :categoryId)
         order by v.createdAt desc
         """)
-    Page<ExpenseVoucherResponse> findVouchersByMonth(
+    Page<ExpenseVoucherRow> findVouchersByMonth(
             @Param("status") ExpenseVoucherStatus status,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,

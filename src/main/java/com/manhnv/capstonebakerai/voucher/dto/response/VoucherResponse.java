@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.voucher.dto.response;
 
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 import com.manhnv.capstonebakerai.voucher.enums.DiscountType;
 import com.manhnv.capstonebakerai.voucher.enums.VoucherDisplayStatus;
 import com.manhnv.capstonebakerai.voucher.enums.VoucherStatus;
@@ -25,7 +26,7 @@ public record VoucherResponse(
         LocalDateTime endDate,
         VoucherStatus status,
         VoucherDisplayStatus displayStatus,
-        UUID createdBy,
+        UserSummaryResponse createdBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

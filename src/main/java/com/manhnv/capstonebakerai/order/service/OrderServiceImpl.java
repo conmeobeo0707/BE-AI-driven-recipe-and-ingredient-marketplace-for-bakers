@@ -32,6 +32,8 @@ import com.manhnv.capstonebakerai.voucher.dto.response.VoucherPreviewResponse;
 import com.manhnv.capstonebakerai.voucher.service.VoucherService;
 import com.manhnv.capstonebakerai.warehouse.dto.StockLine;
 import com.manhnv.capstonebakerai.warehouse.service.InventoryService;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -73,6 +75,18 @@ public class OrderServiceImpl implements OrderService {
     InventoryService inventoryService;
     LoyaltyService loyaltyService;
     ApplicationEventPublisher eventPublisher;
+    UserSummaryService userSummaryService;
+
+    private OrderResponse enrich(Order order) {
+        OrderResponse base = mapper.toResponse(order);
+        UserSummaryResponse creator = userSummaryService.getSummary(order.getCreatedBy());
+        return new OrderResponse(base.id(), base.code(), base.customerId(), creator, base.status(), base.paymentMethod(),
+                base.productsPrice(), base.shippingFee(), base.discountPercent(), base.discountAmount(), base.voucherCode(),
+                base.voucherDiscountAmount(), base.total(), base.revenue(), base.note(), base.receiverName(),
+                base.receiverPhone(), base.provinceCode(), base.districtCode(), base.wardCode(), base.addressDetail(),
+                base.fullAddress(), base.cancelReason(), base.carrierName(), base.shippingService(), base.cancelledAt(),
+                base.deliveredAt(), base.receivedConfirmedAt(), base.createdAt(), base.items());
+    }
 
     @Override
     @Transactional
@@ -80,7 +94,7 @@ public class OrderServiceImpl implements OrderService {
         Customer customer = findCustomerByUserId(userId);
         Order order = buildOrder(customer, userId, request, BigDecimal.ZERO);
         Order saved = saveWithPayment(order);
-        return mapper.toResponse(saved);
+        return enrich(saved);
     }
 
     @Override
@@ -94,7 +108,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getMyOrder(UUID userId, UUID orderId) {
-        return mapper.toResponse(findOwnedOrder(userId, orderId));
+        return enrich(findOwnedOrder(userId, orderId));
     }
 
     @Override
@@ -111,7 +125,7 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(OrderErrorCode.ORDER_CANNOT_CANCEL);
         }
         applyCancel(order, request, true);
-        return mapper.toResponse(orderRepository.save(order));
+        return enrich(orderRepository.save(order));
     }
 
     @Override
@@ -125,7 +139,7 @@ public class OrderServiceImpl implements OrderService {
             order.setReceivedConfirmedAt(LocalDateTime.now());
             historyService.record(order.getId(), OrderHistoryAction.RECEIVED_CONFIRMED, OrderStatus.DELIVERED, OrderStatus.CONFIRMED, null);
         }
-        return mapper.toResponse(orderRepository.save(order));
+        return enrich(orderRepository.save(order));
     }
 
     @Override
@@ -222,7 +236,7 @@ public class OrderServiceImpl implements OrderService {
                 : BigDecimal.ZERO;
         Order order = buildOrder(customer, staffUserId, request.order(), discount);
         Order saved = saveWithPayment(order);
-        return mapper.toResponse(saved);
+        return enrich(saved);
     }
 
     @Override
@@ -238,7 +252,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getForStaff(UUID orderId) {
-        return mapper.toResponse(findOrThrow(orderId));
+        return enrich(findOrThrow(orderId));
     }
 
     @Override
@@ -252,7 +266,7 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
         }
         applyTransition(order, next, null);
-        return mapper.toResponse(orderRepository.save(order));
+        return enrich(orderRepository.save(order));
     }
 
     @Override
@@ -263,7 +277,7 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(OrderErrorCode.ORDER_CANNOT_CANCEL);
         }
         applyCancel(order, request, false);
-        return mapper.toResponse(orderRepository.save(order));
+        return enrich(orderRepository.save(order));
     }
 
     @Override

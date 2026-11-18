@@ -6,6 +6,8 @@ import com.manhnv.capstonebakerai.warehouse.entity.StockTransaction;
 import com.manhnv.capstonebakerai.warehouse.enums.StockTransactionRefType;
 import com.manhnv.capstonebakerai.warehouse.enums.StockTransactionType;
 import com.manhnv.capstonebakerai.warehouse.repository.StockTransactionRepository;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,14 +22,18 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
 public class StockTransactionServiceImpl implements StockTransactionService {
     private final StockTransactionRepository transactions;
+    private final UserSummaryService userSummaryService;
 
-    public StockTransactionServiceImpl(StockTransactionRepository transactions) {
+    public StockTransactionServiceImpl(StockTransactionRepository transactions, UserSummaryService userSummaryService) {
         this.transactions = transactions;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -63,7 +69,10 @@ public class StockTransactionServiceImpl implements StockTransactionService {
             return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
         };
 
-        return transactions.findAll(specification, pageable).map(this::toResponse);
+        Page<StockTransaction> page = transactions.findAll(specification, pageable);
+        Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
+                page.getContent().stream().map(StockTransaction::getCreatedBy).filter(Objects::nonNull).distinct().toList());
+        return page.map(stockTransaction -> toResponse(stockTransaction, creators));
     }
 
     @Override
@@ -95,11 +104,13 @@ public class StockTransactionServiceImpl implements StockTransactionService {
         }
     }
 
-    private StockTransactionResponse toResponse(StockTransaction stockTransaction) {
+    private StockTransactionResponse toResponse(StockTransaction stockTransaction, Map<UUID, UserSummaryResponse> creators) {
+        UUID createdBy = stockTransaction.getCreatedBy();
+        UserSummaryResponse creator = createdBy == null ? null : creators.getOrDefault(createdBy, new UserSummaryResponse(createdBy, null, null));
         return new StockTransactionResponse(stockTransaction.getId(), stockTransaction.getStockLotId(),
                 stockTransaction.getProductId(), stockTransaction.getTransactionType(),
                 stockTransaction.getQuantityChange(), stockTransaction.getBalanceAfter(),
                 stockTransaction.getRefType(), stockTransaction.getRefId(),
-                stockTransaction.getCreatedBy(), stockTransaction.getCreatedAt());
+                creator, stockTransaction.getCreatedAt());
     }
 }

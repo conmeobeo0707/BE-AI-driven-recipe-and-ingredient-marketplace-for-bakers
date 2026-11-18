@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.quote.dto.response;
 
 import com.manhnv.capstonebakerai.quote.enums.RequestQuoteStatus;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -13,7 +14,7 @@ public record RequestQuoteResponse(
         String contactName,
         String content,
         RequestQuoteStatus status,
-        UUID handledBy,
+        UserSummaryResponse handledBy,
         LocalDateTime handledAt,
         String rejectReason,
         String resultNote,

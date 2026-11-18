@@ -11,6 +11,8 @@ import com.manhnv.capstonebakerai.receipt.exception.ReceiptVoucherErrorCode;
 import com.manhnv.capstonebakerai.receipt.mapper.ReceiptVoucherMapper;
 import com.manhnv.capstonebakerai.receipt.repository.ReceiptCategoryRepository;
 import com.manhnv.capstonebakerai.receipt.repository.ReceiptVoucherRepository;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -20,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -30,6 +34,7 @@ public class ReceiptVoucherServiceImpl implements ReceiptVoucherService{
     ReceiptVoucherRepository voucherRepository;
     ReceiptCategoryRepository categoryRepository;
     ReceiptVoucherMapper mapper;
+    UserSummaryService userSummaryService;
 
     @Override
     @Transactional
@@ -49,14 +54,14 @@ public class ReceiptVoucherServiceImpl implements ReceiptVoucherService{
                 .note(request.note())
                 .build();
 
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
     @Transactional
     public ReceiptVoucherResponse createFromPayment(UUID paymentId, BigDecimal amount, ReceiptCategoryType type, String note) {
         return voucherRepository.findByPaymentId(paymentId)
-                .map(mapper::toResponse)
+                .map(this::enrich)
                 .orElseGet(() -> {
                     ReceiptCategory category = categoryRepository.findFirstByTypeOrderByCreatedAtAsc(type)
                             .orElseThrow(() -> new AppException(ReceiptVoucherErrorCode.SYSTEM_RECEIPT_CATEGORY_MISSING));
@@ -68,14 +73,14 @@ public class ReceiptVoucherServiceImpl implements ReceiptVoucherService{
                             .amount(amount)
                             .note(note)
                             .build();
-                    return mapper.toResponse(voucherRepository.save(voucher));
+                    return enrich(voucherRepository.save(voucher));
                 });
     }
 
     @Override
     @Transactional(readOnly = true)
     public ReceiptVoucherResponse getById(UUID id) {
-        return voucherRepository.findWithCategoryById(id).map(mapper::toResponse)
+        return voucherRepository.findWithCategoryById(id).map(this::enrich)
                 .orElseThrow(() -> new AppException(ReceiptVoucherErrorCode.RECEIPT_VOUCHER_NOT_FOUND));
     }
 
@@ -85,7 +90,26 @@ public class ReceiptVoucherServiceImpl implements ReceiptVoucherService{
         Page<ReceiptVoucher> page = categoryId == null
                 ? voucherRepository.findAll(pageable)
                 : voucherRepository.findByReceiptCategoryId(categoryId, pageable);
-        return page.map(mapper::toResponse);
+        Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
+                page.getContent().stream().map(ReceiptVoucher::getCreatedBy).filter(Objects::nonNull).distinct().toList());
+        return page.map(entity -> enrich(entity, creators));
+    }
+
+    private ReceiptVoucherResponse enrich(ReceiptVoucher entity) {
+        UserSummaryResponse creator = userSummaryService.getSummary(entity.getCreatedBy());
+        return enrich(entity, creator);
+    }
+
+    private ReceiptVoucherResponse enrich(ReceiptVoucher entity, Map<UUID, UserSummaryResponse> creators) {
+        UUID createdBy = entity.getCreatedBy();
+        UserSummaryResponse creator = createdBy == null ? null : creators.getOrDefault(createdBy, new UserSummaryResponse(createdBy, null, null));
+        return enrich(entity, creator);
+    }
+
+    private ReceiptVoucherResponse enrich(ReceiptVoucher entity, UserSummaryResponse creator) {
+        ReceiptVoucherResponse base = mapper.toResponse(entity);
+        return new ReceiptVoucherResponse(base.id(), base.code(), base.receiptCategoryId(), base.receiptCategoryName(),
+                base.receiptCategoryType(), base.paymentId(), base.amount(), base.note(), creator, base.createdAt());
     }
 
     private String generateCode() {
