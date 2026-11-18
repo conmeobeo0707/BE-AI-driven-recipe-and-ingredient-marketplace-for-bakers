@@ -31,7 +31,37 @@ public class VideoSlides {
     private static final String FLAME_JS = "if(document.querySelector('#flame')){tl.to('#flame',{scaleY:1.15,scaleX:0.9,"
             + "transformOrigin:'50% 100%',duration:0.25,yoyo:true,repeat:9,ease:'sine.inOut'},1.8);}";
 
-    public Map<String, Object> intro(VideoTheme theme, String category, String title, String description) {
+    private static final String PHOTO_CSS = "#photos{position:relative;width:100%;height:100%;border-radius:40px;overflow:hidden;"
+            + "background:{{BLUSH}};box-shadow:0 24px 60px rgba(59,42,35,.16)}"
+            + ".ph{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;display:block}"
+            + ".ph+.ph{opacity:0}";
+
+    private static String photoBox(List<String> urls) {
+        StringBuilder out = new StringBuilder("<div id='photos'>");
+        for (int i = 0; i < urls.size(); i++) {
+            out.append("<img class='ph' id='ph").append(i).append("' src='").append(esc(urls.get(i))).append("' alt=''/>");
+        }
+        return out.append("</div>").toString();
+    }
+
+    private static String photoJs(int count, double start, double secondsPerPhoto) {
+        StringBuilder js = new StringBuilder(".from('#photos',{opacity:0,scale:0.92,transformOrigin:'50% 50%',duration:0.7,ease:'power3.out'},")
+                .append(start).append(')');
+        double zoom = secondsPerPhoto > 0 ? secondsPerPhoto + 0.6 : 8;
+        for (int i = 0; i < count; i++) {
+            double at = start + i * secondsPerPhoto;
+            if (i > 0) {
+                js.append(".to('#ph").append(i).append("',{opacity:1,duration:0.6,ease:'power2.inOut'},").append(at - 0.3).append(')');
+            }
+            js.append(".fromTo('#ph").append(i).append("',{scale:1.08},{scale:1,transformOrigin:'50% 50%',duration:")
+                    .append(zoom).append(",ease:'none'},").append(Math.max(start, at - 0.3)).append(')');
+        }
+        return js.toString();
+    }
+
+    public Map<String, Object> intro(VideoTheme theme, String category, String title, String description,
+                                     List<String> photos, double secondsPerPhoto) {
+        boolean hasPhotos = photos != null && !photos.isEmpty();
         List<String> lines = splitTitle(title);
         int longest = lines.stream().mapToInt(String::length).max().orElse(0);
         int titleSize = longest <= 11 ? 124 : longest <= 15 ? 104 : longest <= 20 ? 86 : 72;
@@ -44,7 +74,8 @@ public class VideoSlides {
                 + "<div class='left'><div class='kicker' id='pill'>" + esc(upper(category, "CÔNG THỨC")) + "</div>"
                 + "<h1 class='serif'>" + h1 + "</h1><div id='rule'></div>"
                 + (description.isBlank() ? "" : "<p id='desc'>" + esc(truncate(description, 190)) + "</p>")
-                + "</div><div id='artbox'>" + VideoArt.hero(theme.decoration(), 760) + "</div></div>";
+                + "</div><div id='artbox'>" + (hasPhotos ? photoBox(photos) : VideoArt.hero(theme.decoration(), 760))
+                + "</div></div>";
         String css = "#b1{width:900px;height:900px;right:-120px;top:90px;transform:scale(0)}"
                 + "#b2{width:240px;height:240px;left:-70px;bottom:-70px;opacity:0.7;transform:scale(0)}"
                 + ".left{position:absolute;left:140px;top:150px;width:900px}"
@@ -52,14 +83,15 @@ public class VideoSlides {
                 + ".ln{display:block;overflow:hidden;padding:10px 0 4px}.ln span{display:inline-block;transform:translateY(115%)}"
                 + ".hl{color:{{ACCENT}};font-style:italic}#rule{width:140px;margin:28px 0 26px;transform:scaleX(0);transform-origin:left}"
                 + "p{margin:0;font-size:34px;line-height:1.5;max-width:820px;opacity:0;transform:translateY(16px);filter:blur(8px)}"
-                + "#artbox{position:absolute;right:110px;top:190px;width:760px;height:760px}";
+                + "#artbox{position:absolute;right:110px;top:190px;width:760px;height:760px}"
+                + (hasPhotos ? PHOTO_CSS : "");
         String js = "const tl=gsap.timeline();tl.to('#b1',{scale:1,duration:0.9,ease:'power3.out'},0)"
                 + ".to('#b2',{scale:1,duration:0.9,ease:'power3.out'},0.1)"
                 + ".from('#pill',{opacity:0,y:20,duration:0.5,ease:'power3.out'},0.2)"
                 + ".to(gsap.utils.toArray('.ln span'),{y:0,duration:0.7,ease:'power3.out',stagger:0.12},0.3)"
                 + ".to('#rule',{scaleX:1,duration:0.6,ease:'power3.out'},0.9)"
                 + (description.isBlank() ? "" : ".to('#desc',{opacity:1,y:0,filter:'blur(0px)',duration:0.7,ease:'power3.out'},1.0)")
-                + ART_JS + ";" + FLAME_JS;
+                + (hasPhotos ? photoJs(photos.size(), 0.3, secondsPerPhoto) + ";" : ART_JS + ";" + FLAME_JS);
         return asset(theme, html, css, js);
     }
 
@@ -141,7 +173,8 @@ public class VideoSlides {
 
     public Map<String, Object> step(VideoTheme theme, String kicker, int index, int total, String instruction,
                                     List<String> ingredients, List<String> tools, List<String> badges, String notes,
-                                    String icon) {
+                                    String icon, List<String> photos, double secondsPerPhoto) {
+        boolean hasPhotos = photos != null && !photos.isEmpty();
         int length = instruction.length();
         int insSize = length <= 110 ? 46 : length <= 190 ? 40 : length <= 280 ? 34 : 30;
         StringBuilder html = new StringBuilder("<div class='stage' id='stage'><div class='blob' id='b1'></div><div id='left'>")
@@ -154,7 +187,8 @@ public class VideoSlides {
         if (!tools.isEmpty()) html.append("<div class='pl'>DỤNG CỤ</div><div class='chips'>")
                 .append(chips(tools, "ct")).append("</div>");
         if (notes != null && !notes.isBlank()) html.append("<div id='note'><b>Lưu ý:</b> ").append(esc(truncate(notes, 140))).append("</div>");
-        html.append("</div><div id='panel'><div id='artbox'>").append(VideoArt.icon(icon, 400)).append("</div>");
+        html.append("</div><div id='panel'><div id='artbox'>")
+                .append(hasPhotos ? photoBox(photos) : VideoArt.icon(icon, 400)).append("</div>");
         if (!badges.isEmpty()) {
             html.append("<div class='badges'>");
             for (String badge : badges) html.append("<span class='badge'>").append(esc(badge)).append("</span>");
@@ -179,7 +213,9 @@ public class VideoSlides {
                 + "#panel{position:absolute;left:1220px;top:140px;width:560px;height:740px;background:#fff;border-radius:36px;"
                 + "box-shadow:0 20px 50px rgba(59,42,35,.08);box-sizing:border-box;display:flex;flex-direction:column;"
                 + "align-items:center;justify-content:center;gap:40px}"
-                + "#artbox{width:400px;height:400px}"
+                + (hasPhotos ? "#artbox{width:480px;height:" + (badges.isEmpty() ? 660 : 540) + "px}" + PHOTO_CSS
+                        .replace("border-radius:40px", "border-radius:28px")
+                : "#artbox{width:400px;height:400px}")
                 + ".badges{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;padding:0 30px}"
                 + ".badge{padding:12px 28px;border-radius:40px;background:{{INK}};color:#fff;font-size:28px;font-weight:800}"
                 + "#prog{position:absolute;left:140px;top:965px;width:1640px;display:flex;gap:12px}"
@@ -194,7 +230,8 @@ public class VideoSlides {
                 + ".from(gsap.utils.toArray('.pl'),{opacity:0,duration:0.4},0.9)"
                 + ".from(gsap.utils.toArray('.chip'),{opacity:0,scale:0.8,duration:0.4,ease:'back.out(2)',stagger:0.07},1.0)"
                 + ".from('#panel',{opacity:0,x:60,duration:0.6,ease:'power3.out'},0.4)"
-                + ".from(gsap.utils.toArray('.pop'),{scale:0,opacity:0,transformOrigin:'50% 50%',duration:0.5,ease:'back.out(1.8)',stagger:0.12},0.8)"
+                + (hasPhotos ? photoJs(photos.size(), 0.6, secondsPerPhoto)
+                : ".from(gsap.utils.toArray('.pop'),{scale:0,opacity:0,transformOrigin:'50% 50%',duration:0.5,ease:'back.out(1.8)',stagger:0.12},0.8)")
                 + ".from(gsap.utils.toArray('.badge'),{opacity:0,y:20,duration:0.5,ease:'back.out(2)',stagger:0.1},1.2)"
                 + ".from('#cur',{scaleX:0,transformOrigin:'0% 50%',duration:0.8,ease:'power3.out'},0.5)"
                 + (notes != null && !notes.isBlank() ? ".from('#note',{opacity:0,y:12,duration:0.5},1.4)" : "") + ";";
