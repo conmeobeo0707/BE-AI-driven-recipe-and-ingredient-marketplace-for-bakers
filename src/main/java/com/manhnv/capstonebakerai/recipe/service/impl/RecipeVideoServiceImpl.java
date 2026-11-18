@@ -12,7 +12,9 @@ import com.manhnv.capstonebakerai.media.service.ShotstackService;
 import com.manhnv.capstonebakerai.recipe.dto.request.CreateRecipeVideoRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeVideoRenderResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeStepImage;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeVideoRender;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStepType;
@@ -22,6 +24,7 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeVideoRenderRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeVideoService;
 import com.manhnv.capstonebakerai.recipe.video.VideoDesign;
 import com.manhnv.capstonebakerai.recipe.video.VideoArt;
+import com.manhnv.capstonebakerai.recipe.video.VideoPhotoEmbedder;
 import com.manhnv.capstonebakerai.recipe.video.VideoSlides;
 import com.manhnv.capstonebakerai.recipe.video.VideoTheme;
 import com.manhnv.capstonebakerai.recipe.video.VideoThemeSelector;
@@ -42,6 +45,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -53,6 +57,9 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
     private static final int ROWS_PER_SLIDE = 14;
     private static final Pattern TEMPERATURE = Pattern.compile("(\\d{2,3})\\s*(?:°|độ)\\s*C", Pattern.CASE_INSENSITIVE);
     private static final int MAX_NARRATION_CHARS = 2500;
+    private static final int MAX_PHOTOS_PER_SLIDE = 6;
+    private static final double NARRATION_CHARS_PER_SECOND = 14.0;
+    private static final double MIN_PHOTO_SECONDS = 3.0;
 
     private final ShotstackService shotstackService;
     private final RecipeVideoRenderRepository renderRepository;
@@ -63,6 +70,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
     private final PlatformTransactionManager transactionManager;
     private final VideoThemeSelector themeSelector;
     private final VideoSlides slides;
+    private final VideoPhotoEmbedder photoEmbedder;
 
     @Value("${app.shotstack.tts-model:elevenlabs-turbo-v2.5}")
     private String ttsModel;
@@ -197,16 +205,40 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                             .filter(link -> link.getTool() != null)
                             .map(link -> link.getTool().getName())
                             .toList();
+                    List<String> stepPhotos = photoUrls(nullToEmpty(step.getImages()).stream()
+                            .sorted(Comparator.comparing(RecipeStepImage::getSortOrder, Comparator.nullsLast(Integer::compareTo)))
+                            .map(RecipeStepImage::getMedia));
                     return new StepSnapshot(step.getRecipeStepType(), step.getDurationMinutes(),
                             blankToDefault(step.getInstruction(), ""), blankToDefault(step.getNotes(), ""),
-                            stepIngredients, stepTools);
+                            stepIngredients, stepTools, stepPhotos);
                 })
                 .toList();
+
+        List<String> recipePhotos = photoUrls(nullToEmpty(recipe.getImages()).stream()
+                .sorted(Comparator.comparing(RecipeImage::getSortOrder, Comparator.nullsLast(Integer::compareTo)))
+                .map(RecipeImage::getMedia));
 
         return new RecipeSnapshot(blankToDefault(recipe.getTitle(), "Công thức"),
                 recipe.getRecipeCategory() == null ? null : recipe.getRecipeCategory().getName(),
                 blankToDefault(recipe.getDescription(), ""), recipe.getPrepTimeMinutes(), recipe.getCookTimeMinutes(),
-                recipe.getServings(), recipe.getDifficulty(), ingredients, tools, steps);
+                recipe.getServings(), recipe.getDifficulty(), ingredients, tools, steps, recipePhotos);
+    }
+
+    private static List<String> photoUrls(Stream<Media> media) {
+        return media
+                .filter(Objects::nonNull)
+                .filter(m -> m.getType() == MediaType.IMAGE && m.getStatus() == MediaStatus.ATTACHED)
+                .map(Media::getUrl)
+                .filter(url -> url != null && !url.isBlank())
+                .map(String::trim)
+                .limit(MAX_PHOTOS_PER_SLIDE)
+                .toList();
+    }
+
+    private static double photoSeconds(String narration, int photoCount) {
+        if (photoCount <= 1) return 0;
+        double estimated = truncate(narration, MAX_NARRATION_CHARS).length() / NARRATION_CHARS_PER_SECOND;
+        return Math.max(MIN_PHOTO_SECONDS, estimated / photoCount);
     }
 
     private List<Scene> buildScenes(RecipeSnapshot recipe, VideoDesign design) {
@@ -218,7 +250,12 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
             intro.append("Thuộc danh mục ").append(recipe.category()).append(". ");
         }
         if (!recipe.description().isEmpty()) intro.append(endSentence(recipe.description()));
-        scenes.add(new Scene(slides.intro(theme, recipe.category(), recipe.title(), recipe.description()), intro.toString()));
+        String introNarration = intro.toString();
+        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_BUDGET_CHARS);
+        List<String> introPhotos = photoEmbedder.embed(recipe.photos(),
+                VideoSlides.INTRO_PHOTO_SIZE, VideoSlides.INTRO_PHOTO_SIZE, photoBudget);
+        scenes.add(new Scene(slides.intro(theme, recipe.category(), recipe.title(), recipe.description(),
+                introPhotos, photoSeconds(introNarration, introPhotos.size())), introNarration));
 
         List<String> facts = new ArrayList<>();
         if (recipe.prep() != null) facts.add("thời gian chuẩn bị " + recipe.prep() + " phút");
@@ -240,7 +277,9 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         List<StepSnapshot> steps = recipe.steps();
         for (int i = 0; i < steps.size(); i++) {
             String icon = i < design.stepIcons().size() ? design.stepIcons().get(i) : "bowl";
-            scenes.add(stepScene(theme, steps.get(i), i + 1, steps.size(), icon));
+            List<String> stepPhotos = photoEmbedder.embed(steps.get(i).photos(),
+                    VideoSlides.STEP_PHOTO_WIDTH, VideoSlides.STEP_PHOTO_HEIGHT, photoBudget);
+            scenes.add(stepScene(theme, steps.get(i), i + 1, steps.size(), icon, stepPhotos));
         }
 
         scenes.add(new Scene(slides.outro(theme, recipe.title()),
@@ -264,7 +303,8 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         }
     }
 
-    private Scene stepScene(VideoTheme theme, StepSnapshot step, int index, int total, String icon) {
+    private Scene stepScene(VideoTheme theme, StepSnapshot step, int index, int total, String icon,
+                            List<String> photos) {
         String type = step.type() == RecipeStepType.PREPARATION ? "CHUẨN BỊ" : "NẤU";
         StringBuilder narration = new StringBuilder("Bước ").append(index).append(", ").append(type.toLowerCase());
         List<String> badges = new ArrayList<>();
@@ -280,8 +320,10 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         if (!step.tools().isEmpty()) narration.append("Dụng cụ: ").append(String.join(", ", step.tools())).append(". ");
         if (!step.notes().isEmpty()) narration.append("Lưu ý: ").append(endSentence(step.notes()));
 
+        String stepNarration = narration.toString().trim();
         return new Scene(slides.step(theme, "BƯỚC " + index + " · " + type, index, total, step.instruction(),
-                step.ingredients(), step.tools(), badges, step.notes(), icon), narration.toString().trim());
+                step.ingredients(), step.tools(), badges, step.notes(), icon,
+                photos, photoSeconds(stepNarration, photos.size())), stepNarration);
     }
 
     private Map<String, Object> buildEdit(List<Scene> scenes) {
@@ -376,10 +418,10 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
 
     private record RecipeSnapshot(String title, String category, String description, Integer prep, Integer cook,
                                   Integer servings, DifficultyEnum difficulty, List<VideoSlides.Row> ingredients,
-                                  List<VideoSlides.Row> tools, List<StepSnapshot> steps) { }
+                                  List<VideoSlides.Row> tools, List<StepSnapshot> steps, List<String> photos) { }
 
     private record StepSnapshot(RecipeStepType type, Integer duration, String instruction, String notes,
-                                List<String> ingredients, List<String> tools) { }
+                                List<String> ingredients, List<String> tools, List<String> photos) { }
 
     private record Scene(Map<String, Object> asset, String narration) { }
 }

@@ -35,7 +35,7 @@ public class Scorer {
     }
 
     public Context prepare(Snapshot snapshot, CommunityStats stats, CustomerData customer, Instant now) {
-        TasteProfile taste = TasteProfile.build(customer, snapshot.recipesById(), now);
+        TasteProfile taste = TasteProfile.build(customer, snapshot, now);
         return new Context(snapshot, stats, customer, taste, stats.collaborative(customer.id(), taste.recentLikes()), now);
     }
 
@@ -49,7 +49,7 @@ public class Scorer {
 
     public Features features(RecipeItem recipe, Context context) {
         return new Features(
-                content(recipe, context.taste()),
+                content(recipe, context.taste(), context.snapshot()),
                 skill(recipe, context),
                 bestHobby(recipe, context).map(Map.Entry::getValue).orElse(0.0),
                 context.collaborative().scores().getOrDefault(recipe.id(), 0.0),
@@ -100,14 +100,18 @@ public class Scorer {
 
     // 60% cosine similarity between the recipe's ingredients and the customer's ingredient taste,
     // 40% how much the customer likes the recipe's category.
-    static double content(RecipeItem recipe, TasteProfile taste) {
+    // Each ingredient counts by its rarity on both sides, so sharing matcha matters more than sharing flour.
+    static double content(RecipeItem recipe, TasteProfile taste, Snapshot snapshot) {
         double ingredientPart = 0;
         if (taste.ingredientNorm() > 0 && !recipe.ingredients().isEmpty()) {
             double dot = 0;
+            double recipeLength = 0;
             for (UUID ingredient : recipe.ingredients().keySet()) {
-                dot += Math.max(0, taste.ingredients().getOrDefault(ingredient, 0.0));
+                double rarity = snapshot.rarity(ingredient);
+                dot += Math.max(0, taste.ingredients().getOrDefault(ingredient, 0.0)) * rarity;
+                recipeLength += rarity * rarity;
             }
-            ingredientPart = dot / (Math.sqrt(recipe.ingredients().size()) * taste.ingredientNorm());
+            ingredientPart = dot / (Math.sqrt(recipeLength) * taste.ingredientNorm());
         }
         double categoryPart = 0;
         if (recipe.categoryId() != null && taste.maxCategory() > 0) {

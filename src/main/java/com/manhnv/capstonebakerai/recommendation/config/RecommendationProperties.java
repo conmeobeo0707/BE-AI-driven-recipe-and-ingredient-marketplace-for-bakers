@@ -6,17 +6,14 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-// Settings under app.recommendation.* in application.properties.
 @Getter
 @Setter
 @Component
 @ConfigurationProperties(prefix = "app.recommendation")
 public class RecommendationProperties {
 
-    // Feature weights used while no trained model is active.
     private DefaultWeights defaultWeights = new DefaultWeights();
 
-    // Minimum data before training is allowed.
     private Training training = new Training();
 
     public Weights defaultWeights() {
