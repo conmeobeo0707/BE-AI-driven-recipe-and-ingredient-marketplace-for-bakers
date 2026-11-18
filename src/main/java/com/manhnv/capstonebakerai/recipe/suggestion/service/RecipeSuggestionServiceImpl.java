@@ -106,7 +106,6 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
         matched.sort(String.CASE_INSENSITIVE_ORDER);
         missing.sort(String.CASE_INSENSITIVE_ORDER);
         int total = mapped.size() + unmapped.size();
-        //coverage = matched / total
         return new RecipeSuggestionItem(recipe.getId(), recipe.getTitle(), matched.size(), total,
                 total == 0 ? 0 : (double) matched.size() / total, matched, missing, unmapped.size());
     }

@@ -92,7 +92,7 @@ public class IngredientImageServiceImpl implements IngredientImageService {
             );
         }
 
-        // Validate the image first
+        // Validate the image first so an invalid file does not use up the customer's quota.
         String dataUrl = imagePreprocessor.toDataUrl(file);
 
         AtomicInteger usage = consumeDailyQuota(userId);
@@ -106,6 +106,8 @@ public class IngredientImageServiceImpl implements IngredientImageService {
                     IngredientImageServiceImpl::isRefused
             );
         } catch (AppException exception) {
+            // The customer got no result (busy, network, timeout, Groq-side error or an unusable answer):
+            // give the attempt back. A refused image keeps the attempt so it cannot be retried for free.
             if (exception.getErrorCode() != IngredientImageErrorCode.VISION_REFUSED) {
                 usage.decrementAndGet();
             }

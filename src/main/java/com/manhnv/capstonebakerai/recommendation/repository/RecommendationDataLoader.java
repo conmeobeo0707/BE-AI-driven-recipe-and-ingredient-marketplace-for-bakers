@@ -85,9 +85,9 @@ public class RecommendationDataLoader {
         // Only ingredients linked to an active catalog entry count towards taste.
         Map<UUID, Map<UUID, String>> ingredients = new HashMap<>();
         for (Object[] row : entityManager.createQuery("""
-                select ri.recipe.id, c.id, c.canonicalName
-                from RecipeIngredient ri join ri.ingredient i join i.catalogIngredient c
-                where ri.recipe.recipeStatus = :status and c.active = true
+                select i.recipe.id, c.id, c.canonicalName
+                from Ingredient i join i.catalogIngredient c
+                where i.recipe.recipeStatus = :status and c.active = true
                 """, Object[].class)
                 .setParameter("status", RecipeStatus.PUBLISHED)
                 .getResultList()) {
