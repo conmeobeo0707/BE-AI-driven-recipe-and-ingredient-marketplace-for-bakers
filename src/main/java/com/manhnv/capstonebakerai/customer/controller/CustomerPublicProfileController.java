@@ -31,4 +31,15 @@ public class CustomerPublicProfileController {
     ) {
         return ApiResponse.success(customerProfileService.getPublicProfileByUserId(userId));
     }
+
+    @GetMapping("/detail/{id}")
+    @Operation(
+            summary = "Lấy thông tin hiển thị của Customer theo CustomerId",
+            description = "Dùng customerId từ response để lấy tên, avatar, skill level, giới tính, ngày sinh và các hobby kèm thông tin chi tiết. Không trả email, số điện thoại hoặc địa chỉ."
+    )
+    public ApiResponse<CustomerPublicProfileResponse> getById(
+            @PathVariable UUID id
+    ) {
+        return ApiResponse.success(customerProfileService.getPublicProfileById(id));
+    }
 }

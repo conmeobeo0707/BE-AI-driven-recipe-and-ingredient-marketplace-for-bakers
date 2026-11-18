@@ -63,6 +63,23 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     @Override
+    public CustomerPublicProfileResponse getPublicProfileById(UUID customerId) {
+        Customer customer = findCustomerById(customerId);
+        var user = customer.getUser();
+
+        return new CustomerPublicProfileResponse(
+                user.getUserId(),
+                customer.getId(),
+                user.getFullName(),
+                user.getAvatarUrl(),
+                customer.getSkillLevel(),
+                user.getGender(),
+                user.getBod(),
+                selectedHobbies(customer)
+        );
+    }
+
+    @Override
     @Transactional
     public CustomerProfileResponse updateProfile(UUID userId, UpdateCustomerProfileRequest request) {
         Customer customer = findCustomer(userId);
@@ -95,6 +112,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     private Customer findCustomer(UUID userId) {
         return customerRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(CustomerErrorCode.CUSTOMER_PROFILE_NOT_FOUND));
+    }
+
+    private Customer findCustomerById(UUID customerId) {
+        return customerRepository.findById(customerId)
                 .orElseThrow(() -> new AppException(CustomerErrorCode.CUSTOMER_PROFILE_NOT_FOUND));
     }
 

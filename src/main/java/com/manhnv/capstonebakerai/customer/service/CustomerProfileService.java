@@ -12,6 +12,8 @@ public interface CustomerProfileService {
 
     CustomerPublicProfileResponse getPublicProfileByUserId(UUID userId);
 
+    CustomerPublicProfileResponse getPublicProfileById(UUID customerId);
+
     CustomerProfileResponse updateProfile(UUID userId, UpdateCustomerProfileRequest request);
 
     CustomerProfileResponse updateHobbies(UUID userId, UpdateCustomerHobbiesRequest request);
