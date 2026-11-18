@@ -316,6 +316,19 @@ public class OrderServiceImpl implements OrderService {
         return historyService.getForStaff(orderId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public OrderStatusSummaryResponse getStatusSummaryForStaff() {
+        long totalOrders = orderRepository.count();
+        long pendingApproval = orderRepository.countByStatusIn(
+                List.of(OrderStatus.AWAITING_PAYMENT, OrderStatus.PENDING));
+        long shipping = orderRepository.countByStatusIn(
+                List.of(OrderStatus.READY_TO_SHIP, OrderStatus.SHIPPING));
+        long completed = orderRepository.countByStatusIn(List.of(OrderStatus.DELIVERED));
+
+        return new OrderStatusSummaryResponse(totalOrders, pendingApproval, shipping, completed);
+    }
+
     private Order buildOrder(Customer customer, UUID createdBy, CreateOrderRequest request, BigDecimal discountPercent) {
         Order order = Order.builder()
                 .code(generateCode())

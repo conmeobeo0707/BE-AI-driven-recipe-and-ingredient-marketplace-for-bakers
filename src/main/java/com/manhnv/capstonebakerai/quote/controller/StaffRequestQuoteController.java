@@ -5,10 +5,13 @@ import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.quote.dto.request.MarkOrderedRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RejectRequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteResponse;
+import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteStaffSummaryResponse;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteSummaryResponse;
 import com.manhnv.capstonebakerai.quote.enums.RequestQuoteStatus;
 import com.manhnv.capstonebakerai.quote.service.RequestQuoteService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,35 @@ import java.util.UUID;
 public class StaffRequestQuoteController {
 
     private final RequestQuoteService service;
+
+    @Operation(summary = "API lấy thống kê yêu cầu đặt sỉ", description = "Snapshot hiện tại, không filter theo thời gian. handledByMe lấy theo user đang đăng nhập")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Thống kê yêu cầu đặt sỉ",
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            name = "RequestQuoteStaffSummaryExample",
+                            value = """
+                                    {
+                                      "success": true,
+                                      "message": null,
+                                      "data": {
+                                        "totalRequests": 342,
+                                        "waitingClaim": 12,
+                                        "handledByMe": 27,
+                                        "ordered": 198
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<RequestQuoteStaffSummaryResponse>> summary() {
+        return ResponseEntity.ok(ApiResponse.success(
+                service.getSummaryForStaff(SecurityUtils.getCurrentUserId())));
+    }
 
     @Operation(summary = "API lấy danh sách yêu cầu đặt sỉ", description = "Lọc theo status (cho phép null), sort theo createdAt")
     @GetMapping

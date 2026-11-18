@@ -14,6 +14,7 @@ import com.manhnv.capstonebakerai.quote.dto.request.RejectRequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RequestQuoteItemRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteResponse;
+import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteStaffSummaryResponse;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteSummaryResponse;
 import com.manhnv.capstonebakerai.quote.entity.RequestQuote;
 import com.manhnv.capstonebakerai.quote.entity.RequestQuoteDetail;
@@ -176,6 +177,16 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
         RequestQuote saved = repository.save(q);
         publishStatusChanged(saved, false);
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RequestQuoteStaffSummaryResponse getSummaryForStaff(UUID staffUserId) {
+        long totalRequests = repository.count();
+        long waitingClaim = repository.countByStatus(RequestQuoteStatus.PENDING);
+        long handledByMe = repository.countByHandledBy(staffUserId);
+        long ordered = repository.countByStatus(RequestQuoteStatus.ORDERED);
+        return new RequestQuoteStaffSummaryResponse(totalRequests, waitingClaim, handledByMe, ordered);
     }
 
     // ===== Helpers =====

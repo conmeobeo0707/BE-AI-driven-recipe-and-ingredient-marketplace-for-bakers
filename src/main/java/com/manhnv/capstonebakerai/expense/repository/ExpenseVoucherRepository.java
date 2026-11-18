@@ -69,4 +69,11 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
     List<MonthAmount> expensesByMonth(@Param("status") ExpenseVoucherStatus status,
                                       @Param("from") LocalDateTime from,
                                       @Param("to") LocalDateTime to);
+
+    @Query("select coalesce(sum(v.amount), 0) from ExpenseVoucher v where v.status = :status and v.createdAt >= :from and v.createdAt < :to")
+    BigDecimal sumAmountByStatusAndCreatedAtBetween(@Param("status") ExpenseVoucherStatus status,
+                                                     @Param("from") LocalDateTime from,
+                                                     @Param("to") LocalDateTime to);
+
+    long countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(ExpenseVoucherStatus status, LocalDateTime from, LocalDateTime to);
 }

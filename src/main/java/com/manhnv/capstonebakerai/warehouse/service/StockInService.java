@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.warehouse.dto.StockInCreateRequest;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInDetailResponse;
+import com.manhnv.capstonebakerai.warehouse.dto.StockInStatusSummaryResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInUpdateRequest;
 import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
@@ -16,4 +17,5 @@ public interface StockInService {
     StockInDetailResponse update(UUID noteId, StockInUpdateRequest request);
     StockInNote complete(UUID noteId);
     StockInNote cancel(UUID noteId);
+    StockInStatusSummaryResponse getStatusSummary();
 }

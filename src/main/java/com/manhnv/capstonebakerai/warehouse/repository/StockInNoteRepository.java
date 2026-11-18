@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 public interface StockInNoteRepository extends JpaRepository<StockInNote, UUID> {
@@ -18,6 +19,9 @@ public interface StockInNoteRepository extends JpaRepository<StockInNote, UUID> 
     Page<StockInNote> findByStatus(NoteStatus status, Pageable pageable);
     Page<StockInNote> findBySupplierId(UUID supplierId, Pageable pageable);
     Page<StockInNote> findBySupplierIdAndStatus(UUID supplierId, NoteStatus status, Pageable pageable);
+    long countByStatus(NoteStatus status);
+    @Query("select coalesce(sum(n.debtAmount), 0) from StockInNote n where n.status <> :excludedStatus")
+    BigDecimal sumDebtAmountExcludingStatus(@Param("excludedStatus") NoteStatus excludedStatus);
     @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select n from StockInNote n where n.noteId=:id")
     Optional<StockInNote> lockById(@Param("id") UUID id);
 

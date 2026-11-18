@@ -1,13 +1,17 @@
 package com.manhnv.capstonebakerai.warehouse.controller;
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInCreateRequest;
+import com.manhnv.capstonebakerai.warehouse.dto.StockInStatusSummaryResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInUpdateRequest;
 import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.dto.StockInDetailResponse;
 import com.manhnv.capstonebakerai.warehouse.service.StockInService;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,5 +27,29 @@ public class StockInController {
  @PostMapping("/{id}/cancel") public ApiResponse<StockInNote> cancel(@PathVariable UUID id){return ApiResponse.success(service.cancel(id));}
  @GetMapping public ApiResponse<Page<StockInNote>> list(@RequestParam(required=false) NoteStatus status,
          @PageableDefault(size=20,sort="createdAt",direction=Sort.Direction.DESC) Pageable pageable){return ApiResponse.success(service.list(status,pageable));}
+ @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
+ @io.swagger.v3.oas.annotations.responses.ApiResponse(
+         responseCode = "200",
+         description = "Thống kê trạng thái phiếu nhập hàng",
+         content = @Content(
+                 mediaType = "application/json",
+                 examples = @ExampleObject(
+                         name = "StockInStatusSummaryExample",
+                         value = """
+                                 {
+                                   "success": true,
+                                   "message": null,
+                                   "data": {
+                                     "totalNotes": 134,
+                                     "pending": 8,
+                                     "totalDebt": 15230000,
+                                     "cancelled": 6
+                                   }
+                                 }
+                                 """
+                 )
+         )
+ )
+ @GetMapping("/summary") public ApiResponse<StockInStatusSummaryResponse> summary(){return ApiResponse.success(service.getStatusSummary());}
  @GetMapping("/{id}") public ApiResponse<StockInDetailResponse> get(@PathVariable UUID id){return ApiResponse.success(service.get(id));}
 }

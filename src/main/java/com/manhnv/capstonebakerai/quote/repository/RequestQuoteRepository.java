@@ -15,6 +15,10 @@ public interface RequestQuoteRepository extends JpaRepository<RequestQuote, UUID
     @EntityGraph(attributePaths = {"details", "customer"})
     Optional<RequestQuote> findWithDetailsById(UUID id);
 
+    long countByStatus(RequestQuoteStatus status);
+
+    long countByHandledBy(UUID handledBy);
+
     // Nhận xử lý: chỉ thành công nếu yêu cầu còn PENDING, chống 2 staff bấm cùng lúc
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

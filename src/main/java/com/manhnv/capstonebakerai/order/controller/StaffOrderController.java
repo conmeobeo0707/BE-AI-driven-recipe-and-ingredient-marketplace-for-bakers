@@ -7,6 +7,7 @@ import com.manhnv.capstonebakerai.order.dto.request.StaffCreateOrderRequest;
 import com.manhnv.capstonebakerai.order.dto.request.UpdateOrderStatusRequest;
 import com.manhnv.capstonebakerai.order.dto.response.OrderHistoryStaffResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderResponse;
+import com.manhnv.capstonebakerai.order.dto.response.OrderStatusSummaryResponse;
 import com.manhnv.capstonebakerai.order.dto.response.OrderSummaryResponse;
 import com.manhnv.capstonebakerai.order.dto.response.RevenueReportResponse;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
@@ -14,6 +15,8 @@ import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
 import com.manhnv.capstonebakerai.order.enums.RevenuePeriodType;
 import com.manhnv.capstonebakerai.order.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +68,34 @@ public class StaffOrderController {
         LocalDate end = to != null ? to : LocalDate.now();
         LocalDate start = from != null ? from : end.minusDays(29);
         return ResponseEntity.ok(ApiResponse.success(service.getRevenueReport(type, start, end)));
+    }
+
+    @Operation(summary = "API lấy thống kê trạng thái đơn hàng", description = "Snapshot toàn bộ dữ liệu hiện tại, không filter theo thời gian")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Thống kê trạng thái đơn hàng",
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            name = "OrderStatusSummaryExample",
+                            value = """
+                                    {
+                                      "success": true,
+                                      "message": null,
+                                      "data": {
+                                        "totalOrders": 134,
+                                        "pendingApproval": 8,
+                                        "shipping": 15,
+                                        "completed": 102
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<OrderStatusSummaryResponse>> summary() {
+        return ResponseEntity.ok(ApiResponse.success(service.getStatusSummaryForStaff()));
     }
 
     @Operation(summary = "Lấy chi tiết đơn hàng")
