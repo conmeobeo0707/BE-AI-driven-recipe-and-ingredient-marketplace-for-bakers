@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.expense.dto.response;
 
 import com.manhnv.capstonebakerai.expense.enums.ExpenseVoucherStatus;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -14,6 +15,6 @@ public record ExpenseVoucherResponse(
         BigDecimal amount,
         String reason,
         ExpenseVoucherStatus status,
-        UUID createdBy,
+        UserSummaryResponse createdBy,
         LocalDateTime createdAt)
 { }

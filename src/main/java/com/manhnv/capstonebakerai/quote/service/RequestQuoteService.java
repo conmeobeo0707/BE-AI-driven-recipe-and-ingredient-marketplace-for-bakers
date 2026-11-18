@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.quote.dto.request.MarkOrderedRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RejectRequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteResponse;
+import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteStaffSummaryResponse;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteSummaryResponse;
 import com.manhnv.capstonebakerai.quote.enums.RequestQuoteStatus;
 import org.springframework.data.domain.Page;
@@ -25,4 +26,5 @@ public interface RequestQuoteService {
     RequestQuoteResponse claim(UUID id, UUID staffUserId);
     RequestQuoteResponse markOrdered(UUID id, UUID staffUserId, boolean manager, MarkOrderedRequest request);
     RequestQuoteResponse reject(UUID id, UUID staffUserId, boolean manager, RejectRequestQuoteRequest request);
+    RequestQuoteStaffSummaryResponse getSummaryForStaff(UUID staffUserId);
 }
