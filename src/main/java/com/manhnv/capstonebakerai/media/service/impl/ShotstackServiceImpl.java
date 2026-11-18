@@ -5,6 +5,7 @@ import com.manhnv.capstonebakerai.media.dto.request.ShotstackWebhookRequest;
 import com.manhnv.capstonebakerai.media.event.ShotstackRenderVerifiedEvent;
 import com.manhnv.capstonebakerai.media.service.ShotstackService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,7 @@ import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ShotstackServiceImpl implements ShotstackService {
@@ -68,9 +70,12 @@ public class ShotstackServiceImpl implements ShotstackService {
 
     @Override
     public void handleWebhook(ShotstackWebhookRequest webhook) {
-        if (webhook.getId() == null || webhook.getId().isBlank()
-                || !"edit".equalsIgnoreCase(webhook.getType())
-                || !"render".equalsIgnoreCase(webhook.getAction())) {
+        if (!"edit".equalsIgnoreCase(webhook.getType()) || !"render".equalsIgnoreCase(webhook.getAction())) {
+            log.debug("Ignoring Shotstack webhook type={} action={} id={}",
+                    webhook.getType(), webhook.getAction(), webhook.getId());
+            return;
+        }
+        if (webhook.getId() == null || webhook.getId().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Shotstack render webhook");
         }
         // Shotstack webhooks are unsigned: verify with the provider before publishing the result.
