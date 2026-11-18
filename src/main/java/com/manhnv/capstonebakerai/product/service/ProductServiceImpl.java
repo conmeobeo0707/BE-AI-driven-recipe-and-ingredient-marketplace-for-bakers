@@ -7,6 +7,8 @@ import com.manhnv.capstonebakerai.product.enums.ProductStatus;
 import com.manhnv.capstonebakerai.product.exception.ProductErrorCode;
 import com.manhnv.capstonebakerai.product.repository.*;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -26,15 +28,17 @@ public class ProductServiceImpl implements ProductService {
     private final ChildProductRepository children;
     private final UnitPriceHistoryRepository priceHistory;
     private final ProductCategoryRepository categories;
+    private final UserSummaryService userSummaryService;
 
     public ProductServiceImpl(ProductRepository products, ProductUnitRepository units,
             ChildProductRepository children, UnitPriceHistoryRepository priceHistory,
-            ProductCategoryRepository categories) {
+            ProductCategoryRepository categories, UserSummaryService userSummaryService) {
         this.products = products;
         this.units = units;
         this.children = children;
         this.priceHistory = priceHistory;
         this.categories = categories;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -171,9 +175,16 @@ public class ProductServiceImpl implements ProductService {
     public List<UnitPriceHistoryResponse> getUnitPriceHistory(UUID productId, UUID unitId) {
         if (units.findByUnitIdAndProductId(unitId, productId).isEmpty())
             throw new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product");
-        return priceHistory.findByUnitIdOrderByCreatedAtDesc(unitId).stream()
-                .map(priceHistoryEntry -> new UnitPriceHistoryResponse(priceHistoryEntry.getUnitHistoryId(), priceHistoryEntry.getUnitId(), priceHistoryEntry.getUpdatedBy(),
-                        priceHistoryEntry.getSellingPrice(), priceHistoryEntry.getCreatedAt())).toList();
+        List<UnitPriceHistory> entries = priceHistory.findByUnitIdOrderByCreatedAtDesc(unitId);
+        Map<UUID, UserSummaryResponse> updaters = userSummaryService.getSummaries(
+                entries.stream().map(UnitPriceHistory::getUpdatedBy).filter(Objects::nonNull).distinct().toList());
+        return entries.stream()
+                .map(priceHistoryEntry -> {
+                    UUID updatedBy = priceHistoryEntry.getUpdatedBy();
+                    UserSummaryResponse updater = updatedBy == null ? null : updaters.getOrDefault(updatedBy, new UserSummaryResponse(updatedBy, null, null));
+                    return new UnitPriceHistoryResponse(priceHistoryEntry.getUnitHistoryId(), priceHistoryEntry.getUnitId(), updater,
+                            priceHistoryEntry.getSellingPrice(), priceHistoryEntry.getCreatedAt());
+                }).toList();
     }
 
     @Override

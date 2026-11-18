@@ -7,6 +7,7 @@ import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseCategory;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseCategoryType;
@@ -16,6 +17,8 @@ import com.manhnv.capstonebakerai.expense.exception.ExpenseVoucherErrorCode;
 import com.manhnv.capstonebakerai.expense.mapper.ExpenseVoucherMapper;
 import com.manhnv.capstonebakerai.expense.repository.ExpenseCategoryRepository;
 import com.manhnv.capstonebakerai.expense.repository.ExpenseVoucherRepository;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -29,6 +32,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -39,6 +44,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     ExpenseVoucherRepository voucherRepository;
     ExpenseCategoryRepository categoryRepository;
     ExpenseVoucherMapper mapper;
+    UserSummaryService userSummaryService;
 
     @Override
     @Transactional
@@ -57,7 +63,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
                 .createdBy(userId)
                 .build();
 
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
@@ -72,7 +78,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
         voucher.setAmount(request.amount());
         voucher.setReason(request.reason());
 
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
@@ -85,19 +91,19 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
         voucher.setStatus(ExpenseVoucherStatus.CANCELLED);
         voucher.setCancelReason(request != null ? request.cancelReason() : null);
         voucher.setCancelledAt(LocalDateTime.now());
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ExpenseVoucherResponse> getAll(Pageable pageable) {
-        return voucherRepository.findAll(pageable).map(mapper::toResponse);
+        return enrichPage(voucherRepository.findAll(pageable));
     }
 
     @Override
     @Transactional(readOnly = true)
     public ExpenseVoucherResponse getById(UUID id) {
-        return mapper.toResponse(findOrThrow(id));
+        return enrich(findOrThrow(id));
     }
 
     @Override
@@ -137,7 +143,35 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
 
         // Unlike getReport() (active-only totals), this backs the voucher management table, which
         // needs both ACTIVE and CANCELLED rows so the UI's status tabs have something to filter.
-        return voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
+        Page<ExpenseVoucherRow> rows = voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
+        Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
+                rows.getContent().stream().map(ExpenseVoucherRow::createdBy).filter(Objects::nonNull).distinct().toList());
+        return rows.map(row -> new ExpenseVoucherResponse(row.id(), row.code(), row.expenseCategoryId(), row.expenseCategoryName(),
+                row.amount(), row.reason(), row.status(), resolveCreator(creators, row.createdBy()), row.createdAt()));
+    }
+
+    /** Fills in the mapper-skipped `createdBy` with a resolved name/avatar for a single entity. */
+    private ExpenseVoucherResponse enrich(ExpenseVoucher entity) {
+        ExpenseVoucherResponse base = mapper.toResponse(entity);
+        UserSummaryResponse creator = userSummaryService.getSummary(entity.getCreatedBy());
+        return new ExpenseVoucherResponse(base.id(), base.code(), base.expenseCategoryId(), base.expenseCategoryName(),
+                base.amount(), base.reason(), base.status(), creator, base.createdAt());
+    }
+
+    /** Same as {@link #enrich(ExpenseVoucher)} but batches the user lookup for a whole page. */
+    private Page<ExpenseVoucherResponse> enrichPage(Page<ExpenseVoucher> page) {
+        Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
+                page.getContent().stream().map(ExpenseVoucher::getCreatedBy).filter(Objects::nonNull).distinct().toList());
+        return page.map(entity -> {
+            ExpenseVoucherResponse base = mapper.toResponse(entity);
+            return new ExpenseVoucherResponse(base.id(), base.code(), base.expenseCategoryId(), base.expenseCategoryName(),
+                    base.amount(), base.reason(), base.status(), resolveCreator(creators, entity.getCreatedBy()), base.createdAt());
+        });
+    }
+
+    private UserSummaryResponse resolveCreator(Map<UUID, UserSummaryResponse> creators, UUID userId) {
+        if (userId == null) return null;
+        return creators.getOrDefault(userId, new UserSummaryResponse(userId, null, null));
     }
 
     private String generateCode() {

@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.order.dto.response;
 
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -12,7 +13,7 @@ public record OrderResponse(
         UUID id,
         String code,
         UUID customerId,
-        UUID createdBy,
+        UserSummaryResponse createdBy,
         OrderStatus status,
         PaymentMethod paymentMethod,
         BigDecimal productsPrice,
