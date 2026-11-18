@@ -12,6 +12,7 @@ import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeVideoRenderRepository;
 import com.manhnv.capstonebakerai.recipe.service.impl.RecipeVideoServiceImpl;
+import com.manhnv.capstonebakerai.recipe.video.VideoPhotoEmbedder;
 import com.manhnv.capstonebakerai.recipe.video.VideoSlides;
 import com.manhnv.capstonebakerai.recipe.video.VideoThemeSelector;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,22 @@ class RecipeVideoWebhookFlowTest {
         runWebhook("failed", "Render failed", false);
     }
 
+    @Test
+    void hostingCopyWebhookIsAcknowledgedWithoutVerification() {
+        var builder = RestClient.builder().baseUrl("https://shotstack.test");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var publisher = mock(org.springframework.context.ApplicationEventPublisher.class);
+        var shotstack = new ShotstackServiceImpl(builder.build(), publisher);
+        var callback = new ShotstackWebhookRequest();
+        callback.setType("serve");
+        callback.setAction("copy");
+        callback.setId("894ffa44-f4dd-4efa-8eae-9a067046ed9c");
+
+        assertDoesNotThrow(() -> shotstack.handleWebhook(callback));
+        server.verify();
+        verifyNoInteractions(publisher);
+    }
+
     private void runWebhook(String status, String error, boolean completed) {
         var builder = RestClient.builder().baseUrl("https://shotstack.test");
         var server = MockRestServiceServer.bindTo(builder).build();
@@ -75,7 +92,8 @@ class RecipeVideoWebhookFlowTest {
             var shotstack = spy(new ShotstackServiceImpl(builder.build(), context));
             doReturn(videoBytes).when(shotstack).downloadOutput(VERIFIED_URL);
             var service = new RecipeVideoServiceImpl(shotstack, renders, recipes, mediaRepository,
-                    storage, mediaHelper, transactionManager, mock(VideoThemeSelector.class), mock(VideoSlides.class));
+                    storage, mediaHelper, transactionManager, mock(VideoThemeSelector.class), mock(VideoSlides.class),
+                    mock(VideoPhotoEmbedder.class));
             context.registerBean(RecipeVideoService.class, () -> service);
             context.refresh();
             var callback = new ShotstackWebhookRequest();

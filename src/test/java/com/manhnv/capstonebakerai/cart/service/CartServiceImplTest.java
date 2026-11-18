@@ -1,6 +1,8 @@
 package com.manhnv.capstonebakerai.cart.service;
 
 import com.manhnv.capstonebakerai.cart.dto.request.AddCartItemRequest;
+import com.manhnv.capstonebakerai.cart.dto.request.UpdateCartItemQuantityRequest;
+import com.manhnv.capstonebakerai.cart.dto.response.CartItemResponse;
 import com.manhnv.capstonebakerai.cart.dto.response.CartResponse;
 import com.manhnv.capstonebakerai.cart.entity.Cart;
 import com.manhnv.capstonebakerai.cart.entity.CartItem;
@@ -177,6 +179,168 @@ public class CartServiceImplTest {
         when(unit.isSale()).thenReturn(false);
 
         assertThatThrownBy(() -> cartService.addItem(userId, request))
+                .isInstanceOf(AppException.class);
+        verify(cartItemRepository, never()).save(any());
+    }
+
+    // View cart
+
+    // UTCID01
+    @Test
+    void getMyCart_cartWithItems_shouldReturnItemsAndTotal() {
+        // Arrange
+        CartItem item1 = mock(CartItem.class);
+        CartItem item2 = mock(CartItem.class);
+        CartItemResponse response1 = mock(CartItemResponse.class);
+        CartItemResponse response2 = mock(CartItemResponse.class);
+
+        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of(item1, item2));
+        when(cartMapper.toItemResponse(item1)).thenReturn(response1);
+        when(cartMapper.toItemResponse(item2)).thenReturn(response2);
+        when(response1.subtotal()).thenReturn(new BigDecimal("50000"));
+        when(response2.subtotal()).thenReturn(new BigDecimal("100000"));
+
+        // Act
+        CartResponse response = cartService.getMyCart(userId);
+
+        // Assert
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.totalItems()).isEqualTo(2);
+        assertThat(response.totalAmount()).isEqualByComparingTo("150000");
+    }
+
+    // UTCID02
+    @Test
+    void getMyCart_emptyCart_shouldReturnEmptyResponse() {
+        // Arrange
+        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of());
+
+        // Act
+        CartResponse response = cartService.getMyCart(userId);
+
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalItems()).isZero();
+        assertThat(response.totalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // UTCID03
+    void getMyCart_noCart_shouldCreateNewCart() {
+        // Arrange
+        when(cartRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        when(cartRepository.save(any(Cart.class))).thenReturn(cart);
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of());
+
+        // Act
+        CartResponse response = cartService.getMyCart(userId);
+
+        // Assert
+        verify(cartRepository).save(any(Cart.class));
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // UTCID04
+    @Test
+    void getMyCart_singleItem_shouldReturnOneItem() {
+        // Arrange
+        CartItem item = mock(CartItem.class);
+        CartItemResponse itemResponse = mock(CartItemResponse.class);
+
+        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of(item));
+        when(cartMapper.toItemResponse(item)).thenReturn(itemResponse);
+        when(itemResponse.subtotal()).thenReturn(new BigDecimal("75000"));
+
+        // Act
+        CartResponse response = cartService.getMyCart(userId);
+
+        // Assert
+        assertThat(response.totalItems()).isEqualTo(1);
+        assertThat(response.totalAmount()).isEqualByComparingTo("75000");
+    }
+
+    // Update cart quantity
+
+    // UTCID01
+    @Test
+    void updateQuantity_validItem_shouldUpdateQuantity() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        UpdateCartItemQuantityRequest request = new UpdateCartItemQuantityRequest(new BigDecimal("5"));
+        CartItem item = CartItem.builder()
+                .cart(cart)
+                .quantity(new BigDecimal("2"))
+                .build();
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, userId)).thenReturn(Optional.of(item));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of());
+
+        // Act
+        CartResponse response = cartService.updateQuantity(userId, itemId, request);
+
+        // Assert
+        assertThat(item.getQuantity()).isEqualByComparingTo("5");
+        verify(cartItemRepository).save(item);
+        assertThat(response).isNotNull();
+    }
+
+    // UTCID02
+    @Test
+    void updateQuantity_decreaseQuantity_shouldUpdateToNewValue() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        UpdateCartItemQuantityRequest request = new UpdateCartItemQuantityRequest(BigDecimal.ONE);
+        CartItem item = CartItem.builder()
+                .cart(cart)
+                .quantity(new BigDecimal("4"))
+                .build();
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, userId)).thenReturn(Optional.of(item));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of());
+
+        // Act
+        cartService.updateQuantity(userId, itemId, request);
+
+        // Assert
+        assertThat(item.getQuantity()).isEqualByComparingTo("1");
+        verify(cartItemRepository).save(item);
+    }
+
+    // UTCID03
+    @Test
+    void updateQuantity_itemNotFound_shouldThrow() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        UpdateCartItemQuantityRequest request = new UpdateCartItemQuantityRequest(new BigDecimal("5"));
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, userId)).thenReturn(Optional.empty());
+
+        // Act - Assert
+        assertThatThrownBy(() -> cartService.updateQuantity(userId, itemId, request))
+                .isInstanceOf(AppException.class);
+        verify(cartItemRepository, never()).save(any());
+    }
+
+    // UTCID04
+    @Test
+    void updateQuantity_itemBelongsToOtherUser_shouldThrow() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        UpdateCartItemQuantityRequest request = new UpdateCartItemQuantityRequest(new BigDecimal("5"));
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, otherUserId)).thenReturn(Optional.empty());
+
+        // Act - Assert
+        assertThatThrownBy(() -> cartService.updateQuantity(otherUserId, itemId, request))
                 .isInstanceOf(AppException.class);
         verify(cartItemRepository, never()).save(any());
     }

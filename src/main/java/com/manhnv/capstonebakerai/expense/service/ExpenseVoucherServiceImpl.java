@@ -134,7 +134,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     }
 
     @Override
-    public Page<ExpenseVoucherResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable) {
+    public Page<ExpenseVoucherWithNameResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable) {
         YearMonth target = month != null ? month : YearMonth.now();
 
         if (categoryId != null && !categoryRepository.existsById(categoryId)) {

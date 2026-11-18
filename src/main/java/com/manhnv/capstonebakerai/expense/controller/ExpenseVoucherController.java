@@ -85,7 +85,7 @@ public class ExpenseVoucherController {
     @Operation(summary = "API lấy chi tiết phiếu chi", description = "month cho phép null(nếu null thì hệ thống sẽ tính month từ tháng đó, categoryId cho phép null(hệ thống sẽ lấy toàn bộ category). Đây là báo cáo chi tiết của phiếu chi.")
     @GetMapping("/report-detail")
     @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
-    public ResponseEntity<ApiResponse<Page<ExpenseVoucherResponse>>> listVoucherFromReport(
+    public ResponseEntity<ApiResponse<Page<ExpenseVoucherWithNameResponse>>> listVoucherFromReport(
             @RequestParam(required = false)
             @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam(required = false) UUID categoryId,
