@@ -260,9 +260,10 @@ public class RecommendationAdminService {
                         .toList())));
         hobbies.sort(Comparator.comparingInt(KnowledgeResponse.LearnedHobby::likes).reversed());
 
-        long ingredientRows = count("select count(i) from Ingredient i join i.recipe r where r.recipeStatus = :published");
-        long linkedRows = count("select count(i) from Ingredient i join i.recipe r where r.recipeStatus = :published"
-                + " and i.catalogIngredient is not null");
+        long ingredientRows = count("select count(ri) from RecipeIngredient ri join ri.recipe r"
+                + " where r.recipeStatus = :published");
+        long linkedRows = count("select count(ri) from RecipeIngredient ri join ri.recipe r"
+                + " where r.recipeStatus = :published and ri.ingredient.catalogIngredient is not null");
         Optional<RecommendationModel> active = modelRepository.findFirstByActiveTrue();
         return new KnowledgeResponse(
                 count("select count(c) from IngredientCatalog c where c.active = true"),

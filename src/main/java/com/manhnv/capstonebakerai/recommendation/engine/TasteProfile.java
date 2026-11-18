@@ -10,21 +10,22 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
-// "What does this customer like?" learned from their own behaviour.
-//
-// Every signal gets points: view +1 (at most 3 per recipe), bookmark +4, rating 5/4/3/2/1 -> +4/+2/0/-2/-4.
-// Points halve every 30 days, and only the last 180 days (max 500 signals) count.
-// A recipe's points are added to each of its catalog ingredients (times the ingredient's rarity),
-// its category and its difficulty.
+// "What does this customer like?" learned from their own behaviour
+// every signal gets points: view +1 (max 3 per recipe), bookmark +4, rating 5/4/3/2/1 -> +4/+2/0/-2/-4
+// points halve every 30 days, and only the last 180 days (max 500 signals) count
+// A recipe's points are added to each of its catalog ingredients (times the ingredient's rarity), its category and its difficulty.
 public record TasteProfile(
-        Map<UUID, Double> ingredients,      // catalog ingredient -> points
-        double ingredientNorm,              // length of the positive part, for cosine similarity
-        Map<UUID, Double> categories,       // recipe category -> points
+        Map<UUID, Double> ingredients,
+        // length of the positive part, for cosine similarity
+        double ingredientNorm,
+        Map<UUID, Double> categories,
         double maxCategory,
         Map<DifficultyEnum, Double> difficulties,
         double maxDifficulty,
-        Set<UUID> excludedRecipes,          // bookmarked or rated: never recommended again
-        List<UUID> recentLikes,             // up to 20 liked recipes, newest first (for "people who liked X")
+        // bookmarked or rated: never recommended again
+        Set<UUID> excludedRecipes,
+        // up to 20 liked recipes, newest first (for "people who liked X")
+        List<UUID> recentLikes,
         boolean hasHistory
 ) {
     private static final Duration HISTORY = Duration.ofDays(180);

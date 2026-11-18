@@ -90,6 +90,7 @@ public class IngredientCatalogLookupService {
                     || (term.normalized().length() >= 4
                     && (" " + query + " ").contains(" " + term.normalized() + " ")))) {
                 type = MatchType.PARTIAL;
+                // score = length of the shorter string / length of the longer string
                 score = (double) Math.min(query.length(), term.normalized().length())
                         / Math.max(query.length(), term.normalized().length());
             } else {
@@ -97,6 +98,7 @@ public class IngredientCatalogLookupService {
                     continue;
                 }
                 int maxLength = Math.max(query.length(), term.normalized().length());
+                // if the length difference is too large, skip fuzzy matching
                 if (Math.abs(query.length() - term.normalized().length()) > maxLength * (1 - MIN_SIMILARITY)) {
                     continue;
                 }
@@ -113,6 +115,7 @@ public class IngredientCatalogLookupService {
         return best.values().stream().sorted(ORDER).limit(limit).toList();
     }
 
+    //levenshtein distance similarity
     private double similarity(String first, String second) {
         int[] previous = new int[second.length() + 1];
         int[] current = new int[second.length() + 1];
