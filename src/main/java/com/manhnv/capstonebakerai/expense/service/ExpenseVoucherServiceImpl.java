@@ -9,6 +9,7 @@ import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherSummaryResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherWithNameResponse;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseCategory;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseCategoryType;
@@ -149,8 +150,12 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
         Page<ExpenseVoucherRow> rows = voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
         Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
                 rows.getContent().stream().map(ExpenseVoucherRow::createdBy).filter(Objects::nonNull).distinct().toList());
-        return rows.map(row -> new ExpenseVoucherResponse(row.id(), row.code(), row.expenseCategoryId(), row.expenseCategoryName(),
-                row.amount(), row.reason(), row.status(), resolveCreator(creators, row.createdBy()), row.createdAt()));
+        return rows.map(row -> {
+            UserSummaryResponse creator = resolveCreator(creators, row.createdBy());
+            ExpenseVoucherResponse response = new ExpenseVoucherResponse(row.id(), row.code(), row.expenseCategoryId(), row.expenseCategoryName(),
+                    row.amount(), row.reason(), row.status(), creator, row.createdAt());
+            return new ExpenseVoucherWithNameResponse(response, creator != null ? creator.fullName() : null);
+        });
     }
 
     @Override

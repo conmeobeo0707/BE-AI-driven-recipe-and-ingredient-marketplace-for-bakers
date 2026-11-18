@@ -8,6 +8,7 @@ import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherSummaryResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherWithNameResponse;
 import com.manhnv.capstonebakerai.expense.service.ExpenseVoucherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
