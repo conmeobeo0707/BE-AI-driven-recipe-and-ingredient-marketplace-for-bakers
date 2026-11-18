@@ -12,6 +12,9 @@ public class VideoSlides {
 
     public static final int WIDTH = 1920;
     public static final int HEIGHT = 1080;
+    public static final int INTRO_PHOTO_SIZE = 760;
+    public static final int STEP_PHOTO_WIDTH = 480;
+    public static final int STEP_PHOTO_HEIGHT = 660;
 
     public record Row(String name, String quantity) { }
 
