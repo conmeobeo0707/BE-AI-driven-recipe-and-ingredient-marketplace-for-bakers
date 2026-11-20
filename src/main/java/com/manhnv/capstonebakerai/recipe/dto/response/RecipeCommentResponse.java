@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.recipe.dto.response;
 
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 import lombok.*;
 
 import java.time.LocalDateTime;
