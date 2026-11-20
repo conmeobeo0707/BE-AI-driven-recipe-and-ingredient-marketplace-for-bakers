@@ -177,7 +177,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 .status(MediaStatus.ATTACHED)
                 .url(storedUrl)
                 .build());
-        recipe.setMedia(video);
+        recipe.setVideoMedia(video);
         recipeRepository.save(recipe);
 
         if (previous != null) {
@@ -273,7 +273,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         }
         if (!recipe.description().isEmpty()) intro.append(endSentence(recipe.description()));
         String introNarration = intro.toString();
-        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_BUDGET_CHARS);
+        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_PHOTO_BUDGET);
         List<String> introPhotos = photoEmbedder.embed(recipe.photos(),
                 VideoSlides.INTRO_PHOTO_SIZE, VideoSlides.INTRO_PHOTO_SIZE, photoBudget);
         scenes.add(new Scene(slides.intro(theme, recipe.category(), recipe.title(), recipe.description(),
