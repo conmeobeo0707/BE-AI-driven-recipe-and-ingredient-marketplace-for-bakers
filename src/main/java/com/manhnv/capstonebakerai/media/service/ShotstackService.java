@@ -10,4 +10,12 @@ public interface ShotstackService {
     void handleWebhook(ShotstackWebhookRequest webhook);
 
     byte[] downloadOutput(String url);
+
+    /**
+     * Actively checks a render's status with Shotstack and publishes the same
+     * {@code ShotstackRenderVerifiedEvent} the webhook would — a fallback for when Shotstack's
+     * callback never arrives (e.g. a dev-only ngrok tunnel that isn't running), driven by
+     * {@code RecipeVideoRenderPoller} instead of an inbound webhook call.
+     */
+    void pollAndPublish(String renderId);
 }

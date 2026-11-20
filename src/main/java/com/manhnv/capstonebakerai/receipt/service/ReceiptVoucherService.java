@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.receipt.service;
 
 import com.manhnv.capstonebakerai.receipt.dto.request.CreateReceiptVoucherRequest;
 import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptVoucherResponse;
+import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptVoucherSummaryResponse;
 import com.manhnv.capstonebakerai.receipt.enums.ReceiptCategoryType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,4 +16,5 @@ public interface ReceiptVoucherService {
     ReceiptVoucherResponse createFromPayment(UUID paymentId, BigDecimal amount, ReceiptCategoryType type, String note);
     ReceiptVoucherResponse getById(UUID id);
     Page<ReceiptVoucherResponse> getAll(UUID categoryId, Pageable pageable);
+    ReceiptVoucherSummaryResponse getSummary(UUID currentUserId);
 }

@@ -3,6 +3,7 @@ package com.manhnv.capstonebakerai.receipt.service;
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.receipt.dto.request.CreateReceiptVoucherRequest;
 import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptVoucherResponse;
+import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptVoucherSummaryResponse;
 import com.manhnv.capstonebakerai.receipt.entity.ReceiptCategory;
 import com.manhnv.capstonebakerai.receipt.entity.ReceiptVoucher;
 import com.manhnv.capstonebakerai.receipt.enums.ReceiptCategoryType;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -93,6 +95,18 @@ public class ReceiptVoucherServiceImpl implements ReceiptVoucherService{
         Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
                 page.getContent().stream().map(ReceiptVoucher::getCreatedBy).filter(Objects::nonNull).distinct().toList());
         return page.map(entity -> enrich(entity, creators));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReceiptVoucherSummaryResponse getSummary(UUID currentUserId) {
+        long totalVouchers = voucherRepository.count();
+        BigDecimal totalAmount = voucherRepository.sumAmount();
+        BigDecimal averagePerVoucher = totalVouchers == 0 ? BigDecimal.ZERO
+                : totalAmount.divide(BigDecimal.valueOf(totalVouchers), 2, RoundingMode.HALF_UP);
+        long myVoucherCount = voucherRepository.countByCreatedBy(currentUserId);
+
+        return new ReceiptVoucherSummaryResponse(totalVouchers, totalAmount, averagePerVoucher, myVoucherCount);
     }
 
     private ReceiptVoucherResponse enrich(ReceiptVoucher entity) {
