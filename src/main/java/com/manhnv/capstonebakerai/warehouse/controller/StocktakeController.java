@@ -16,8 +16,10 @@ import java.util.*;
 public class StocktakeController {
  private final StocktakeService service;public StocktakeController(StocktakeService service){this.service=service;}
  @PostMapping @ResponseStatus(HttpStatus.CREATED) public ApiResponse<StocktakeDetailResponse> create(@Valid @RequestBody StocktakeCreateRequest request){return ApiResponse.success(service.create(request));}
+ @GetMapping("/assignees") public ApiResponse<java.util.List<StocktakeService.StaffAssignee>> assignees(){return ApiResponse.success(service.assignees());}
+ @PutMapping("/{noteId}/assignee/{staffId}") public ApiResponse<StocktakeDetailResponse> assign(@PathVariable UUID noteId,@PathVariable UUID staffId){return ApiResponse.success(service.assign(noteId,staffId));}
  @PutMapping("/{noteId}/counts") public ApiResponse<StocktakeDetailResponse> count(@PathVariable UUID noteId,@Valid @RequestBody StocktakeCountRequest request){return ApiResponse.success(service.count(noteId,request));}
- @PostMapping("/{noteId}/complete") public ApiResponse<StocktakeDetailResponse> complete(@PathVariable UUID noteId){return ApiResponse.success(service.complete(noteId));}
+ @PostMapping("/{noteId}/complete") public ApiResponse<StocktakeDetailResponse> complete(@PathVariable UUID noteId, @Valid @RequestBody(required=false) StocktakeCountRequest request){return ApiResponse.success(service.complete(noteId, request));}
  @PostMapping("/{noteId}/cancel") public ApiResponse<StocktakeNote> cancel(@PathVariable UUID noteId){return ApiResponse.success(service.cancel(noteId));}
  @GetMapping public ApiResponse<Page<StocktakeNote>> list(@RequestParam(required=false) StocktakeStatus status,
          @PageableDefault(size=20,sort="createdAt",direction=Sort.Direction.DESC) Pageable pageable){return ApiResponse.success(service.list(status,pageable));}

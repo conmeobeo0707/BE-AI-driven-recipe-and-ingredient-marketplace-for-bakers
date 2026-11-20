@@ -1,10 +1,13 @@
 package com.manhnv.capstonebakerai.warehouse.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.product.dtos.ComboItemRequest;
 import com.manhnv.capstonebakerai.product.dtos.InventoryProduct;
 import com.manhnv.capstonebakerai.product.dtos.InventoryUnit;
 import com.manhnv.capstonebakerai.product.service.ProductService;
+import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import com.manhnv.capstonebakerai.warehouse.dto.*;
 import com.manhnv.capstonebakerai.warehouse.entity.*;
 import com.manhnv.capstonebakerai.warehouse.enums.*;
@@ -26,16 +29,24 @@ public class StockOutServiceImpl implements StockOutService {
     private final WarehouseSupport support;
     private final ProductService products;
     private final StockTransactionService stockTransactions;
+    private final StocktakeNoteRepository stocktakeNotes;
+    private final StocktakeItemRepository stocktakeItems;
+    private final UserRepository users;
 
     public StockOutServiceImpl(StockOutNoteRepository notes, StockOutItemRepository items, StockLotRepository lots,
                                WarehouseSupport support, ProductService products,
-                               StockTransactionService stockTransactions) {
+                               StockTransactionService stockTransactions, StocktakeNoteRepository stocktakeNotes,
+                               StocktakeItemRepository stocktakeItems, UserRepository users) {
         this.notes = notes; this.items = items; this.lots = lots; this.support = support; this.products = products;
         this.stockTransactions = stockTransactions;
+        this.stocktakeNotes = stocktakeNotes;
+        this.stocktakeItems = stocktakeItems;
+        this.users = users;
     }
 
     @Override @Transactional(readOnly = true)
     public Page<StockOutNote> list(NoteStatus status, StockOutType type, Pageable pageable) {
+        WarehouseSupport.requireWarehouseUser();
         if (status != null && type != null) return notes.findByStatusAndType(status, type, pageable);
         if (status != null) return notes.findByStatus(status, pageable);
         if (type != null) return notes.findByType(type, pageable);
@@ -44,18 +55,32 @@ public class StockOutServiceImpl implements StockOutService {
 
     @Override @Transactional(readOnly = true)
     public StockOutDetailResponse get(UUID noteId) {
+        WarehouseSupport.requireWarehouseUser();
         StockOutNote stockOutNote = notes.findById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stock-out note not found"));
-        return new StockOutDetailResponse(stockOutNote, items.findByNoteIdOrderByItemId(noteId));
+        return new StockOutDetailResponse(stockOutNote, items.findByNoteIdOrderByItemId(noteId),
+                userName(stockOutNote.getCreatedBy()), userName(stockOutNote.getApprovedBy()));
+    }
+
+    private String userName(UUID userId) {
+        return userId == null ? null : users.findById(userId).map(User::getFullName).orElse(null);
     }
 
     @Override @Transactional
     public StockOutNote create(StockOutCreateRequest request) {
+        WarehouseSupport.requireWarehouseUser();
+        return createPending(request, SecurityUtils.getCurrentUserId(), null, Map.of());
+    }
+
+    private StockOutNote createPending(StockOutCreateRequest request, UUID creator, UUID stocktakeNoteId,
+                                       Map<UUID, UUID> stocktakeItemsByLot) {
         List<UUID> productIds = request.items().stream().map(StockOutItemRequest::productId).distinct().toList();
         Map<UUID, InventoryProduct> productsById = new HashMap<>();
         support.lockProducts(productIds).forEach(inventoryProduct -> productsById.put(inventoryProduct.productId(), inventoryProduct));
         StockOutNote stockOutNote = new StockOutNote();
         stockOutNote.setCode(WarehouseSupport.code("SOUT"));
         stockOutNote.setType(request.type());
+        stockOutNote.setCreatedBy(creator);
+        stockOutNote.setStocktakeNoteId(stocktakeNoteId);
         stockOutNote.setReferenceOrderId(request.referenceOrderId());
         stockOutNote.setNote(request.note());
         stockOutNote.setStatus(NoteStatus.PENDING);
@@ -77,8 +102,10 @@ public class StockOutServiceImpl implements StockOutService {
             pendingItem.setNoteId(savedNote.getNoteId());
             pendingItem.setProductId(inventoryProduct.productId());
             pendingItem.setLotId(itemRequest.lotId());
+            if (itemRequest.lotId() != null) pendingItem.setStocktakeItemId(stocktakeItemsByLot.get(itemRequest.lotId()));
             pendingItem.setUnitId(baseUnit.unitId());
-            BigDecimal baseQuantity = itemRequest.quantity().multiply(requestedUnit.conversionFactor()).setScale(2, java.math.RoundingMode.HALF_UP);
+            BigDecimal baseQuantity = (stocktakeNoteId == null
+                    ? itemRequest.quantity().multiply(requestedUnit.conversionFactor()) : itemRequest.quantity()).setScale(2, java.math.RoundingMode.HALF_UP);
             if (baseQuantity.signum() <= 0 || baseQuantity.precision() - baseQuantity.scale() > 8) throw WarehouseSupport.error("Converted stock quantity exceeds the database precision limit");
             pendingItem.setQuantity(baseQuantity);
             pendingItem.setUnitPrice(BigDecimal.ZERO);
@@ -97,7 +124,7 @@ public class StockOutServiceImpl implements StockOutService {
         StockOutNote existingNote = notes.lockByReferenceOrderIdAndType(orderId, StockOutType.SALE).orElse(null);
         if (existingNote != null) {
             if (existingNote.getStatus() == NoteStatus.COMPLETED) return existingNote;
-            if (existingNote.getStatus() == NoteStatus.PENDING) return complete(existingNote.getNoteId());
+            if (existingNote.getStatus() == NoteStatus.PENDING) return postStockOut(existingNote, null);
             throw new AppException(WarehouseErrorCode.CONFLICT, "A cancelled sale stock-out already exists for this order");
         }
 
@@ -120,8 +147,8 @@ public class StockOutServiceImpl implements StockOutService {
                 .toList();
         StockOutCreateRequest stockOutRequest = new StockOutCreateRequest(StockOutType.SALE, orderId,
                 "Sale order " + orderId, expandedItems);
-        StockOutNote pendingNote = create(stockOutRequest);
-        return complete(pendingNote.getNoteId());
+        StockOutNote pendingNote = createPending(stockOutRequest, null, null, Map.of());
+        return postStockOut(pendingNote, null);
     }
 
     @Override
@@ -191,9 +218,60 @@ public class StockOutServiceImpl implements StockOutService {
     }
 
     @Override @Transactional
+    public StockOutNote createStocktakeDisposal(UUID stocktakeNoteId) {
+        WarehouseSupport.requireRole("STAFF");
+        UUID userId = SecurityUtils.getCurrentUserId();
+        StocktakeNote stocktake = lockStocktake(stocktakeNoteId);
+        if (!userId.equals(stocktake.getHandleBy())) throw new AppException(WarehouseErrorCode.FORBIDDEN);
+        if (stocktake.getStatus() != StocktakeStatus.PENDING_DISPOSAL) throw new AppException(WarehouseErrorCode.CONFLICT);
+        if (notes.findByStocktakeNoteIdAndStatus(stocktakeNoteId, NoteStatus.PENDING).isPresent()) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "A disposal is already awaiting approval");
+        }
+
+        Map<UUID, UUID> itemIdsByLot = new HashMap<>();
+        List<StockOutItemRequest> shortages = new ArrayList<>();
+        for (StocktakeItem item : stocktakeItems.findByNoteIdOrderByItemId(stocktakeNoteId)) {
+            if (item.getDiffQuantity() == null || item.getDiffQuantity().signum() >= 0) continue;
+            itemIdsByLot.put(item.getLotId(), item.getItemId());
+            shortages.add(new StockOutItemRequest(item.getProductId(), support.baseUnit(item.getProductId()).unitId(),
+                    item.getLotId(), item.getDiffQuantity().negate()));
+        }
+        if (shortages.isEmpty()) throw new AppException(WarehouseErrorCode.CONFLICT, "No shortages to dispose");
+        return createPending(new StockOutCreateRequest(StockOutType.DISPOSAL, null, stocktake.getCode(), shortages),
+                userId, stocktakeNoteId, itemIdsByLot);
+    }
+
+    @Override @Transactional
     public StockOutNote complete(UUID noteId) {
-        StockOutNote stockOutNote = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stock-out note not found"));
+        WarehouseSupport.requireWarehouseUser();
+        UUID stocktakeId = notes.findStocktakeNoteId(noteId).orElse(null);
+        StocktakeNote stocktake = stocktakeId == null ? null : lockStocktake(stocktakeId);
+        StockOutNote stockOutNote = lockStockOut(noteId);
+        if (stockOutNote.getType() == StockOutType.DISPOSAL) {
+            WarehouseSupport.requireRole("MANAGER");
+            stockOutNote.setApprovedBy(SecurityUtils.getCurrentUserId());
+            stockOutNote.setApprovedAt(LocalDateTime.now());
+        }
+        return postStockOut(stockOutNote, stocktake);
+    }
+
+    private StocktakeNote lockStocktake(UUID stocktakeNoteId) {
+        return stocktakeNotes.lockById(stocktakeNoteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND));
+    }
+
+    private StockOutNote lockStockOut(UUID noteId) {
+        return notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND));
+    }
+
+    private StockOutNote postStockOut(StockOutNote stockOutNote, StocktakeNote stocktake) {
+        UUID noteId = stockOutNote.getNoteId();
         if (stockOutNote.getStatus() != NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT, "Only PENDING stock-out notes can be completed");
+        Map<UUID, StocktakeItem> shortageItems = new HashMap<>();
+        if (stocktake != null) {
+            if (stocktake.getStatus() != StocktakeStatus.PENDING_DISPOSAL) throw new AppException(WarehouseErrorCode.CONFLICT);
+            stocktakeItems.findByNoteIdOrderByItemId(stocktake.getNoteId())
+                    .forEach(item -> shortageItems.put(item.getItemId(), item));
+        }
         List<StockOutItem> requestedItems = items.findByNoteIdOrderByItemId(noteId);
         List<UUID> productIds = requestedItems.stream().map(StockOutItem::getProductId).distinct().toList();
         support.lockProducts(productIds);
@@ -205,8 +283,18 @@ public class StockOutServiceImpl implements StockOutService {
             List<StockLot> eligibleLots;
             if (stockOutNote.getType() == StockOutType.SALE) eligibleLots = lots.findSaleableLots(requestedItem.getProductId(), LotStatus.STORAGE, today);
             else {
-                support.ensureLotsNotInDraftStocktake(List.of(requestedItem.getLotId()));
+                if (stocktake == null) support.ensureLotsNotInDraftStocktake(List.of(requestedItem.getLotId()));
                 eligibleLots = lots.lockByLotIds(List.of(requestedItem.getLotId()));
+            }
+            if (stocktake != null) {
+                StocktakeItem shortage = shortageItems.get(requestedItem.getStocktakeItemId());
+                if (shortage == null || !shortage.getLotId().equals(requestedItem.getLotId())
+                        || shortage.getDiffQuantity() == null
+                        || shortage.getDiffQuantity().negate().compareTo(requestedItem.getQuantity()) != 0
+                        || eligibleLots.isEmpty()
+                        || eligibleLots.getFirst().getCurrentQuantity().compareTo(shortage.getSystemQuantity()) != 0) {
+                    throw new AppException(WarehouseErrorCode.CONFLICT, "Stocktake shortage or lot quantity has changed");
+                }
             }
             if (eligibleLots.isEmpty()) throw new AppException(WarehouseErrorCode.INSUFFICIENT_STOCK, "No eligible lot for product " + requestedItem.getProductId());
             if (stockOutNote.getType() == StockOutType.SALE) {
@@ -226,6 +314,7 @@ public class StockOutServiceImpl implements StockOutService {
                 StockOutItem outputItem = new StockOutItem();
                 outputItem.setNoteId(noteId); outputItem.setProductId(requestedItem.getProductId()); outputItem.setLotId(stockLot.getLotId());
                 outputItem.setUnitId(requestedItem.getUnitId()); outputItem.setQuantity(deductedQuantity); outputItem.setUnitPrice(stockLot.getUnitCost()); outputItem.setTotalPrice(lineCost);
+                outputItem.setStocktakeItemId(requestedItem.getStocktakeItemId());
                 items.save(outputItem);
                 stockLot.setCurrentQuantity(stockLot.getCurrentQuantity().subtract(deductedQuantity));
                 stockLot.setStatus(stockLot.getCurrentQuantity().signum() == 0 ? LotStatus.EMPTY : stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(today) ? LotStatus.EXPIRED : LotStatus.STORAGE);
@@ -244,6 +333,10 @@ public class StockOutServiceImpl implements StockOutService {
         support.adjustStock(stockDeltas);
         totalCost = WarehouseSupport.money(totalCost);
         if (totalCost.precision() - totalCost.scale() > 13) throw WarehouseSupport.error("Stock-out total cost exceeds the database precision limit");
+        if (stocktake != null) {
+            stocktake.setStatus(StocktakeStatus.COMPLETED);
+            stocktake.setUpdatedAt(LocalDateTime.now());
+        }
         stockOutNote.setTotalCost(totalCost);
         stockOutNote.setStatus(NoteStatus.COMPLETED);
         stockOutNote.setUpdatedAt(LocalDateTime.now());
@@ -251,8 +344,17 @@ public class StockOutServiceImpl implements StockOutService {
     }
 
     @Override @Transactional
-    public StockOutNote cancel(UUID noteId) {
-        StockOutNote stockOutNote = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stock-out note not found"));
+    public StockOutNote cancel(UUID noteId, String reason) {
+        WarehouseSupport.requireWarehouseUser();
+        notes.findStocktakeNoteId(noteId).ifPresent(this::lockStocktake);
+        StockOutNote stockOutNote = lockStockOut(noteId);
+        if (stockOutNote.getType() == StockOutType.DISPOSAL) {
+            WarehouseSupport.requireRole("MANAGER");
+            if (reason == null || reason.isBlank() || reason.length() > 1000) {
+                throw WarehouseSupport.error("Enter a rejection reason of up to 1000 characters");
+            }
+            stockOutNote.setRejectionReason(reason.strip());
+        }
         if (stockOutNote.getStatus() != NoteStatus.PENDING) throw new AppException(WarehouseErrorCode.CONFLICT, "Only PENDING stock-out notes can be cancelled");
         stockOutNote.setStatus(NoteStatus.CANCELLED);
         stockOutNote.setUpdatedAt(LocalDateTime.now());
@@ -262,6 +364,7 @@ public class StockOutServiceImpl implements StockOutService {
     @Override
     @Transactional
     public StockOutNote disposeExpiredLot(UUID lotId) {
+        WarehouseSupport.requireWarehouseUser();
         StockLot existingLot = lots.findById(lotId)
                 .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Lot not found"));
         UUID productId = existingLot.getProductId();
@@ -283,7 +386,6 @@ public class StockOutServiceImpl implements StockOutService {
                 null,
                 "EXPIRED: Hủy toàn bộ lô " + expiredLot.getLotCode(),
                 List.of(new StockOutItemRequest(productId, baseUnit.unitId(), lotId, expiredLot.getCurrentQuantity())));
-        StockOutNote pendingNote = create(request);
-        return complete(pendingNote.getNoteId());
+        return create(request);
     }
 }

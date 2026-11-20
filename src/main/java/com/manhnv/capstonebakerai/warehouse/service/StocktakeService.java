@@ -10,10 +10,13 @@ import org.springframework.data.domain.Pageable;
 import java.util.UUID;
 
 public interface StocktakeService {
+    record StaffAssignee(UUID userId, String fullName) { }
+    java.util.List<StaffAssignee> assignees();
+    StocktakeDetailResponse assign(UUID noteId, UUID staffId);
     Page<StocktakeNote> list(StocktakeStatus status, Pageable pageable);
     StocktakeDetailResponse get(UUID noteId);
     StocktakeDetailResponse create(StocktakeCreateRequest request);
     StocktakeDetailResponse count(UUID noteId, StocktakeCountRequest request);
-    StocktakeDetailResponse complete(UUID noteId);
+    StocktakeDetailResponse complete(UUID noteId, StocktakeCountRequest request);
     StocktakeNote cancel(UUID noteId);
 }

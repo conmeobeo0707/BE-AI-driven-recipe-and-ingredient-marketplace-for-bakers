@@ -3,6 +3,9 @@ package com.manhnv.capstonebakerai.warehouse.service;
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.warehouse.dto.*;
+import com.manhnv.capstonebakerai.user.enums.Role;
+import com.manhnv.capstonebakerai.user.enums.UserStatus;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import com.manhnv.capstonebakerai.warehouse.entity.*;
 import com.manhnv.capstonebakerai.warehouse.enums.*;
 import com.manhnv.capstonebakerai.warehouse.exception.WarehouseErrorCode;
@@ -21,27 +24,34 @@ public class StocktakeServiceImpl implements StocktakeService {
     private final StocktakeItemRepository items;
     private final StockLotRepository lots;
     private final WarehouseSupport support;
-    private final StockTransactionService stockTransactions;
+    private final StockOutNoteRepository stockOutNotes;
+    private final UserRepository users;
 
     public StocktakeServiceImpl(StocktakeNoteRepository notes, StocktakeItemRepository items, StockLotRepository lots,
-                                WarehouseSupport support, StockTransactionService stockTransactions) {
+                                WarehouseSupport support, StockOutNoteRepository stockOutNotes,
+                                UserRepository users) {
         this.notes = notes; this.items = items; this.lots = lots; this.support = support;
-        this.stockTransactions = stockTransactions;
+        this.stockOutNotes = stockOutNotes; this.users = users;
     }
 
     @Override @Transactional(readOnly = true)
     public Page<StocktakeNote> list(StocktakeStatus status, Pageable pageable) {
-        return status == null ? notes.findAll(pageable) : notes.findByStatus(status, pageable);
+        WarehouseSupport.requireWarehouseUser();
+        return notes.findVisible(WarehouseSupport.hasRole("MANAGER"), SecurityUtils.getCurrentUserId(),
+                status == null ? null : status.name(), pageable);
     }
 
     @Override @Transactional(readOnly = true)
     public StocktakeDetailResponse get(UUID noteId) {
         StocktakeNote stocktakeNote = notes.findById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stocktake note not found"));
+        if (!WarehouseSupport.hasRole("MANAGER")) requireAssignee(stocktakeNote);
         return detail(stocktakeNote, items.findByNoteIdOrderByItemId(noteId));
     }
 
     @Override @Transactional
     public StocktakeDetailResponse create(StocktakeCreateRequest request) {
+        WarehouseSupport.requireRole("MANAGER");
+        if (request.handleBy() != null) validateStaff(request.handleBy());
         List<UUID> productIds = request.productIds().stream().distinct().sorted().toList();
         if (productIds.size() != request.productIds().size()) throw WarehouseSupport.error("Duplicate productIds are not allowed");
         support.lockProducts(productIds);
@@ -71,11 +81,49 @@ public class StocktakeServiceImpl implements StocktakeService {
         return detail(savedNote, stocktakeItems);
     }
 
+    @Override @Transactional(readOnly = true)
+    public List<StaffAssignee> assignees() {
+        WarehouseSupport.requireRole("MANAGER");
+        return users.findByRoleInAndStatusOrderByCreatedAtDescUserIdAsc(List.of(Role.STAFF), UserStatus.ACTIVE)
+                .stream().map(user -> new StaffAssignee(user.getUserId(), user.getFullName())).toList();
+    }
+
+    @Override @Transactional
+    public StocktakeDetailResponse assign(UUID noteId, UUID staffId) {
+        WarehouseSupport.requireRole("MANAGER");
+        StocktakeNote note = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND));
+        if (note.getStatus() != StocktakeStatus.DRAFT) throw new AppException(WarehouseErrorCode.CONFLICT);
+        validateStaff(staffId);
+        note.setHandleBy(staffId);
+        note.setUpdatedAt(LocalDateTime.now());
+        return detail(note, items.findByNoteIdOrderByItemId(noteId));
+    }
+
+    private void validateStaff(UUID staffId) {
+        if (users.findById(staffId).filter(user -> user.getRole() == Role.STAFF
+                && user.getStatus() == UserStatus.ACTIVE).isEmpty()) {
+            throw WarehouseSupport.error("Assign an active staff member");
+        }
+    }
+
+    private void requireAssignee(StocktakeNote note) {
+        WarehouseSupport.requireRole("STAFF");
+        if (!Objects.equals(note.getHandleBy(), SecurityUtils.getCurrentUserId())) {
+            throw new AppException(WarehouseErrorCode.FORBIDDEN);
+        }
+    }
+
     @Override @Transactional
     public StocktakeDetailResponse count(UUID noteId, StocktakeCountRequest request) {
         StocktakeNote stocktakeNote = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stocktake note not found"));
-        if (stocktakeNote.getStatus() != StocktakeStatus.DRAFT) throw new AppException(WarehouseErrorCode.CONFLICT, "Only DRAFT stocktakes accept counts");
+        requireAssignee(stocktakeNote);
+        if (stocktakeNote.getStatus() != StocktakeStatus.ASSIGNED) throw new AppException(WarehouseErrorCode.CONFLICT, "Only ASSIGNED stocktakes accept counts");
         List<StocktakeItem> stocktakeItems = items.findByNoteIdOrderByItemId(noteId);
+        updateCounts(stocktakeItems, request);
+        return detail(stocktakeNote, stocktakeItems);
+    }
+
+    private void updateCounts(List<StocktakeItem> stocktakeItems, StocktakeCountRequest request) {
         Map<UUID, StocktakeItem> itemsById = new HashMap<>();
         stocktakeItems.forEach(stocktakeItem -> itemsById.put(stocktakeItem.getItemId(), stocktakeItem));
         Set<UUID> countedItemIds = new HashSet<>();
@@ -88,21 +136,22 @@ public class StocktakeServiceImpl implements StocktakeService {
                 stocktakeItem.setActualQuantity(lotCount.actualQuantity()); stocktakeItem.setReason(lotCount.reason()); stocktakeItem.setNote(lotCount.note());
             }
         }
-        return detail(stocktakeNote, items.saveAll(stocktakeItems));
     }
 
     @Override @Transactional
-    public StocktakeDetailResponse complete(UUID noteId) {
+    public StocktakeDetailResponse complete(UUID noteId, StocktakeCountRequest request) {
         StocktakeNote stocktakeNote = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stocktake note not found"));
-        if (stocktakeNote.getStatus() != StocktakeStatus.DRAFT) throw new AppException(WarehouseErrorCode.CONFLICT, "Only DRAFT stocktakes can be completed");
+        requireAssignee(stocktakeNote);
+        if (stocktakeNote.getStatus() != StocktakeStatus.ASSIGNED) throw new AppException(WarehouseErrorCode.CONFLICT, "Only ASSIGNED stocktakes can be completed");
         List<StocktakeItem> stocktakeItems = items.findByNoteIdOrderByItemId(noteId);
+        if (request != null) updateCounts(stocktakeItems, request);
         if (stocktakeItems.isEmpty()) throw WarehouseSupport.error("Stocktake must contain at least one lot");
         List<UUID> productIds = stocktakeItems.stream().map(StocktakeItem::getProductId).distinct().sorted().toList();
         support.lockProducts(productIds);
         List<StockLot> lockedLots = lots.lockByLotIds(stocktakeItems.stream().map(StocktakeItem::getLotId).toList());
         Map<UUID, StockLot> lotsById = new HashMap<>();
         lockedLots.forEach(stockLot -> lotsById.put(stockLot.getLotId(), stockLot));
-        Map<UUID, BigDecimal> stockDeltas = new HashMap<>();
+        boolean hasShortage = false;
         for (StocktakeItem stocktakeItem : stocktakeItems) {
             if (stocktakeItem.getActualQuantity() == null) throw WarehouseSupport.error("Enter actual quantity for every lot before completing");
             StockLot stockLot = lotsById.get(stocktakeItem.getLotId());
@@ -113,20 +162,10 @@ public class StocktakeServiceImpl implements StocktakeService {
             BigDecimal costAmount = WarehouseSupport.money(difference.multiply(stocktakeItem.getUnitCost()));
             if (costAmount.precision() - costAmount.scale() > 13) throw WarehouseSupport.error("Stocktake cost amount exceeds the database precision limit");
             stocktakeItem.setDiffQuantity(difference); stocktakeItem.setCostAmount(costAmount);
-            stockDeltas.merge(stocktakeItem.getProductId(), difference, BigDecimal::add);
-            stockLot.setCurrentQuantity(stocktakeItem.getActualQuantity());
-            stockLot.setStatus(stockLot.getCurrentQuantity().signum() == 0 ? LotStatus.EMPTY : stockLot.getExpiryDate() != null && stockLot.getExpiryDate().isBefore(LocalDate.now()) ? LotStatus.EXPIRED : LotStatus.STORAGE);
-            if (difference.signum() != 0) {
-                StockTransactionType transactionType = difference.signum() > 0
-                        ? StockTransactionType.STOCKTAKE_INCREASE : StockTransactionType.STOCKTAKE_DECREASE;
-                stockTransactions.record(stockLot.getLotId(), stockLot.getProductId(), transactionType,
-                        difference, stockLot.getCurrentQuantity(), StockTransactionRefType.STOCKTAKE_NOTE,
-                        stocktakeNote.getNoteId());
-            }
+            hasShortage |= difference.signum() < 0;
         }
-        items.saveAll(stocktakeItems);
-        support.adjustStock(stockDeltas);
-        stocktakeNote.setStatus(StocktakeStatus.COMPLETED);
+        stocktakeNote.setCountsSubmittedAt(LocalDateTime.now());
+        if (!hasShortage) stocktakeNote.setStatus(StocktakeStatus.COMPLETED);
         stocktakeNote.setUpdatedAt(LocalDateTime.now());
         notes.save(stocktakeNote);
         return detail(stocktakeNote, stocktakeItems);
@@ -135,7 +174,14 @@ public class StocktakeServiceImpl implements StocktakeService {
     @Override @Transactional
     public StocktakeNote cancel(UUID noteId) {
         StocktakeNote stocktakeNote = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stocktake note not found"));
-        if (stocktakeNote.getStatus() != StocktakeStatus.DRAFT) throw new AppException(WarehouseErrorCode.CONFLICT, "Only DRAFT stocktakes can be cancelled");
+        WarehouseSupport.requireRole("MANAGER");
+        if (stocktakeNote.getStatus() == StocktakeStatus.COMPLETED || stocktakeNote.getStatus() == StocktakeStatus.CANCELLED) {
+            throw new AppException(WarehouseErrorCode.CONFLICT);
+        }
+        stockOutNotes.findByStocktakeNoteIdAndStatus(noteId, NoteStatus.PENDING).ifPresent(disposal -> {
+            disposal.setStatus(NoteStatus.CANCELLED);
+            disposal.setUpdatedAt(LocalDateTime.now());
+        });
         stocktakeNote.setStatus(StocktakeStatus.CANCELLED);
         stocktakeNote.setUpdatedAt(LocalDateTime.now());
         return notes.save(stocktakeNote);
@@ -147,6 +193,10 @@ public class StocktakeServiceImpl implements StocktakeService {
                 .forEach(stocktakeItem -> itemsByProductId.computeIfAbsent(stocktakeItem.getProductId(), productId -> new ArrayList<>()).add(stocktakeItem));
         List<StocktakeDetailResponse.ProductLots> products = itemsByProductId.entrySet().stream()
                 .map(entry -> new StocktakeDetailResponse.ProductLots(entry.getKey(), List.copyOf(entry.getValue()))).toList();
-        return new StocktakeDetailResponse(stocktakeNote, products);
+        String pendingDisposalCode = stocktakeNote.getStatus() == StocktakeStatus.PENDING_DISPOSAL
+                ? stockOutNotes.findByStocktakeNoteIdAndStatus(stocktakeNote.getNoteId(), NoteStatus.PENDING)
+                    .map(StockOutNote::getCode).orElse(null)
+                : null;
+        return new StocktakeDetailResponse(stocktakeNote, products, pendingDisposalCode);
     }
 }
