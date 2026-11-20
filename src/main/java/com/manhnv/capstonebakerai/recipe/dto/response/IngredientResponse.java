@@ -16,4 +16,5 @@ public class IngredientResponse {
     private String name;
     private String unit;
     private BigDecimal quantity;
+    private UUID catalogIngredientId;
 }

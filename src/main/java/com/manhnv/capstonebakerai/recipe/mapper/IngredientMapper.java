@@ -10,10 +10,13 @@ public class IngredientMapper {
         if (entity == null) return null;
         return IngredientResponse.builder()
                 .id(entity.getId())
-                .recipeId(entity.getRecipe() != null ? entity.getRecipe().getId() : null)
                 .name(entity.getName())
                 .unit(entity.getUnit())
-                .quantity(entity.getQuantity())
+                .catalogIngredientId(
+                        entity.getCatalogIngredient() == null
+                                ? null
+                                : entity.getCatalogIngredient().getId()
+                )
                 .build();
     }
 
@@ -22,7 +25,6 @@ public class IngredientMapper {
         Ingredient entity = new Ingredient();
         entity.setName(request.getName());
         entity.setUnit(request.getUnit());
-        entity.setQuantity(request.getQuantity());
         return entity;
     }
 }

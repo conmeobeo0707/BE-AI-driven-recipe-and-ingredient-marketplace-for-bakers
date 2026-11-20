@@ -1,6 +1,5 @@
 package com.manhnv.capstonebakerai.recipe.entity;
 
-import com.manhnv.capstonebakerai.recipe.enums.InteractionSource;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import com.manhnv.capstonebakerai.customer.entity.Customer;
 import jakarta.persistence.*;
@@ -26,8 +25,8 @@ public class RecipeInteraction {
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "recipe_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "recipe_id", nullable = false)
     private Recipe recipe;
 
     @Enumerated(EnumType.STRING)
@@ -39,13 +38,6 @@ public class RecipeInteraction {
 
     @Column(name = "recomm_id", length = 100)
     private String recommId;
-
-    @Column(name = "search_query", length = 255)
-    private String searchQuery;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "source", nullable = false, length = 20)
-    private InteractionSource source = InteractionSource.DIRECT;
 
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt = Instant.now();

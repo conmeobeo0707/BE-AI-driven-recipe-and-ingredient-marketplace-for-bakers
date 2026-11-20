@@ -45,28 +45,13 @@ public class ToolController {
         return ResponseEntity.ok(ApiResponse.success(toolService.getById(toolId)));
     }
 
-    @Operation(summary = "Lấy tools theo recipe id (search + pagination + sorting)")
-    @GetMapping("/recipe/{recipeId}")
-    public ResponseEntity<ApiResponse<PageResponse<ToolResponse>>> getByRecipeId(
-            @PathVariable UUID recipeId,
-            @RequestParam(value = "search", required = false) String search,
-            @ParameterObject
-            @PageableDefault(page = 0, size = 10)
-            @SortDefault.SortDefaults({
-                    @SortDefault(sort = "name", direction = Sort.Direction.ASC)
-            }) Pageable pageable) {
-
-        PageResponse<ToolResponse> resp = toolService.getByRecipeId(recipeId, search, pageable);
-        return ResponseEntity.ok(ApiResponse.success(resp));
-    }
-
-    @Operation(summary = "Tạo tool mới", description = "Request body: recipeId và name bắt buộc, không được null. recipeId phải trỏ tới recipe hiện có.")
+    @Operation(summary = "Tạo tool mới", description = "Request body: name bắt buộc.")
     @PostMapping
     public ResponseEntity<ApiResponse<ToolResponse>> create(@Valid @RequestBody ToolRequest request) {
         return ResponseEntity.ok(ApiResponse.success(toolService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật tool", description = "Request body: recipeId và name bắt buộc, không được null. Đây là cập nhật các giá trị, không phải partial update.")
+    @Operation(summary = "Cập nhật tool", description = "Request body: name bắt buộc. Đây là cập nhật toàn bộ, không phải partial update.")
     @PutMapping("/{toolId}")
     public ResponseEntity<ApiResponse<ToolResponse>> update(@PathVariable UUID toolId,
                                                             @Valid @RequestBody ToolRequest request) {

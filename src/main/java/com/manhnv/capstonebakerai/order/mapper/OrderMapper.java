@@ -1,10 +1,8 @@
 package com.manhnv.capstonebakerai.order.mapper;
 
-import com.manhnv.capstonebakerai.order.dto.response.OrderItemResponse;
-import com.manhnv.capstonebakerai.order.dto.response.OrderResponse;
-import com.manhnv.capstonebakerai.order.dto.response.OrderSummaryResponse;
-import com.manhnv.capstonebakerai.order.dto.response.OrderTrackingResponse;
+import com.manhnv.capstonebakerai.order.dto.response.*;
 import com.manhnv.capstonebakerai.order.entity.Order;
+import com.manhnv.capstonebakerai.order.entity.OrderHistory;
 import com.manhnv.capstonebakerai.order.entity.OrderItem;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -21,5 +19,9 @@ public interface OrderMapper {
     OrderSummaryResponse toSummary(Order order);
 
     OrderTrackingResponse toTracking(Order order);
+
+    OrderHistoryResponse toHistoryResponse(OrderHistory history);
+
+    OrderHistoryStaffResponse toHistoryStaffResponse(OrderHistory history);
 }
 

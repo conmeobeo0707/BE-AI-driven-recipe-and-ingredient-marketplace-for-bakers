@@ -1,6 +1,5 @@
 package com.manhnv.capstonebakerai.recipe.dto.response;
 
-import com.manhnv.capstonebakerai.recipe.enums.InteractionSource;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeInteractionType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,7 +20,7 @@ public class RecipeInteractionResponse {
     private String recipeTitle;
     private Integer ratingScore;
     private String recommId;
-    private String searchQuery;
-    private InteractionSource source;
     private Instant occurredAt;
+    // BOOKMARK/RATING only: true while this row is the customer's current bookmark/rating; null for VIEW.
+    private Boolean active;
 }

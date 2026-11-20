@@ -19,6 +19,8 @@ public record OrderResponse(
         BigDecimal shippingFee,
         BigDecimal discountPercent,
         BigDecimal discountAmount,
+        String voucherCode,
+        BigDecimal voucherDiscountAmount,
         BigDecimal total,
         BigDecimal revenue,
         String note,

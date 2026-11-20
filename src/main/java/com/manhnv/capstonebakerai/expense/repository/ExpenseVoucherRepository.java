@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseVoucherStatus;
+import com.manhnv.capstonebakerai.report.dto.response.MonthAmount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,7 +12,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -43,7 +43,7 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
             v.amount, v.reason, v.status, v.createdBy, v.createdAt)
         from ExpenseVoucher v
         join v.expenseCategory c
-        where v.status = :status
+        where (:status is null or v.status = :status)
           and v.createdAt >= :from
           and v.createdAt < :to
           and (:categoryId is null or c.id = :categoryId)
@@ -55,4 +55,17 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
             @Param("to") LocalDateTime to,
             @Param("categoryId") UUID categoryId,
             Pageable pageable);
+    @Query("""
+    select new com.manhnv.capstonebakerai.report.dto.response.MonthAmount(
+        extract(year from e.createdAt),
+        extract(month from e.createdAt),
+        sum(e.amount))
+    from ExpenseVoucher e
+    where e.status = :status
+      and e.createdAt >= :from and e.createdAt < :to
+    group by extract(year from e.createdAt), extract(month from e.createdAt)
+    """)
+    List<MonthAmount> expensesByMonth(@Param("status") ExpenseVoucherStatus status,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to);
 }

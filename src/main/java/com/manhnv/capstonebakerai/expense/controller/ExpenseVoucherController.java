@@ -7,6 +7,7 @@ import com.manhnv.capstonebakerai.expense.dto.request.CreateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherRequest;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherWithNameResponse;
 import com.manhnv.capstonebakerai.expense.service.ExpenseVoucherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -81,7 +82,7 @@ public class ExpenseVoucherController {
     @Operation(summary = "API lấy chi tiết phiếu chi", description = "month cho phép null(nếu null thì hệ thống sẽ tính month từ tháng đó, categoryId cho phép null(hệ thống sẽ lấy toàn bộ category). Đây là báo cáo chi tiết của phiếu chi.")
     @GetMapping("/report-detail")
     @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
-    public ResponseEntity<ApiResponse<Page<ExpenseVoucherResponse>>> listVoucherFromReport(
+    public ResponseEntity<ApiResponse<Page<ExpenseVoucherWithNameResponse>>> listVoucherFromReport(
             @RequestParam(required = false)
             @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam(required = false) UUID categoryId,
@@ -91,4 +92,5 @@ public class ExpenseVoucherController {
 
         return ResponseEntity.ok(ApiResponse.success(service.getListVoucherFromReport(month, categoryId, pageable)));
     }
+
 }

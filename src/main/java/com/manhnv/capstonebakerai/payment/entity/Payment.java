@@ -1,7 +1,9 @@
 package com.manhnv.capstonebakerai.payment.entity;
 
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
+import com.manhnv.capstonebakerai.payment.enums.PaymentDirection;
 import com.manhnv.capstonebakerai.payment.enums.PaymentStatus;
+import com.manhnv.capstonebakerai.payment.enums.PaymentType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -23,8 +25,20 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "order_id", nullable = false, unique = true)
+    @Enumerated(EnumType.STRING) @Column(nullable = false)
+    private PaymentType type;
+
+    @Enumerated(EnumType.STRING) @Column(nullable = false)
+    private PaymentDirection direction;
+
+    @Column(name = "order_id", unique = true)
     private UUID orderId;
+
+    @Column(name = "supplier_id")
+    private UUID supplierId;
+
+    @Column(length = 50, unique = true)
+    private String code;
 
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private PaymentMethod method;
@@ -40,6 +54,10 @@ public class Payment {
 
     @Column(name = "checkout_url", length = 500)
     private String checkoutUrl;
+
+    private String bankReference;
+    private String note;
+    private UUID createdBy;
 
     private LocalDateTime paidAt;
 

@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public interface RecipeRatingRepository extends JpaRepository<RecipeRating, UUID> {
@@ -23,6 +25,10 @@ public interface RecipeRatingRepository extends JpaRepository<RecipeRating, UUID
 
     Page<RecipeRating> findByRecipe_Id(UUID recipeId, Pageable pageable);
     Page<RecipeRating> findByRecipe_IdAndScore(UUID recipeId, Integer score, Pageable pageable);
+
+    @Query("select r.recipe.id from RecipeRating r where r.customer.id = :customerId and r.recipe.id in :recipeIds")
+    Set<UUID> findRecipeIdsByCustomer(@Param("customerId") UUID customerId,
+                                      @Param("recipeIds") Collection<UUID> recipeIds);
 
     @Query(value = "SELECT COALESCE(AVG(score), 0) FROM ratings WHERE recipe_id = :recipeId", nativeQuery = true)
     BigDecimal findAverageRatingByRecipeId(@Param("recipeId") UUID recipeId);

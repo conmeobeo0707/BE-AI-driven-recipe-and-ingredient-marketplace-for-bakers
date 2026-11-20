@@ -19,4 +19,8 @@ public interface PaymentRepository  extends JpaRepository<Payment, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)       // chống 2 webhook trùng chạy song song
     @Query("select p from Payment p where p.externalId = :externalId")
     Optional<Payment> findByExternalIdForUpdate(String externalId);
+
+    Optional<Payment> findByIdAndSupplierId(UUID id, UUID supplierId);
+    Page<Payment> findBySupplierId(UUID supplierId, Pageable pageable);
+    boolean existsByCode(String code);
 }

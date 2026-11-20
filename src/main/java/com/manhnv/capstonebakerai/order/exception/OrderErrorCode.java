@@ -18,7 +18,8 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_NOT_DELIVERED("Order has not been delivered yet", HttpStatus.BAD_REQUEST),
     INVALID_DATE_RANGE("Invalid date range", HttpStatus.BAD_REQUEST),
     PRODUCT_WEIGHT_MISSING("Product unit has no weight configured", HttpStatus.BAD_REQUEST),
-    ORDER_PAYMENT_REQUIRED("Order have not paid", HttpStatus.BAD_REQUEST)
+    ORDER_PAYMENT_REQUIRED("Order have not paid", HttpStatus.BAD_REQUEST),
+    INSUFFICIENT_STOCK("Product out of stock", HttpStatus.BAD_REQUEST)
     ;
 
     private final String message;

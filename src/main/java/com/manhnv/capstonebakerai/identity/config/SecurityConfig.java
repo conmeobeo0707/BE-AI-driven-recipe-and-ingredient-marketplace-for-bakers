@@ -48,7 +48,8 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/forgot-password"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/forgot-password/verify"),
-                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/reset-password"));
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/reset-password"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/media/videos/webhook"));
         var bearerTokenResolver = new DefaultBearerTokenResolver();
         http
                 .cors(Customizer.withDefaults())
@@ -79,6 +80,10 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 "/api/v1/payos/webhook"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/media/videos/webhook").permitAll()
+                        .requestMatchers(
+                                "/ws/**"
                         ).permitAll()
                         // Swagger / OpenAPI cho phép public
                         .requestMatchers(
@@ -111,7 +116,22 @@ public class SecurityConfig {
                                 "/api/v1/customers/me/**"
                         )
                         .hasRole("CUSTOMER")
-                        .requestMatchers("/api/v1/recommendations/**")
+                        .requestMatchers(
+                                "/api/v1/recommendations/**"
+                        )
+                        .hasRole("CUSTOMER")
+                        .requestMatchers(
+                                "/api/v1/admin/recommendations",
+                                "/api/v1/admin/recommendations/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                "/api/v1/management/ingredient-catalog",
+                                "/api/v1/management/ingredient-catalog/**"
+                        ).hasRole("BAKER_STAFF")
+                        .requestMatchers(
+                                "/api/v1/recipe-suggestions",
+                                "/api/v1/recipe-suggestions/**"
+                        )
                         .hasRole("CUSTOMER")
                         .requestMatchers(
                                 "/api/v1/admin/hobbies",

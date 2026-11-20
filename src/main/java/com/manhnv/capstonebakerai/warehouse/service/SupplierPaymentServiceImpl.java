@@ -3,23 +3,20 @@ package com.manhnv.capstonebakerai.warehouse.service;
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
-import com.manhnv.capstonebakerai.payment.entity.PaymentTransaction;
-import com.manhnv.capstonebakerai.payment.enums.TransactionDirection;
-import com.manhnv.capstonebakerai.payment.enums.TransactionMethod;
-import com.manhnv.capstonebakerai.payment.enums.TransactionRefType;
-import com.manhnv.capstonebakerai.payment.repository.PaymentTransactionRepository;
+import com.manhnv.capstonebakerai.payment.entity.Payment;
+import com.manhnv.capstonebakerai.payment.enums.PaymentDirection;
+import com.manhnv.capstonebakerai.payment.enums.PaymentType;
+import com.manhnv.capstonebakerai.payment.repository.PaymentRepository;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierPaymentCreateRequest;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierPaymentDetailResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.SupplierPaymentResponse;
 import com.manhnv.capstonebakerai.warehouse.entity.StockInNote;
-import com.manhnv.capstonebakerai.warehouse.entity.SupplierPayment;
 import com.manhnv.capstonebakerai.warehouse.entity.SupplierPaymentDetail;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.enums.PaymentStatus;
 import com.manhnv.capstonebakerai.warehouse.exception.WarehouseErrorCode;
 import com.manhnv.capstonebakerai.warehouse.repository.StockInNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.SupplierPaymentDetailRepository;
-import com.manhnv.capstonebakerai.warehouse.repository.SupplierPaymentRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.SupplierRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,18 +37,17 @@ import java.util.UUID;
 @Service
 public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     private final SupplierRepository suppliers;
-    private final SupplierPaymentRepository payments;
     private final SupplierPaymentDetailRepository paymentDetails;
     private final StockInNoteRepository stockInNotes;
-    private final PaymentTransactionRepository transactionRepository;
+    private final PaymentRepository paymentRepository;
 
-    public SupplierPaymentServiceImpl(SupplierRepository suppliers, SupplierPaymentRepository payments,
-            SupplierPaymentDetailRepository paymentDetails, StockInNoteRepository stockInNotes, PaymentTransactionRepository transactionRepository) {
+    public SupplierPaymentServiceImpl(
+            SupplierRepository suppliers, SupplierPaymentDetailRepository paymentDetails, StockInNoteRepository stockInNotes,
+            PaymentRepository paymentRepository) {
         this.suppliers = suppliers;
-        this.payments = payments;
         this.paymentDetails = paymentDetails;
         this.stockInNotes = stockInNotes;
-        this.transactionRepository = transactionRepository;
+        this.paymentRepository = paymentRepository;
     }
 
     @Override
@@ -92,13 +88,18 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
             }
         }
 
-        SupplierPayment supplierPayment = new SupplierPayment();
-        supplierPayment.setCode(generateCode());
-        supplierPayment.setSupplierId(supplierId);
-        supplierPayment.setAmount(request.amount());
-        supplierPayment.setCreatedBy(SecurityUtils.getCurrentUserId());
-        supplierPayment.setCreatedAt(LocalDateTime.now());
-        SupplierPayment savedPayment = payments.save(supplierPayment);
+        Payment supplierPayment = Payment.builder()
+                .type(PaymentType.SUPPLIER)
+                .direction(PaymentDirection.OUT)
+                .method(PaymentMethod.BANK_TRANSFER)
+                .status(com.manhnv.capstonebakerai.payment.enums.PaymentStatus.PAID)
+                .supplierId(supplierId)
+                .code(generateCode())
+                .amount(request.amount())
+                .paidAt(LocalDateTime.now())
+                .createdBy(SecurityUtils.getCurrentUserId())
+                .build();
+        Payment savedPayment = paymentRepository.save(supplierPayment);
 
         List<SupplierPaymentDetail> savedDetails = new ArrayList<>();
         for (SupplierPaymentCreateRequest.Allocation allocation : request.details()) {
@@ -111,23 +112,13 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
             stockInNote.setUpdatedAt(LocalDateTime.now());
 
             SupplierPaymentDetail paymentDetail = new SupplierPaymentDetail();
-            paymentDetail.setSupplierPaymentsId(savedPayment.getId());
+            paymentDetail.setPaymentId(savedPayment.getId());
             paymentDetail.setStockInNoteId(stockInNote.getNoteId());
             paymentDetail.setAmount(allocatedAmount);
             savedDetails.add(paymentDetail);
         }
         stockInNotes.saveAll(lockedNotes);
         List<SupplierPaymentDetail> savedPaymentDetails = paymentDetails.saveAll(savedDetails);
-
-        PaymentTransaction transaction = PaymentTransaction.builder()
-                .refType(TransactionRefType.SUPPLIER_PAYMENT)
-                .refId(savedPayment.getId())
-                .direction(TransactionDirection.OUT)
-                .amount(request.amount())
-                .method(TransactionMethod.BANK_TRANSFER)
-                .createdBy(SecurityUtils.getCurrentUserId())
-                .build();
-        transactionRepository.save(transaction);
 
         return toDetailResponse(savedPayment, savedPaymentDetails, notesById);
     }
@@ -138,22 +129,22 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         if (!suppliers.existsById(supplierId)) {
             throw new AppException(WarehouseErrorCode.NOT_FOUND, "Supplier not found");
         }
-        return payments.findBySupplierId(supplierId, pageable).map(this::toResponse);
+        return paymentRepository.findBySupplierId(supplierId, pageable).map(this::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public SupplierPaymentDetailResponse get(UUID supplierId, UUID paymentId) {
-        SupplierPayment supplierPayment = payments.findByIdAndSupplierId(paymentId, supplierId)
+        Payment supplierPayment = paymentRepository.findByIdAndSupplierId(paymentId, supplierId)
                 .orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Supplier payment not found"));
-        List<SupplierPaymentDetail> details = paymentDetails.findBySupplierPaymentsIdOrderById(paymentId);
+        List<SupplierPaymentDetail> details = paymentDetails.findByPaymentIdOrderById(paymentId);
         Map<UUID, StockInNote> notesById = new HashMap<>();
         stockInNotes.findAllById(details.stream().map(SupplierPaymentDetail::getStockInNoteId).toList())
                 .forEach(stockInNote -> notesById.put(stockInNote.getNoteId(), stockInNote));
         return toDetailResponse(supplierPayment, details, notesById);
     }
 
-    private SupplierPaymentDetailResponse toDetailResponse(SupplierPayment supplierPayment,
+    private SupplierPaymentDetailResponse toDetailResponse(Payment supplierPayment,
             List<SupplierPaymentDetail> details, Map<UUID, StockInNote> notesById) {
         List<SupplierPaymentDetailResponse.Allocation> allocations = details.stream()
                 .map(detail -> {
@@ -164,7 +155,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         return new SupplierPaymentDetailResponse(toResponse(supplierPayment), allocations);
     }
 
-    private SupplierPaymentResponse toResponse(SupplierPayment supplierPayment) {
+    private SupplierPaymentResponse toResponse(Payment supplierPayment) {
         return new SupplierPaymentResponse(supplierPayment.getId(), supplierPayment.getCode(),
                 supplierPayment.getSupplierId(), supplierPayment.getAmount(), supplierPayment.getCreatedAt(),
                 supplierPayment.getCreatedBy());
@@ -174,7 +165,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         String code;
         do {
             code = "SP-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase(Locale.ROOT);
-        } while (payments.existsByCode(code));
+        } while (paymentRepository.existsByCode(code));
         return code;
     }
 }

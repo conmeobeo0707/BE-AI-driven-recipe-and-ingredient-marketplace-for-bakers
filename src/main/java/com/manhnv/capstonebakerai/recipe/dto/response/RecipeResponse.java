@@ -31,6 +31,10 @@ public class RecipeResponse {
     private BigDecimal averageRating;
     private RecipeStatus recipeStatus;
     private LocalDateTime createdAt;
+    private LocalDateTime publishedAt;
+    private Long viewCount;
+    private Long bookmarkCount;
+    private Long ratingCount;
 
     private List<ToolResponse> tools;
     private List<IngredientResponse> ingredients;

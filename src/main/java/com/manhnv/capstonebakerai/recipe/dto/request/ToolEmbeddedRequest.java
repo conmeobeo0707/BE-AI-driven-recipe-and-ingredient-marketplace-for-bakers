@@ -2,6 +2,8 @@ package com.manhnv.capstonebakerai.recipe.dto.request;
 
 import lombok.*;
 import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+import java.math.BigDecimal;
 
 @Setter
 @Getter
@@ -9,6 +11,8 @@ import jakarta.validation.constraints.NotNull;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ToolEmbeddedRequest {
-    @NotNull(message = "name is required")
-    private String name;
+    @NotNull(message = "toolId is required")
+    private UUID toolId;
+    @NotNull(message = "quantity is required")
+    private BigDecimal quantity;
 }

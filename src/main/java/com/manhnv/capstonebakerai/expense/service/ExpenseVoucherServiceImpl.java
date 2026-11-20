@@ -7,27 +7,32 @@ import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherWithNameResponse;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseCategory;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
+import com.manhnv.capstonebakerai.expense.enums.ExpenseCategoryType;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseVoucherStatus;
 import com.manhnv.capstonebakerai.expense.exception.ExpenseCategoryErrorCode;
 import com.manhnv.capstonebakerai.expense.exception.ExpenseVoucherErrorCode;
 import com.manhnv.capstonebakerai.expense.mapper.ExpenseVoucherMapper;
 import com.manhnv.capstonebakerai.expense.repository.ExpenseCategoryRepository;
 import com.manhnv.capstonebakerai.expense.repository.ExpenseVoucherRepository;
+import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -37,11 +42,16 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     ExpenseVoucherRepository voucherRepository;
     ExpenseCategoryRepository categoryRepository;
     ExpenseVoucherMapper mapper;
+    UserRepository userRepository;
 
     @Override
     @Transactional
     public ExpenseVoucherResponse create(UUID userId, CreateExpenseVoucherRequest request) {
         ExpenseCategory category = findCategoryOrThrow(request.expenseCategoryId());
+
+        if (!isManager() && category.getType() == ExpenseCategoryType.SALARY) {
+            throw new AppException(ExpenseVoucherErrorCode.REQUIRE_MANAGER_ROLE);
+        }
 
         ExpenseVoucher voucher = ExpenseVoucher.builder()
                 .code(generateCode())
@@ -77,7 +87,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
             throw new AppException(ExpenseVoucherErrorCode.EXPENSE_VOUCHER_ALREADY_CANCELLED);
         }
         voucher.setStatus(ExpenseVoucherStatus.CANCELLED);
-        voucher.setCancelReason(request.cancelReason());
+        voucher.setCancelReason(request != null ? request.cancelReason() : null);
         voucher.setCancelledAt(LocalDateTime.now());
         return mapper.toResponse(voucherRepository.save(voucher));
     }
@@ -119,7 +129,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     }
 
     @Override
-    public Page<ExpenseVoucherResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable) {
+    public Page<ExpenseVoucherWithNameResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable) {
         YearMonth target = month != null ? month : YearMonth.now();
 
         if (categoryId != null && !categoryRepository.existsById(categoryId)) {
@@ -129,7 +139,22 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
         LocalDateTime from = target.atDay(1).atStartOfDay();
         LocalDateTime to = target.plusMonths(1).atDay(1).atStartOfDay();
 
-        return voucherRepository.findVouchersByMonth(ExpenseVoucherStatus.ACTIVE, from, to, categoryId, pageable);
+        Page<ExpenseVoucherResponse> page = voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
+
+        Set<UUID> staffIds = page.stream()
+                .map(ExpenseVoucherResponse::createdBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<UUID, String> names = staffIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllById(staffIds).stream()
+                .collect(Collectors.toMap(User::getUserId, User::getFullName));
+
+        return page.map(v -> new ExpenseVoucherWithNameResponse(
+                v,
+                v.createdBy() == null ? null : names.get(v.createdBy())
+        ));
     }
 
     private String generateCode() {
@@ -148,5 +173,10 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     private ExpenseCategory findCategoryOrThrow(UUID id) {
         return categoryRepository.findById(id)
                 .orElseThrow(() -> new AppException(ExpenseCategoryErrorCode.EXPENSE_CATEGORY_NOT_FOUND));
+    }
+
+    private boolean isManager() {
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_MANAGER"));
     }
 }

@@ -20,10 +20,6 @@ public class Tool {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "recipe_id", nullable = false)
-    private Recipe recipe;
-
     @Column(name = "name", nullable = false)
     private String name;
 }

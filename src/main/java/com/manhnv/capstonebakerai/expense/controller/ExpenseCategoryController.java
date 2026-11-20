@@ -27,7 +27,7 @@ public class ExpenseCategoryController {
             summary = "API tạo danh mục chi",
             description =  "Cần truyền name và type(SALARY, RENT, MARKETING, SHIPPING, UTILITY, OTHER")
     @PostMapping
-    @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('MANAGER')")
     public ResponseEntity<ApiResponse<ExpenseCategoryResponse>> create(@Valid @RequestBody ExpenseCategoryRequest request) {
         return ResponseEntity.ok(ApiResponse.success(service.create(request)));
     }
@@ -36,7 +36,7 @@ public class ExpenseCategoryController {
             summary = "Update danh mục chi",
             description =  "Cần truyền name và type(SALARY, RENT, MARKETING, SHIPPING, UTILITY, OTHER")
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('MANAGER')")
     public ResponseEntity<ApiResponse<ExpenseCategoryResponse>> update(@PathVariable UUID id, @Valid @RequestBody ExpenseCategoryRequest request) {
         return ResponseEntity.ok(ApiResponse.success(service.update(id, request)));
     }
@@ -44,7 +44,7 @@ public class ExpenseCategoryController {
     @Operation(
             summary = "Xóa danh mục chi")
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('MANAGER')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id){
         service.delete(id);
         return ResponseEntity.ok(ApiResponse.success(null));

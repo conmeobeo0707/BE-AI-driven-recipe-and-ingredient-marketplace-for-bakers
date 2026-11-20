@@ -3,10 +3,12 @@ package com.manhnv.capstonebakerai.order.service;
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.customer.entity.Customer;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
+import com.manhnv.capstonebakerai.loyalty.service.LoyaltyService;
 import com.manhnv.capstonebakerai.order.dto.request.*;
 import com.manhnv.capstonebakerai.order.dto.response.*;
 import com.manhnv.capstonebakerai.order.entity.Order;
 import com.manhnv.capstonebakerai.order.entity.OrderItem;
+import com.manhnv.capstonebakerai.order.enums.OrderHistoryAction;
 import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.order.enums.PaymentMethod;
 import com.manhnv.capstonebakerai.order.enums.RevenuePeriodType;
@@ -25,6 +27,11 @@ import com.manhnv.capstonebakerai.product.repository.ProductUnitRepository;
 import com.manhnv.capstonebakerai.shipment.dto.response.ShippingRateResponse;
 import com.manhnv.capstonebakerai.shipment.service.ShipmentService;
 import com.manhnv.capstonebakerai.shipment.service.ShippingRateService;
+import com.manhnv.capstonebakerai.voucher.dto.request.ValidateVoucherRequest;
+import com.manhnv.capstonebakerai.voucher.dto.response.VoucherPreviewResponse;
+import com.manhnv.capstonebakerai.voucher.service.VoucherService;
+import com.manhnv.capstonebakerai.warehouse.dto.StockLine;
+import com.manhnv.capstonebakerai.warehouse.service.InventoryService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +68,10 @@ public class OrderServiceImpl implements OrderService {
     ShipmentService shipmentService;
     ShippingRateService shippingRateService;
     PaymentService paymentService;
+    VoucherService voucherService;
+    OrderHistoryService historyService;
+    InventoryService inventoryService;
+    LoyaltyService loyaltyService;
     ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -112,6 +123,7 @@ public class OrderServiceImpl implements OrderService {
         }
         if (order.getReceivedConfirmedAt() == null) {
             order.setReceivedConfirmedAt(LocalDateTime.now());
+            historyService.record(order.getId(), OrderHistoryAction.RECEIVED_CONFIRMED, OrderStatus.DELIVERED, OrderStatus.CONFIRMED, null);
         }
         return mapper.toResponse(orderRepository.save(order));
     }
@@ -121,7 +133,7 @@ public class OrderServiceImpl implements OrderService {
     public void syncStatusFromShipment(UUID orderId, OrderStatus next) {
         Order order = findOrThrow(orderId);
         if (order.getStatus() == next) return;
-        applyTransition(order, next);
+        applyTransition(order, next, "Đồng bộ từ đơn vị vận chuyển");
         orderRepository.save(order);
     }
 
@@ -133,7 +145,7 @@ public class OrderServiceImpl implements OrderService {
             log.warn("Order {} is {} but payment PAID, check manually", order.getCode(), order.getStatus());
             return;
         }
-        applyTransition(order, OrderStatus.PENDING);
+        applyTransition(order, OrderStatus.PENDING, "Thanh toán PAYOS thành công");
         orderRepository.save(order);
     }
 
@@ -161,6 +173,43 @@ public class OrderServiceImpl implements OrderService {
                 cod,
                 productsPrice
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public VoucherPreviewResponse previewVoucher(UUID userId, ValidateVoucherRequest request) {
+        Customer customer = findCustomerByUserId(userId);
+        BigDecimal productPrices = resolveLines(request.items()).stream().map(ResolvedLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return voucherService.calculate(request.voucherCode(), customer.getId(), productPrices);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderHistoryResponse> getMyOrderHistory(UUID userId, UUID orderId) {
+        findOwnedOrder(userId, orderId);
+        return historyService.getForCustomer(orderId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExpectedPointsResponse previewExpectedPoints(UUID userId, PreviewPointsRequest request) {
+        Customer customer = findCustomerByUserId(userId);
+
+        BigDecimal productsPrice = resolveLines(request.items()).stream().map(ResolvedLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal voucherDiscount = BigDecimal.ZERO;
+        String code = request.voucherCode();
+        if (code != null && !code.isBlank()) {
+            voucherDiscount = voucherService
+                    .calculate(code, customer.getId(), productsPrice)
+                    .discountAmount();
+        }
+
+        BigDecimal pointBase = productsPrice.subtract(voucherDiscount).max(BigDecimal.ZERO);
+        int points = loyaltyService.expectedOrderPoints(customer.getId(), pointBase);
+        return new ExpectedPointsResponse(points, pointBase);
     }
 
     @Override
@@ -202,7 +251,7 @@ public class OrderServiceImpl implements OrderService {
         if (order.getStatus() == OrderStatus.AWAITING_PAYMENT) {
             throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
         }
-        applyTransition(order, next);
+        applyTransition(order, next, null);
         return mapper.toResponse(orderRepository.save(order));
     }
 
@@ -244,6 +293,15 @@ public class OrderServiceImpl implements OrderService {
                 return new RevenueReportResponse(type, from, to, sumRevenue(orders), orders.size(), points);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderHistoryStaffResponse> getOrderHistoryForStaff(UUID orderId) {
+        if (!orderRepository.existsById(orderId)) {
+            throw new AppException(OrderErrorCode.ORDER_NOT_FOUND);
+        }
+        return historyService.getForStaff(orderId);
+    }
+
     private Order buildOrder(Customer customer, UUID createdBy, CreateOrderRequest request, BigDecimal discountPercent) {
         Order order = Order.builder()
                 .code(generateCode())
@@ -263,8 +321,16 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         addItems(order, request.items());
+        order.recalculateTotals();
+        applyVoucher(order, customer, request.voucherCode());
         applyShipping(order, request.shippingRateId());
         return order;
+    }
+
+    private void applyVoucher(Order order, Customer customer, String voucherCode) {
+        if (voucherCode == null || voucherCode.isBlank()) return;
+        VoucherPreviewResponse preview = voucherService.calculate(voucherCode, customer.getId(), order.amountAfterDiscount());
+        order.applyVoucher(preview.voucherId(), preview.code(), preview.discountAmount());
     }
 
     private record ResolvedLine(Product product, ProductUnit unit, int quantity,
@@ -332,11 +398,19 @@ public class OrderServiceImpl implements OrderService {
 
     private Order saveWithPayment(Order order) {
         Order saved = orderRepository.save(order);
+
+        historyService.record(saved.getId(), OrderHistoryAction.CREATED, null, saved.getStatus(), saved.getCreatedBy().equals(saved.getCustomer().getUser().getUserId()) ? null : "Nhân viên tạo đơn hộ khách");
+
+        if (saved.getVoucherId() != null) {
+            voucherService.consume(saved.getVoucherId(), saved.getCustomer().getId(), saved.getId(), saved.getVoucherDiscountAmount());
+        }
+
         paymentService.createPending(saved.getId(), saved.getPaymentMethod(), saved.getTotal());
 
         // Notification Configure
         if (saved.getStatus() == OrderStatus.PENDING) {
-            // TODO: DEDCUT STOCK
+            // DEDCUT STOCK
+            deductStock(saved);
             eventPublisher.publishEvent(new OrderCreatedEvent(saved.getId(), saved.getCode()));
         }
         return saved;
@@ -357,16 +431,20 @@ public class OrderServiceImpl implements OrderService {
         return order.getPaymentMethod() == PaymentMethod.COD ? order.getProductsPrice() : BigDecimal.ZERO;
     }
 
-    private void applyTransition(Order order, OrderStatus next) {
+    private void applyTransition(Order order, OrderStatus next, String note) {
         if (!order.getStatus().canTransitionTo(next)) {
             throw new AppException(OrderErrorCode.ORDER_INVALID_STATUS_TRANSITION);
         }
+        OrderStatus previous = order.getStatus();
+
         switch (next) {
-            // TODO: gọi InventoryService.deduct(...) trừ kho (quantity x conversionFactor)
+            case PENDING -> deductStock(order);
             case CONFIRMED -> shipmentService.createForOrder(order);
             case DELIVERED -> {
                 order.setDeliveredAt(LocalDateTime.now());
-                order.setRevenue(order.getProductsPrice().subtract(order.getDiscountAmount()));
+                order.setRevenue(order.getProductsPrice()
+                        .subtract(order.getDiscountAmount())
+                        .subtract(order.getVoucherDiscountAmount()));
                 if (order.getPaymentMethod() == PaymentMethod.COD) {
                     paymentService.settleCod(order);
                 }
@@ -374,6 +452,8 @@ public class OrderServiceImpl implements OrderService {
             default -> { }
         }
         order.setStatus(next);
+
+        historyService.record(order.getId(), OrderHistoryAction.STATUS_CHANGED, previous, next, note);
 
         // Notification configure
         if (next == OrderStatus.PENDING) {
@@ -392,12 +472,14 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelledAt(LocalDateTime.now());
         order.setCancelReason(request != null ? request.reason() : null);
+        historyService.record(order.getId(), OrderHistoryAction.CANCELLED, previous, OrderStatus.CANCELLED, order.getCancelReason());
         if (previous != OrderStatus.AWAITING_PAYMENT) {
-            // TODO: hoàn kho (InventoryService.restock)
+            inventoryService.restockForOrder(order.getId());
         }
         if (previous != OrderStatus.PENDING && previous != OrderStatus.AWAITING_PAYMENT) {
             shipmentService.cancelForOrder(order.getId());
         }
+        voucherService.refund(order.getId());
         paymentService.onOrderCancelled(order);
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getId(), order.getCode(),
@@ -447,6 +529,12 @@ public class OrderServiceImpl implements OrderService {
             code = "OD-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         } while (orderRepository.existsByCode(code));
         return code;
+    }
+
+    private void deductStock(Order order) {
+        List<StockLine> lines = order.getItems().stream()
+                .map(i -> new StockLine(i.getProductId(), i.getProductUnitId(), i.getQuantity())).toList();
+        inventoryService.deductForOrder(order.getId(), lines);
     }
 
 }
