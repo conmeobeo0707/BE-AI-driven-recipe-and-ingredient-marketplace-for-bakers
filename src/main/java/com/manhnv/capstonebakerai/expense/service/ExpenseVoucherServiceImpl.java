@@ -72,7 +72,12 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
             throw new AppException(ExpenseVoucherErrorCode.EXPENSE_VOUCHER_CANNOT_UPDATE);
         }
 
-        voucher.setExpenseCategory(findCategoryOrThrow(request.expenseCategoryId()));
+        ExpenseCategory category = findCategoryOrThrow(request.expenseCategoryId());
+        if (category.getType() == ExpenseCategoryType.SALARY && !isManager()) {
+            throw new AppException(ExpenseVoucherErrorCode.REQUIRE_MANAGER_ROLE);
+        }
+
+        voucher.setExpenseCategory(category);
         voucher.setAmount(request.amount());
         voucher.setReason(request.reason());
 
