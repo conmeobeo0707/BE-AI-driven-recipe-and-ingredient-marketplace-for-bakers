@@ -14,7 +14,7 @@ public class RecipeIngredientMapper {
                 .ingredientId(entity.getIngredient().getId())
                 .ingredientName(entity.getIngredient().getName())
                 .quantity(entity.getQuantity())
-                .unit(entity.getIngredient().getUnit())
+                .unit(entity.getUnit())
                 .build();
     }
 
@@ -22,6 +22,7 @@ public class RecipeIngredientMapper {
         if (request == null) return null;
         RecipeIngredient entity = new RecipeIngredient();
         entity.setQuantity(request.getQuantity());
+        entity.setUnit(request.getUnit());
         return entity;
     }
 }

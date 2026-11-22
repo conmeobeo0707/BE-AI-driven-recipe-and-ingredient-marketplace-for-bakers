@@ -27,4 +27,7 @@ public class RecipeIngredient {
 
     @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
     private BigDecimal quantity;
+
+    @Column(name = "unit")
+    private String unit;
 }

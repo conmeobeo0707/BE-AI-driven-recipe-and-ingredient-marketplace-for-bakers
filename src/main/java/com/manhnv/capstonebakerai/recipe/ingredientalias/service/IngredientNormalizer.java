@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.recipe.ingredientcatalog.service;
+package com.manhnv.capstonebakerai.recipe.ingredientalias.service;
 
 import org.springframework.stereotype.Component;
 

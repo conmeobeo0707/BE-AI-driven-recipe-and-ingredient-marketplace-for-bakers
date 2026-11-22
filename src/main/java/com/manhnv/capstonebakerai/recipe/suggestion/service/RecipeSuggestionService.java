@@ -8,7 +8,7 @@ import java.util.UUID;
 public interface RecipeSuggestionService {
 
     RecipeSuggestionResponse suggest(
-            List<UUID> catalogIngredientIds,
+            List<UUID> ingredientIds,
             Integer requestedLimit
     );
 }

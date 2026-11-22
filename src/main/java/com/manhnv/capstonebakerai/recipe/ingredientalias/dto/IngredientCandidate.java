@@ -1,10 +1,10 @@
-package com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto;
+package com.manhnv.capstonebakerai.recipe.ingredientalias.dto;
 
 import java.util.UUID;
 
-public record IngredientCatalogCandidate(
-        UUID catalogIngredientId,
-        String canonicalName,
+public record IngredientCandidate(
+        UUID ingredientId,
+        String ingredientName,
         String matchedName,
         double similarity,
         MatchType matchType

@@ -1,4 +1,4 @@
-package com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto;
+package com.manhnv.capstonebakerai.recipe.ingredientalias.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

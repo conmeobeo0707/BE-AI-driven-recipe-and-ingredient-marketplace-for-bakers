@@ -30,8 +30,10 @@ class RecipeStepResourceHelperTest {
 
     @Test
     void replacesBothListsAndReturnsThemInStepResponse() {
-        RecipeStep step = RecipeStep.builder().id(UUID.randomUUID()).build();
-        Ingredient ingredient = Ingredient.builder().id(UUID.randomUUID()).name("Flour").unit("g").build();
+        Ingredient ingredient = Ingredient.builder().id(UUID.randomUUID()).name("Flour").build();
+        Recipe recipe = Recipe.builder().id(UUID.randomUUID())
+                .ingredients(List.of(RecipeIngredient.builder().ingredient(ingredient).unit("g").build())).build();
+        RecipeStep step = RecipeStep.builder().id(UUID.randomUUID()).recipe(recipe).build();
         Tool tool = Tool.builder().id(UUID.randomUUID()).name("Bowl").build();
         when(ingredients.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
         when(tools.findById(tool.getId())).thenReturn(Optional.of(tool));

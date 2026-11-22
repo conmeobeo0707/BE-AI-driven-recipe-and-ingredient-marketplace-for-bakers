@@ -260,15 +260,11 @@ public class RecommendationAdminService {
                         .toList())));
         hobbies.sort(Comparator.comparingInt(KnowledgeResponse.LearnedHobby::likes).reversed());
 
-        long ingredientRows = count("select count(ri) from RecipeIngredient ri join ri.recipe r"
-                + " where r.recipeStatus = :published");
-        long linkedRows = count("select count(ri) from RecipeIngredient ri join ri.recipe r"
-                + " where r.recipeStatus = :published and ri.ingredient.catalogIngredient is not null");
         Optional<RecommendationModel> active = modelRepository.findFirstByActiveTrue();
         return new KnowledgeResponse(
-                count("select count(c) from IngredientCatalog c where c.active = true"),
+                count("select count(distinct ri.ingredient) from RecipeIngredient ri join ri.recipe r"
+                        + " where r.recipeStatus = :published"),
                 count("select count(a) from IngredientAlias a"),
-                ingredientRows == 0 ? 0 : Math.round((double) linkedRows / ingredientRows * 10_000) / 10_000.0,
                 snapshot.recipes().size(),
                 snapshot.signals().stream().filter(Signal::liked).count(),
                 skillFit,

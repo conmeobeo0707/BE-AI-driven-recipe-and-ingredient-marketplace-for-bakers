@@ -40,7 +40,7 @@ public class RecipeMapper {
                         ? entity.getTools().stream().map(link -> com.manhnv.capstonebakerai.recipe.dto.response.ToolResponse.builder().id(link.getTool().getId()).name(link.getTool().getName()).recipeId(entity.getId()).quantity(link.getQuantity()).build()).collect(Collectors.toList())
                         : Collections.emptyList())
                 .ingredients(entity.getIngredients() != null
-                        ? entity.getIngredients().stream().map(link -> com.manhnv.capstonebakerai.recipe.dto.response.IngredientResponse.builder().id(link.getIngredient().getId()).recipeId(entity.getId()).name(link.getIngredient().getName()).unit(link.getIngredient().getUnit()).quantity(link.getQuantity()).build()).collect(Collectors.toList())
+                        ? entity.getIngredients().stream().map(link -> com.manhnv.capstonebakerai.recipe.dto.response.IngredientResponse.builder().id(link.getIngredient().getId()).recipeId(entity.getId()).name(link.getIngredient().getName()).unit(link.getUnit()).quantity(link.getQuantity()).build()).collect(Collectors.toList())
                         : Collections.emptyList())
                 .steps(entity.getSteps() != null
                         ? entity.getSteps().stream().map(RecipeStepMapper::toDTO).collect(Collectors.toList())

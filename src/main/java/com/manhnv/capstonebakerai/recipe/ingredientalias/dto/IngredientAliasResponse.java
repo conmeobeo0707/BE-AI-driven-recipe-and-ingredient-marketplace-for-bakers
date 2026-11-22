@@ -1,11 +1,11 @@
-package com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto;
+package com.manhnv.capstonebakerai.recipe.ingredientalias.dto;
 
 import java.time.Instant;
 import java.util.UUID;
 
 public record IngredientAliasResponse(
         UUID id,
-        UUID catalogIngredientId,
+        UUID ingredientId,
         String alias,
         String normalizedAlias,
         String languageCode,

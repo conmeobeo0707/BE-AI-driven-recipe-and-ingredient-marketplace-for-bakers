@@ -95,5 +95,6 @@ public class RecipeIngredientServiceImpl implements RecipeIngredientService {
         entity.setIngredient(ingredientRepository.findById(request.getIngredientId())
                 .orElseThrow(() -> new RuntimeException("Ingredient not found")));
         entity.setQuantity(request.getQuantity());
+        entity.setUnit(request.getUnit().trim());
     }
 }

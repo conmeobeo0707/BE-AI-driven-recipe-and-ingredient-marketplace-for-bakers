@@ -7,12 +7,11 @@ import com.manhnv.capstonebakerai.recommendation.engine.RecommendationData.Weigh
 import java.util.List;
 
 // The recommender's knowledge base at a glance (GET /api/v1/admin/recommendations/knowledge):
-// stored knowledge (ingredient catalog, skill/difficulty table), learned knowledge (hobby -> category)
+// stored knowledge (ingredients and their aliases, skill/difficulty table), learned knowledge (hobby -> category)
 // and the weights in use.
 public record KnowledgeResponse(
-        long activeCatalogIngredients,
+        long ingredients,                  // distinct ingredients used by published recipes
         long ingredientAliases,
-        double linkedIngredientRatio,      // published recipes' ingredient rows linked to the catalog
         long publishedRecipes,
         long likes,                        // bookmarks + 4-5 star ratings
         List<SkillFit> skillFit,
