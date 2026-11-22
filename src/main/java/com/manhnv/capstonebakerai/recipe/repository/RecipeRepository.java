@@ -44,23 +44,21 @@ public interface RecipeRepository extends JpaRepository<Recipe, UUID>, JpaSpecif
 
     @Query("""
     select r.id as recipeId,
-           count(distinct i.catalogIngredient.id) as matchedCount
+           count(distinct ri.ingredient.id) as matchedCount
     from Recipe r
     join r.ingredients ri
-    join ri.ingredient i
     where r.recipeStatus = :status
-      and i.catalogIngredient.id in :catalogIngredientIds
+      and ri.ingredient.id in :ingredientIds
     group by r.id
     """)
     List<RecipeIngredientMatch> findIngredientMatches(
             @Param("status") RecipeStatus status,
-            @Param("catalogIngredientIds") Collection<UUID> catalogIngredientIds
+            @Param("ingredientIds") Collection<UUID> ingredientIds
     );
 
     @EntityGraph(attributePaths = {
             "ingredients",
-            "ingredients.ingredient",
-            "ingredients.ingredient.catalogIngredient"
+            "ingredients.ingredient"
     })
     @Query("""
         select distinct r

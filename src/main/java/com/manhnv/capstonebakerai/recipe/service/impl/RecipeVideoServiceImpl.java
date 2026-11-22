@@ -12,6 +12,7 @@ import com.manhnv.capstonebakerai.media.service.ShotstackService;
 import com.manhnv.capstonebakerai.recipe.dto.request.CreateRecipeVideoRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeVideoRenderResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
+import com.manhnv.capstonebakerai.recipe.mapper.RecipeIngredientUnits;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepImage;
@@ -186,7 +187,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         List<VideoSlides.Row> ingredients = nullToEmpty(recipe.getIngredients()).stream()
                 .filter(link -> link.getIngredient() != null)
                 .map(link -> new VideoSlides.Row(link.getIngredient().getName(),
-                        amount(link.getQuantity(), link.getIngredient().getUnit()).trim()))
+                        amount(link.getQuantity(), link.getUnit()).trim()))
                 .toList();
         List<VideoSlides.Row> tools = nullToEmpty(recipe.getTools()).stream()
                 .filter(link -> link.getTool() != null)
@@ -199,7 +200,8 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                     List<String> stepIngredients = nullToEmpty(step.getIngredients()).stream()
                             .filter(link -> link.getIngredient() != null)
                             .map(link -> (link.getIngredient().getName() + " "
-                                    + amount(link.getQuantity(), link.getIngredient().getUnit())).trim())
+                                    + amount(link.getQuantity(),
+                                    RecipeIngredientUnits.unitOf(recipe, link.getIngredient().getId()))).trim())
                             .toList();
                     List<String> stepTools = nullToEmpty(step.getTools()).stream()
                             .filter(link -> link.getTool() != null)

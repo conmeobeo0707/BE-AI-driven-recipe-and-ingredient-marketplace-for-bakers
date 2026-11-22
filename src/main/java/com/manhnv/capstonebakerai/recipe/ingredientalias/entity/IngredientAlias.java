@@ -1,5 +1,6 @@
-package com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity;
+package com.manhnv.capstonebakerai.recipe.ingredientalias.entity;
 
+import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,7 +23,7 @@ public class IngredientAlias {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "ingredient_id", nullable = false)
-    private IngredientCatalog ingredient;
+    private Ingredient ingredient;
 
     @Column(name = "alias", nullable = false, length = 150)
     private String alias;

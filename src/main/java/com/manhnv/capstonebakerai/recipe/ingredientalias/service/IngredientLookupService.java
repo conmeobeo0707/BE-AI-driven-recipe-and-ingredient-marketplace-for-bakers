@@ -1,11 +1,11 @@
-package com.manhnv.capstonebakerai.recipe.ingredientcatalog.service;
+package com.manhnv.capstonebakerai.recipe.ingredientalias.service;
 
 import com.manhnv.capstonebakerai.common.exception.AppException;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate.MatchType;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.exception.IngredientCatalogErrorCode;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.repository.IngredientAliasRepository;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.repository.IngredientCatalogRepository;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.dto.IngredientCandidate;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.dto.IngredientCandidate.MatchType;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.exception.IngredientAliasErrorCode;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.repository.IngredientAliasRepository;
+import com.manhnv.capstonebakerai.recipe.repository.IngredientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,49 +15,47 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class IngredientCatalogLookupService {
+public class IngredientLookupService {
 
     private static final double MIN_SIMILARITY = 0.75;
 
-    private static final Comparator<IngredientCatalogCandidate> ORDER = Comparator
-            .comparing(IngredientCatalogCandidate::matchType)
-            .thenComparing(IngredientCatalogCandidate::similarity, Comparator.reverseOrder())
-            .thenComparing(IngredientCatalogCandidate::canonicalName, String.CASE_INSENSITIVE_ORDER)
-            .thenComparing(IngredientCatalogCandidate::matchedName, String.CASE_INSENSITIVE_ORDER)
-            .thenComparing(IngredientCatalogCandidate::catalogIngredientId);
+    private static final Comparator<IngredientCandidate> ORDER = Comparator
+            .comparing(IngredientCandidate::matchType)
+            .thenComparing(IngredientCandidate::similarity, Comparator.reverseOrder())
+            .thenComparing(IngredientCandidate::ingredientName, String.CASE_INSENSITIVE_ORDER)
+            .thenComparing(IngredientCandidate::matchedName, String.CASE_INSENSITIVE_ORDER)
+            .thenComparing(IngredientCandidate::ingredientId);
 
-    private final IngredientCatalogRepository catalogRepository;
+    private final IngredientRepository ingredientRepository;
     private final IngredientAliasRepository aliasRepository;
     private final IngredientNormalizer normalizer;
 
-    public List<IngredientCatalogCandidate> search(String keyword, int limit) {
+    public List<IngredientCandidate> search(String keyword, int limit) {
         if ((keyword != null && keyword.length() > 150) || limit < 1 || limit > 20) {
-            throw new AppException(IngredientCatalogErrorCode.INVALID_SEARCH);
+            throw new AppException(IngredientAliasErrorCode.INVALID_SEARCH);
         }
         String query = normalizer.normalize(keyword);
         if (query.isEmpty() && keyword != null && !keyword.isBlank()) {
-            throw new AppException(IngredientCatalogErrorCode.INVALID_SEARCH);
+            throw new AppException(IngredientAliasErrorCode.INVALID_SEARCH);
         }
         if (query.isEmpty()) {
-            return catalogRepository.findAllByActiveTrueOrderByCanonicalNameAsc().stream()
+            return ingredientRepository.findAllShared().stream()
                     .limit(limit)
-                    .map(c -> new IngredientCatalogCandidate(
-                            c.getId(), c.getCanonicalName(), c.getCanonicalName(), 0, null
-                    ))
+                    .map(i -> new IngredientCandidate(i.getId(), i.getName(), i.getName(), 0, null))
                     .toList();
         }
         return rank(query, terms(), limit);
     }
 
-    public Map<String, List<IngredientCatalogCandidate>> searchAll(Collection<String> names, int limit) {
+    public Map<String, List<IngredientCandidate>> searchAll(Collection<String> names, int limit) {
         if (limit < 1 || limit > 20) {
-            throw new AppException(IngredientCatalogErrorCode.INVALID_SEARCH);
+            throw new AppException(IngredientAliasErrorCode.INVALID_SEARCH);
         }
         if (names.isEmpty()) {
             return Map.of();
         }
         List<Term> terms = terms();
-        Map<String, List<IngredientCatalogCandidate>> result = new LinkedHashMap<>();
+        Map<String, List<IngredientCandidate>> result = new LinkedHashMap<>();
         for (String name : names) {
             String normalized = normalizer.normalize(name);
             result.put(name, normalized.isEmpty() ? List.of() : rank(normalized, terms, limit));
@@ -67,19 +65,19 @@ public class IngredientCatalogLookupService {
 
     private List<Term> terms() {
         List<Term> terms = new ArrayList<>();
-        for (var catalog : catalogRepository.findAllByActiveTrueOrderByCanonicalNameAsc()) {
-            terms.add(new Term(catalog.getId(), catalog.getCanonicalName(),
-                    catalog.getCanonicalName(), catalog.getNormalizedName()));
+        for (var ingredient : ingredientRepository.findAllShared()) {
+            terms.add(new Term(ingredient.getId(), ingredient.getName(),
+                    ingredient.getName(), normalizer.normalize(ingredient.getName())));
         }
-        for (var alias : aliasRepository.findAllByIngredient_ActiveTrue()) {
-            terms.add(new Term(alias.getIngredient().getId(), alias.getIngredient().getCanonicalName(),
+        for (var alias : aliasRepository.findAll()) {
+            terms.add(new Term(alias.getIngredient().getId(), alias.getIngredient().getName(),
                     alias.getAlias(), alias.getNormalizedAlias()));
         }
         return terms;
     }
 
-    private List<IngredientCatalogCandidate> rank(String query, List<Term> terms, int limit) {
-        Map<UUID, IngredientCatalogCandidate> best = new HashMap<>();
+    private List<IngredientCandidate> rank(String query, List<Term> terms, int limit) {
+        Map<UUID, IngredientCandidate> best = new HashMap<>();
         for (Term term : terms) {
             MatchType type;
             double score;
@@ -108,7 +106,7 @@ public class IngredientCatalogLookupService {
                 }
                 type = MatchType.FUZZY;
             }
-            var candidate = new IngredientCatalogCandidate(term.id(), term.canonicalName(), term.name(),
+            var candidate = new IngredientCandidate(term.id(), term.ingredientName(), term.name(),
                     Math.round(score * 1000) / 1000.0, type);
             best.merge(term.id(), candidate, (first, second) -> ORDER.compare(first, second) <= 0 ? first : second);
         }
@@ -135,6 +133,6 @@ public class IngredientCatalogLookupService {
         return 1 - (double) previous[second.length()] / Math.max(first.length(), second.length());
     }
 
-    private record Term(UUID id, String canonicalName, String name, String normalized) {
+    private record Term(UUID id, String ingredientName, String name, String normalized) {
     }
 }

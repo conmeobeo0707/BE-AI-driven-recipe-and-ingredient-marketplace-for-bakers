@@ -14,7 +14,7 @@ public class RecipeStepIngredientMapper {
                 .ingredientId(entity.getIngredient().getId())
                 .ingredientName(entity.getIngredient().getName())
                 .quantity(entity.getQuantity())
-                .unit(entity.getIngredient().getUnit())
+                .unit(RecipeIngredientUnits.unitOf(entity.getRecipeStep().getRecipe(), entity.getIngredient().getId()))
                 .build();
     }
 

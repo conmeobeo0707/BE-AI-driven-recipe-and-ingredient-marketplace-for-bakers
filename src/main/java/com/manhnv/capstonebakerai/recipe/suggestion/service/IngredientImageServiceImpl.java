@@ -9,11 +9,11 @@ import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.loyalty.enums.AiFeature;
 import com.manhnv.capstonebakerai.loyalty.service.LoyaltyService;
 import com.manhnv.capstonebakerai.loyalty.service.PaidAiRunner;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.dto.IngredientCatalogCandidate;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientNormalizer;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientResolver;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientCatalogLookupService;
+import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.dto.IngredientCandidate;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.service.IngredientLookupService;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.service.IngredientNormalizer;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.service.IngredientResolver;
 import com.manhnv.capstonebakerai.recipe.suggestion.client.GroqIngredientVisionClient;
 import com.manhnv.capstonebakerai.recipe.suggestion.client.GroqIngredientVisionClient.DetectedIngredient;
 import com.manhnv.capstonebakerai.recipe.suggestion.config.IngredientVisionProperties;
@@ -56,7 +56,7 @@ public class IngredientImageServiceImpl implements IngredientImageService {
     private final IngredientNormalizer ingredientNormalizer;
 
     private final IngredientResolver ingredientResolver;
-    private final IngredientCatalogLookupService lookupService;
+    private final IngredientLookupService lookupService;
 
     private final LoyaltyService loyaltyService;
 
@@ -185,12 +185,12 @@ public class IngredientImageServiceImpl implements IngredientImageService {
             uniqueNames.merge(normalized, item, this::mergeDetected);
         }
 
-        // Matched items are keyed by catalog ID so two names for the same ingredient become one row.
+        // Matched items are keyed by ingredient ID so two names for the same ingredient become one row.
         Map<String, IngredientImageRecognitionResponse.Item> items = new LinkedHashMap<>();
         List<DetectedIngredient> unmatched = new ArrayList<>();
 
         for (DetectedIngredient item : uniqueNames.values()) {
-            Optional<IngredientCatalog> resolved = ingredientResolver.resolveExact(item.name())
+            Optional<Ingredient> resolved = ingredientResolver.resolveExact(item.name())
                     .or(() -> ingredientResolver.resolveExact(item.nameVi()));
 
             if (resolved.isEmpty()) {
@@ -198,16 +198,16 @@ public class IngredientImageServiceImpl implements IngredientImageService {
                 continue;
             }
 
-            IngredientCatalog catalog = resolved.get();
+            Ingredient ingredient = resolved.get();
             items.merge(
-                    catalog.getId().toString(),
+                    ingredient.getId().toString(),
                     new IngredientImageRecognitionResponse.Item(
                             item.name(),
                             item.nameVi(),
                             item.uncertain(),
                             true,
-                            catalog.getId(),
-                            catalog.getCanonicalName(),
+                            ingredient.getId(),
+                            ingredient.getName(),
                             List.of()
                     ),
                     (first, second) -> new IngredientImageRecognitionResponse.Item(
@@ -215,8 +215,8 @@ public class IngredientImageServiceImpl implements IngredientImageService {
                             first.vietnameseName(),
                             first.uncertain() || second.uncertain(),
                             true,
-                            first.catalogIngredientId(),
-                            first.canonicalName(),
+                            first.ingredientId(),
+                            first.ingredientName(),
                             List.of()
                     )
             );
@@ -229,10 +229,10 @@ public class IngredientImageServiceImpl implements IngredientImageService {
                 lookupNames.add(item.nameVi());
             }
         }
-        Map<String, List<IngredientCatalogCandidate>> candidates = lookupService.searchAll(lookupNames, 3);
+        Map<String, List<IngredientCandidate>> candidates = lookupService.searchAll(lookupNames, 3);
 
         for (DetectedIngredient item : unmatched) {
-            List<IngredientCatalogCandidate> found = candidates.getOrDefault(item.name(), List.of());
+            List<IngredientCandidate> found = candidates.getOrDefault(item.name(), List.of());
             if (found.isEmpty()) {
                 found = candidates.getOrDefault(item.nameVi(), List.of());
             }

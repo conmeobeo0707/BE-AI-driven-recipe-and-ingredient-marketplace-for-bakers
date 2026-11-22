@@ -18,6 +18,7 @@ import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
 import com.manhnv.capstonebakerai.media.entity.Media;
 import com.manhnv.capstonebakerai.recipe.entity.Tool;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.service.IngredientAliasService;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.media.enums.MediaType;
@@ -56,6 +57,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final UserRepository userRepository;
     private final RecipeCategoryRepository categoryRepository;
     private final IngredientRepository ingredientRepository;
+    private final IngredientAliasService ingredientAliasService;
     private final ToolRepository toolRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final RecipeToolRepository recipeToolRepository;
@@ -128,7 +130,8 @@ public class RecipeServiceImpl implements RecipeService {
         if (request.getIngredients() != null) {
             recipeIngredientRepository.saveAll(request.getIngredients().stream().map(r -> {
                 Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
-                RecipeIngredient link = new RecipeIngredient(); link.setRecipe(savedRecipe); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); return link;
+                if (r.getAliases() != null && !r.getAliases().isEmpty()) ingredientAliasService.addAll(ingredient, r.getAliases());
+                RecipeIngredient link = new RecipeIngredient(); link.setRecipe(savedRecipe); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); link.setUnit(requireUnit(r)); return link;
             }).toList());
         }
 
@@ -231,7 +234,8 @@ public class RecipeServiceImpl implements RecipeService {
         recipeIngredientRepository.flush();
         recipeIngredientRepository.saveAll(ingredients.stream().map(r -> {
             Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
-            RecipeIngredient link = new RecipeIngredient(); link.setRecipe(existing); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); return link;
+            if (r.getAliases() != null && !r.getAliases().isEmpty()) ingredientAliasService.addAll(ingredient, r.getAliases());
+            RecipeIngredient link = new RecipeIngredient(); link.setRecipe(existing); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); link.setUnit(requireUnit(r)); return link;
         }).toList());
 
         // ---- Steps ----
@@ -346,6 +350,15 @@ public class RecipeServiceImpl implements RecipeService {
                 .totalPages(page.getTotalPages())
                 .currentPage(page.getNumber())
                 .build();
+    }
+
+    private static String requireUnit(com.manhnv.capstonebakerai.recipe.dto.request.IngredientEmbeddedRequest request) {
+        if (request.getUnit() == null || request.getUnit().isBlank()) {
+            throw new com.manhnv.capstonebakerai.common.exception.AppException(
+                    com.manhnv.capstonebakerai.common.exception.CommonErrorCode.INVALID_REQUEST,
+                    "unit is required for every recipe ingredient");
+        }
+        return request.getUnit().trim();
     }
 
     private void saveRecipeImages(Recipe recipe, List<UUID> mediaIds, Map<UUID, Media> mediaById,

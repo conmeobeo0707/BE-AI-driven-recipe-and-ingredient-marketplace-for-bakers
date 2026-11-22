@@ -125,9 +125,9 @@ public class SecurityConfig {
                                 "/api/v1/admin/recommendations/**"
                         ).hasRole("ADMIN")
                         .requestMatchers(
-                                "/api/v1/management/ingredient-catalog",
-                                "/api/v1/management/ingredient-catalog/**"
-                        ).hasRole("BAKER_STAFF")
+                                "/api/v1/ingredients/*/aliases",
+                                "/api/v1/ingredients/*/aliases/**"
+                        ).hasRole("STAFF")
                         .requestMatchers(
                                 "/api/v1/recipe-suggestions",
                                 "/api/v1/recipe-suggestions/**"

@@ -13,8 +13,8 @@ public enum RecipeSuggestionErrorCode implements ErrorCode {
             "Limit must be between 1 and 5",
             HttpStatus.BAD_REQUEST
     ),
-    INVALID_CATALOG_SELECTION(
-            "Select between 1 and 20 existing, active catalog ingredients",
+    INVALID_INGREDIENT_SELECTION(
+            "Select between 1 and 20 existing ingredients",
             HttpStatus.BAD_REQUEST
     );
 

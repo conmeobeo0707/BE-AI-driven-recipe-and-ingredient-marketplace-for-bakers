@@ -8,9 +8,7 @@ import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.entity.IngredientCatalog;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.repository.IngredientCatalogRepository;
-import com.manhnv.capstonebakerai.recipe.ingredientcatalog.service.IngredientNormalizer;
+import com.manhnv.capstonebakerai.recipe.repository.IngredientRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.suggestion.dto.RecipeSuggestionResponse;
 import com.manhnv.capstonebakerai.recipe.suggestion.dto.RecipeSuggestionItem;
@@ -32,29 +30,28 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
     private static final int MAX_LIMIT = 5;
 
     private final CustomerRepository customerRepository;
-    private final IngredientCatalogRepository catalogRepository;
+    private final IngredientRepository ingredientRepository;
     private final RecipeRepository recipeRepository;
-    private final IngredientNormalizer ingredientNormalizer;
 
     @Override
-    public RecipeSuggestionResponse suggest(List<UUID> catalogIngredientIds, Integer requestedLimit) {
-        if (catalogIngredientIds == null || catalogIngredientIds.isEmpty()
-                || catalogIngredientIds.size() > 20
-                || catalogIngredientIds.stream().anyMatch(Objects::isNull)) {
-            throw new AppException(RecipeSuggestionErrorCode.INVALID_CATALOG_SELECTION);
+    public RecipeSuggestionResponse suggest(List<UUID> ingredientIds, Integer requestedLimit) {
+        if (ingredientIds == null || ingredientIds.isEmpty()
+                || ingredientIds.size() > 20
+                || ingredientIds.stream().anyMatch(Objects::isNull)) {
+            throw new AppException(RecipeSuggestionErrorCode.INVALID_INGREDIENT_SELECTION);
         }
         int limit = validateLimit(requestedLimit);
         requireCustomer();
 
-        Set<UUID> ids = new LinkedHashSet<>(catalogIngredientIds);
-        Map<UUID, IngredientCatalog> selected = catalogRepository.findAllByIdInAndActiveTrue(ids).stream()
-                .collect(Collectors.toMap(IngredientCatalog::getId, catalog -> catalog));
+        Set<UUID> ids = new LinkedHashSet<>(ingredientIds);
+        Map<UUID, Ingredient> selected = ingredientRepository.findAllSharedByIdIn(ids).stream()
+                .collect(Collectors.toMap(Ingredient::getId, ingredient -> ingredient));
         if (selected.size() != ids.size()) {
-            throw new AppException(RecipeSuggestionErrorCode.INVALID_CATALOG_SELECTION);
+            throw new AppException(RecipeSuggestionErrorCode.INVALID_INGREDIENT_SELECTION);
         }
 
         List<RecipeSuggestionResponse.SelectedIngredient> selectedIngredients = ids.stream()
-                .map(id -> new RecipeSuggestionResponse.SelectedIngredient(id, selected.get(id).getCanonicalName()))
+                .map(id -> new RecipeSuggestionResponse.SelectedIngredient(id, selected.get(id).getName()))
                 .toList();
         List<RecipeSuggestionItem> recipes = findRecipes(ids, limit);
 
@@ -63,7 +60,7 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
         if (recipes.isEmpty()) {
             warnings.add("No published recipe matched this selection.");
         }
-        return new RecipeSuggestionResponse(selectedIngredients, recipes, "INGREDIENT_TYPES_ONLY", warnings);
+        return new RecipeSuggestionResponse(selectedIngredients, recipes, warnings);
     }
 
     private List<RecipeSuggestionItem> findRecipes(Set<UUID> ids, int limit) {
@@ -84,31 +81,25 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
                 .limit(limit).toList();
     }
 
-    // Unmapped or inactive-catalog ingredients stay in the recipe as missing (by raw name) instead of hiding it.
-    private RecipeSuggestionItem toSuggestion(Recipe recipe, Set<UUID> inputCatalogIds) {
-        Map<UUID, IngredientCatalog> mapped = new LinkedHashMap<>();
-        Map<String, String> unmapped = new LinkedHashMap<>();
+    private RecipeSuggestionItem toSuggestion(Recipe recipe, Set<UUID> inputIngredientIds) {
+        Map<UUID, Ingredient> ingredients = new LinkedHashMap<>();
         for (RecipeIngredient recipeIngredient : recipe.getIngredients()) {
             Ingredient ingredient = recipeIngredient.getIngredient();
-            if (ingredient == null) continue;
-            IngredientCatalog catalog = ingredient.getCatalogIngredient();
-            if (catalog != null && catalog.isActive()) {
-                mapped.putIfAbsent(catalog.getId(), catalog);
-            } else if (ingredient.getName() != null && !ingredient.getName().isBlank()) {
-                unmapped.putIfAbsent(ingredientNormalizer.normalize(ingredient.getName()), ingredient.getName().trim());
+            if (ingredient != null) {
+                ingredients.putIfAbsent(ingredient.getId(), ingredient);
             }
         }
         List<String> matched = new ArrayList<>();
-        List<String> missing = new ArrayList<>(unmapped.values());
-        for (IngredientCatalog catalog : mapped.values()) {
-            (inputCatalogIds.contains(catalog.getId()) ? matched : missing).add(catalog.getCanonicalName());
+        List<String> missing = new ArrayList<>();
+        for (Ingredient ingredient : ingredients.values()) {
+            (inputIngredientIds.contains(ingredient.getId()) ? matched : missing).add(ingredient.getName());
         }
         matched.sort(String.CASE_INSENSITIVE_ORDER);
         missing.sort(String.CASE_INSENSITIVE_ORDER);
-        int total = mapped.size() + unmapped.size();
+        int total = ingredients.size();
         //coverage = matched / total
         return new RecipeSuggestionItem(recipe.getId(), recipe.getTitle(), matched.size(), total,
-                total == 0 ? 0 : (double) matched.size() / total, matched, missing, unmapped.size());
+                total == 0 ? 0 : (double) matched.size() / total, matched, missing);
     }
 
     private void requireCustomer() {
