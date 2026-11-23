@@ -13,7 +13,6 @@ public record RequestQuoteSummaryResponse(
         RequestQuoteStatus status,
         int itemCount,
         UUID handledBy,
-        String handledByName,
         LocalDateTime createdAt
 ) {
 }

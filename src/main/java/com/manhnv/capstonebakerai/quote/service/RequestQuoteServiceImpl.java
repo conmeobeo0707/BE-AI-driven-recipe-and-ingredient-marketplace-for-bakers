@@ -24,8 +24,6 @@ import com.manhnv.capstonebakerai.quote.exception.RequestQuoteErrorCode;
 import com.manhnv.capstonebakerai.quote.mapper.QuoteLookup;
 import com.manhnv.capstonebakerai.quote.mapper.RequestQuoteMapper;
 import com.manhnv.capstonebakerai.quote.repository.RequestQuoteRepository;
-import com.manhnv.capstonebakerai.user.entity.User;
-import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Predicate;
@@ -53,7 +51,6 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
     ProductUnitRepository productUnitRepository;
     RequestQuoteMapper mapper;
     ApplicationEventPublisher eventPublisher;
-    UserRepository userRepository;
 
 
     @Override
@@ -125,20 +122,7 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
     @Override
     @Transactional(readOnly = true)
     public Page<RequestQuoteSummaryResponse> getAll(RequestQuoteStatus status, Pageable pageable) {
-        Page<RequestQuote> quotes = repository.findAll(spec(null, status), pageable);
-
-        Set<UUID> staffIds = quotes.stream()
-                .map(RequestQuote::getHandledBy)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<UUID, String> names = staffIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(staffIds).stream().collect(Collectors.toMap(User::getUserId, User::getFullName));
-        return quotes.map(q -> {
-            RequestQuoteSummaryResponse dto = mapper.toSummary(q);
-            String name = q.getHandledBy() == null ? null : names.get(q.getHandledBy());
-            return new RequestQuoteSummaryResponse(dto.id(), dto.customerId(), dto.contactPhone(), dto.contactName(), dto.status(), dto.itemCount(), dto.handledBy(), name, dto.createdAt());
-        });
+        return repository.findAll(spec(null, status), pageable).map(mapper::toSummary);
     }
 
     @Override

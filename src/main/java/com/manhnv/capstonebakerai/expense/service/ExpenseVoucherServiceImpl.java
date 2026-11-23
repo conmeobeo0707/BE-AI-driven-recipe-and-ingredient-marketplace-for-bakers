@@ -7,7 +7,6 @@ import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
-import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherWithNameResponse;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseCategory;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseCategoryType;
@@ -17,8 +16,6 @@ import com.manhnv.capstonebakerai.expense.exception.ExpenseVoucherErrorCode;
 import com.manhnv.capstonebakerai.expense.mapper.ExpenseVoucherMapper;
 import com.manhnv.capstonebakerai.expense.repository.ExpenseCategoryRepository;
 import com.manhnv.capstonebakerai.expense.repository.ExpenseVoucherRepository;
-import com.manhnv.capstonebakerai.user.entity.User;
-import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -31,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -42,7 +39,6 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     ExpenseVoucherRepository voucherRepository;
     ExpenseCategoryRepository categoryRepository;
     ExpenseVoucherMapper mapper;
-    UserRepository userRepository;
 
     @Override
     @Transactional
@@ -134,7 +130,7 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
     }
 
     @Override
-    public Page<ExpenseVoucherWithNameResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable) {
+    public Page<ExpenseVoucherResponse> getListVoucherFromReport(YearMonth month, UUID categoryId, Pageable pageable) {
         YearMonth target = month != null ? month : YearMonth.now();
 
         if (categoryId != null && !categoryRepository.existsById(categoryId)) {
@@ -144,22 +140,9 @@ public class ExpenseVoucherServiceImpl implements ExpenseVoucherService {
         LocalDateTime from = target.atDay(1).atStartOfDay();
         LocalDateTime to = target.plusMonths(1).atDay(1).atStartOfDay();
 
-        Page<ExpenseVoucherResponse> page = voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
-
-        Set<UUID> staffIds = page.stream()
-                .map(ExpenseVoucherResponse::createdBy)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        Map<UUID, String> names = staffIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(staffIds).stream()
-                .collect(Collectors.toMap(User::getUserId, User::getFullName));
-
-        return page.map(v -> new ExpenseVoucherWithNameResponse(
-                v,
-                v.createdBy() == null ? null : names.get(v.createdBy())
-        ));
+        // Unlike getReport() (active-only totals), this backs the voucher management table, which
+        // needs both ACTIVE and CANCELLED rows so the UI's status tabs have something to filter.
+        return voucherRepository.findVouchersByMonth(null, from, to, categoryId, pageable);
     }
 
     private String generateCode() {
