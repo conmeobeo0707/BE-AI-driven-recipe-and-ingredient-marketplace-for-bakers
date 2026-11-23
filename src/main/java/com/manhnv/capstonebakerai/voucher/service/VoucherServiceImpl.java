@@ -17,6 +17,8 @@ import com.manhnv.capstonebakerai.voucher.exception.VoucherErrorCode;
 import com.manhnv.capstonebakerai.voucher.mapper.VoucherMapper;
 import com.manhnv.capstonebakerai.voucher.repository.VoucherRepository;
 import com.manhnv.capstonebakerai.voucher.repository.VoucherUsageRepository;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -32,6 +34,8 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import jakarta.persistence.criteria.Predicate;
 
@@ -45,6 +49,7 @@ public class VoucherServiceImpl implements VoucherService {
     VoucherRepository voucherRepository;
     VoucherUsageRepository usageRepository;
     VoucherMapper mapper;
+    UserSummaryService userSummaryService;
 
     private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // bỏ O,0,I,1 cho dễ đọc
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -77,7 +82,7 @@ public class VoucherServiceImpl implements VoucherService {
                 .endDate(request.endDate())
                 .createdBy(managerUserId)
                 .build();
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
@@ -114,7 +119,7 @@ public class VoucherServiceImpl implements VoucherService {
         voucher.setMaxUsagePerCustomer(request.maxUsagePerCustomer());
         voucher.setStartDate(request.startDate());
         voucher.setEndDate(request.endDate());
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
@@ -122,20 +127,40 @@ public class VoucherServiceImpl implements VoucherService {
     public VoucherResponse updateStatus(UUID id, VoucherStatus status) {
         Voucher voucher = findOrThrow(id);
         voucher.setStatus(status);
-        return mapper.toResponse(voucherRepository.save(voucher));
+        return enrich(voucherRepository.save(voucher));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<VoucherResponse> getAll(VoucherDisplayStatus status, String keyword, Pageable pageable) {
-        return voucherRepository.findAll(spec(status, keyword, LocalDateTime.now()), pageable)
-                .map(mapper::toResponse);
+        Page<Voucher> page = voucherRepository.findAll(spec(status, keyword, LocalDateTime.now()), pageable);
+        Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
+                page.getContent().stream().map(Voucher::getCreatedBy).filter(Objects::nonNull).distinct().toList());
+        return page.map(voucher -> enrich(voucher, creators));
     }
 
     @Override
     @Transactional(readOnly = true)
     public VoucherResponse getById(UUID id) {
-        return mapper.toResponse(findOrThrow(id));
+        return enrich(findOrThrow(id));
+    }
+
+    private VoucherResponse enrich(Voucher voucher) {
+        return enrich(voucher, userSummaryService.getSummary(voucher.getCreatedBy()));
+    }
+
+    private VoucherResponse enrich(Voucher voucher, Map<UUID, UserSummaryResponse> creators) {
+        UUID createdBy = voucher.getCreatedBy();
+        UserSummaryResponse creator = createdBy == null ? null : creators.getOrDefault(createdBy, new UserSummaryResponse(createdBy, null, null));
+        return enrich(voucher, creator);
+    }
+
+    private VoucherResponse enrich(Voucher voucher, UserSummaryResponse creator) {
+        VoucherResponse base = mapper.toResponse(voucher);
+        return new VoucherResponse(base.id(), base.code(), base.name(), base.description(), base.discountType(),
+                base.discountValue(), base.maxDiscountAmount(), base.minOrderValue(), base.totalQuantity(),
+                base.usedQuantity(), base.remainingQuantity(), base.maxUsagePerCustomer(), base.startDate(),
+                base.endDate(), base.status(), base.displayStatus(), creator, base.createdAt(), base.updatedAt());
     }
 
     @Override

@@ -39,4 +39,5 @@ public interface OrderService {
     OrderResponse cancelByStaff(UUID orderId, CancelOrderRequest request);
     RevenueReportResponse getRevenueReport(RevenuePeriodType type, LocalDate from, LocalDate to);
     List<OrderHistoryStaffResponse> getOrderHistoryForStaff(UUID orderId);
+    OrderStatusSummaryResponse getStatusSummaryForStaff();
 }

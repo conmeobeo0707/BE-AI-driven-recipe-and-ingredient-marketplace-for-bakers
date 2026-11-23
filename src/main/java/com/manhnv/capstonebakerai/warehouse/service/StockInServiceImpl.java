@@ -204,4 +204,13 @@ public class StockInServiceImpl implements StockInService {
         stockInNote.setUpdatedAt(LocalDateTime.now());
         return notes.save(stockInNote);
     }
+
+    @Override @Transactional(readOnly = true)
+    public StockInStatusSummaryResponse getStatusSummary() {
+        long totalNotes = notes.count();
+        long pending = notes.countByStatus(NoteStatus.PENDING);
+        long cancelled = notes.countByStatus(NoteStatus.CANCELLED);
+        BigDecimal totalDebt = notes.sumDebtAmountExcludingStatus(NoteStatus.CANCELLED);
+        return new StockInStatusSummaryResponse(totalNotes, pending, totalDebt, cancelled);
+    }
 }

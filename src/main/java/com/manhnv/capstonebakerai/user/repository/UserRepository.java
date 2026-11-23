@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.user.repository;
 
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.enums.Role;
 import com.manhnv.capstonebakerai.user.enums.UserStatus;
@@ -30,4 +31,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             Collection<Role> roles,
             UserStatus status
     );
+
+    @Query("select new com.manhnv.capstonebakerai.user.dto.UserSummaryResponse(u.userId, u.fullName, u.avatarUrl) " +
+            "from User u where u.userId in :ids")
+    List<UserSummaryResponse> findSummariesByIdIn(@Param("ids") Collection<UUID> ids);
 }

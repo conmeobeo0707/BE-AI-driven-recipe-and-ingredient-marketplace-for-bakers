@@ -7,9 +7,11 @@ import com.manhnv.capstonebakerai.expense.dto.request.CreateExpenseVoucherReques
 import com.manhnv.capstonebakerai.expense.dto.request.UpdateExpenseVoucherRequest;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseReportResponse;
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
-import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherWithNameResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherSummaryResponse;
 import com.manhnv.capstonebakerai.expense.service.ExpenseVoucherService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.UUID;
 
@@ -82,7 +85,7 @@ public class ExpenseVoucherController {
     @Operation(summary = "API lấy chi tiết phiếu chi", description = "month cho phép null(nếu null thì hệ thống sẽ tính month từ tháng đó, categoryId cho phép null(hệ thống sẽ lấy toàn bộ category). Đây là báo cáo chi tiết của phiếu chi.")
     @GetMapping("/report-detail")
     @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
-    public ResponseEntity<ApiResponse<Page<ExpenseVoucherWithNameResponse>>> listVoucherFromReport(
+    public ResponseEntity<ApiResponse<Page<ExpenseVoucherResponse>>> listVoucherFromReport(
             @RequestParam(required = false)
             @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam(required = false) UUID categoryId,
@@ -91,6 +94,37 @@ public class ExpenseVoucherController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         return ResponseEntity.ok(ApiResponse.success(service.getListVoucherFromReport(month, categoryId, pageable)));
+    }
+
+    @Operation(summary = "API lấy thống kê phiếu chi theo kỳ", description = "from inclusive, to exclusive (yyyy-MM-dd). Dùng cho 4 card thống kê đầu trang quản lý phiếu chi")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Thống kê phiếu chi theo kỳ",
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            name = "ExpenseVoucherSummaryExample",
+                            value = """
+                                    {
+                                      "success": true,
+                                      "message": null,
+                                      "data": {
+                                        "totalAmount": 15230000,
+                                        "voucherCount": 42,
+                                        "cancelledCount": 3,
+                                        "averagePerVoucher": 390512.82
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @GetMapping("/summary")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<ApiResponse<ExpenseVoucherSummaryResponse>> summary(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(service.getSummary(from, to)));
     }
 
 }

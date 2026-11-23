@@ -1,10 +1,9 @@
 package com.manhnv.capstonebakerai.expense.repository;
 
 import com.manhnv.capstonebakerai.expense.dto.response.ExpenseCategorySummary;
-import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse;
+import com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow;
 import com.manhnv.capstonebakerai.expense.entity.ExpenseVoucher;
 import com.manhnv.capstonebakerai.expense.enums.ExpenseVoucherStatus;
-import com.manhnv.capstonebakerai.report.dto.response.MonthAmount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -38,7 +38,7 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
             @Param("to") LocalDateTime to,
             @Param("categoryId") UUID categoryId);
     @Query("""
-        select new com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherResponse(
+        select new com.manhnv.capstonebakerai.expense.dto.response.ExpenseVoucherRow(
             v.id, v.code, c.id, c.name,
             v.amount, v.reason, v.status, v.createdBy, v.createdAt)
         from ExpenseVoucher v
@@ -49,23 +49,16 @@ public interface ExpenseVoucherRepository extends JpaRepository<ExpenseVoucher, 
           and (:categoryId is null or c.id = :categoryId)
         order by v.createdAt desc
         """)
-    Page<ExpenseVoucherResponse> findVouchersByMonth(
+    Page<ExpenseVoucherRow> findVouchersByMonth(
             @Param("status") ExpenseVoucherStatus status,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             @Param("categoryId") UUID categoryId,
             Pageable pageable);
-    @Query("""
-    select new com.manhnv.capstonebakerai.report.dto.response.MonthAmount(
-        extract(year from e.createdAt),
-        extract(month from e.createdAt),
-        sum(e.amount))
-    from ExpenseVoucher e
-    where e.status = :status
-      and e.createdAt >= :from and e.createdAt < :to
-    group by extract(year from e.createdAt), extract(month from e.createdAt)
-    """)
-    List<MonthAmount> expensesByMonth(@Param("status") ExpenseVoucherStatus status,
-                                      @Param("from") LocalDateTime from,
-                                      @Param("to") LocalDateTime to);
+    @Query("select coalesce(sum(v.amount), 0) from ExpenseVoucher v where v.status = :status and v.createdAt >= :from and v.createdAt < :to")
+    BigDecimal sumAmountByStatusAndCreatedAtBetween(@Param("status") ExpenseVoucherStatus status,
+                                                     @Param("from") LocalDateTime from,
+                                                     @Param("to") LocalDateTime to);
+
+    long countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(ExpenseVoucherStatus status, LocalDateTime from, LocalDateTime to);
 }

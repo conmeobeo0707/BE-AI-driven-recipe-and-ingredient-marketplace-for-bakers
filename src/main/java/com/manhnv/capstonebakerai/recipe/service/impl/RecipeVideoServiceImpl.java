@@ -20,6 +20,7 @@ import com.manhnv.capstonebakerai.recipe.entity.RecipeVideoRender;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStepType;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
+import org.springframework.transaction.annotation.Transactional;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeVideoRenderRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeVideoService;
@@ -105,6 +106,25 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
     }
 
     @Override
+    @Transactional
+    public RecipeVideoRenderResponse cancelProcessingRender(UUID recipeId) {
+        Recipe entity = recipeRepository.findById(recipeId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
+        requireOwnerOrAdmin(entity);
+
+        RecipeVideoRender render = renderRepository.findByRecipeIdAndStatus(recipeId, PROCESSING)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No render in progress for this recipe"));
+
+        render.setStatus(FAILED);
+        render.setErrorMessage("Cancelled by user");
+        render.setCompletedAt(Instant.now());
+        renderRepository.save(render);
+        // If Shotstack's webhook for this render still arrives later, handleRenderResult's own
+        // `if (!PROCESSING.equals(render.getStatus())) return;` guard makes it a no-op.
+        return toResponse(render);
+    }
+
+    @Override
     @EventListener
     public void handleRenderResult(ShotstackRenderVerifiedEvent result) {
         RecipeVideoRender render = renderRepository.findByRenderId(result.renderId())
@@ -157,7 +177,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 .status(MediaStatus.ATTACHED)
                 .url(storedUrl)
                 .build());
-        recipe.setMedia(video);
+        recipe.setVideoMedia(video);
         recipeRepository.save(recipe);
 
         if (previous != null) {
@@ -253,7 +273,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         }
         if (!recipe.description().isEmpty()) intro.append(endSentence(recipe.description()));
         String introNarration = intro.toString();
-        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_BUDGET_CHARS);
+        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_PHOTO_BUDGET);
         List<String> introPhotos = photoEmbedder.embed(recipe.photos(),
                 VideoSlides.INTRO_PHOTO_SIZE, VideoSlides.INTRO_PHOTO_SIZE, photoBudget);
         scenes.add(new Scene(slides.intro(theme, recipe.category(), recipe.title(), recipe.description(),

@@ -18,6 +18,8 @@ import com.manhnv.capstonebakerai.warehouse.exception.WarehouseErrorCode;
 import com.manhnv.capstonebakerai.warehouse.repository.StockInNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.SupplierPaymentDetailRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.SupplierRepository;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -40,14 +43,16 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     private final SupplierPaymentDetailRepository paymentDetails;
     private final StockInNoteRepository stockInNotes;
     private final PaymentRepository paymentRepository;
+    private final UserSummaryService userSummaryService;
 
     public SupplierPaymentServiceImpl(
             SupplierRepository suppliers, SupplierPaymentDetailRepository paymentDetails, StockInNoteRepository stockInNotes,
-            PaymentRepository paymentRepository) {
+            PaymentRepository paymentRepository, UserSummaryService userSummaryService) {
         this.suppliers = suppliers;
         this.paymentDetails = paymentDetails;
         this.stockInNotes = stockInNotes;
         this.paymentRepository = paymentRepository;
+        this.userSummaryService = userSummaryService;
     }
 
     @Override
@@ -129,7 +134,10 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         if (!suppliers.existsById(supplierId)) {
             throw new AppException(WarehouseErrorCode.NOT_FOUND, "Supplier not found");
         }
-        return paymentRepository.findBySupplierId(supplierId, pageable).map(this::toResponse);
+        Page<Payment> page = paymentRepository.findBySupplierId(supplierId, pageable);
+        Map<UUID, UserSummaryResponse> creators = userSummaryService.getSummaries(
+                page.getContent().stream().map(Payment::getCreatedBy).filter(Objects::nonNull).distinct().toList());
+        return page.map(payment -> toResponse(payment, creators));
     }
 
     @Override
@@ -156,9 +164,19 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     }
 
     private SupplierPaymentResponse toResponse(Payment supplierPayment) {
+        return toResponse(supplierPayment, userSummaryService.getSummary(supplierPayment.getCreatedBy()));
+    }
+
+    private SupplierPaymentResponse toResponse(Payment supplierPayment, Map<UUID, UserSummaryResponse> creators) {
+        UUID createdBy = supplierPayment.getCreatedBy();
+        UserSummaryResponse creator = createdBy == null ? null : creators.getOrDefault(createdBy, new UserSummaryResponse(createdBy, null, null));
+        return toResponse(supplierPayment, creator);
+    }
+
+    private SupplierPaymentResponse toResponse(Payment supplierPayment, UserSummaryResponse creator) {
         return new SupplierPaymentResponse(supplierPayment.getId(), supplierPayment.getCode(),
                 supplierPayment.getSupplierId(), supplierPayment.getAmount(), supplierPayment.getCreatedAt(),
-                supplierPayment.getCreatedBy());
+                creator);
     }
 
     private String generateCode() {

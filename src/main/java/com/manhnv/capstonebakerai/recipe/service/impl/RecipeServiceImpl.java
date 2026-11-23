@@ -34,6 +34,8 @@ import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeIngredientRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeService;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.Predicate;
@@ -67,6 +69,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeMediaHelper mediaHelper;
     private final RecipeStepResourceHelper stepResourceHelper;
     private final RecipeStepDurationHelper durationHelper;
+    private final UserSummaryService userSummaryService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -79,7 +82,13 @@ public class RecipeServiceImpl implements RecipeService {
         }
         Recipe entity = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
-        return RecipeMapper.toDTO(entity);
+        return enrich(RecipeMapper.toDTO(entity), entity);
+    }
+
+    private RecipeResponse enrich(RecipeResponse response, Recipe entity) {
+        UUID userId = entity.getUser() != null ? entity.getUser().getUserId() : null;
+        response.setUser(userSummaryService.getSummary(userId));
+        return response;
     }
 
     @Override
@@ -107,7 +116,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         Recipe recipe = RecipeMapper.toEntity(request);
         if (request.getVideoId() != null) {
-            recipe.setMedia(mediaHelper.resolveMedia(request.getVideoId(), MediaType.VIDEO, mediaById, noCurrentlyAttachedMedia));
+            recipe.setVideoMedia(mediaHelper.resolveMedia(request.getVideoId(), MediaType.VIDEO, mediaById, noCurrentlyAttachedMedia));
         }
         recipe.setUser(user);
         recipe.setRecipeCategory(category);
@@ -162,7 +171,7 @@ public class RecipeServiceImpl implements RecipeService {
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
 
-        return RecipeMapper.toDTO(detail);
+        return enrich(RecipeMapper.toDTO(detail), detail);
     }
 
     @Override
@@ -204,7 +213,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         existing.setTitle(request.getTitle());
         existing.setDescription(request.getDescription());
-        existing.setMedia(request.getVideoId() == null ? null
+        existing.setVideoMedia(request.getVideoId() == null ? null
                 : mediaHelper.resolveMedia(request.getVideoId(), MediaType.VIDEO, mediaById, currentlyAttachedMediaIds));
         existing.setDifficulty(request.getDifficulty());
         existing.setPrepTimeMinutes(request.getPrepTimeMinutes());
@@ -288,7 +297,7 @@ public class RecipeServiceImpl implements RecipeService {
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
 
-        return RecipeMapper.toDTO(detail);
+        return enrich(RecipeMapper.toDTO(detail), detail);
     }
 
     @Override
@@ -344,8 +353,20 @@ public class RecipeServiceImpl implements RecipeService {
 
         Page<Recipe> page = repository.findAll(spec, pageable);
 
+        List<Recipe> recipes = page.getContent();
+        Map<UUID, UserSummaryResponse> summariesByUserId = userSummaryService.getSummaries(recipes.stream()
+                .map(r -> r.getUser() != null ? r.getUser().getUserId() : null)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet()));
+
+        List<RecipeResponse> content = recipes.stream().map(r -> {
+            RecipeResponse dto = RecipeMapper.toDTO(r);
+            dto.setUser(r.getUser() != null ? summariesByUserId.get(r.getUser().getUserId()) : null);
+            return dto;
+        }).toList();
+
         return PageResponse.<RecipeResponse>builder()
-                .content(page.getContent().stream().map(RecipeMapper::toDTO).toList())
+                .content(content)
                 .totalElements(page.getTotalElements())
                 .totalPages(page.getTotalPages())
                 .currentPage(page.getNumber())

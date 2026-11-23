@@ -13,6 +13,7 @@ public interface OrderMapper {
     OrderItemResponse toItemResponse(OrderItem item);
 
     @Mapping(source = "customer.id", target = "customerId")
+    @Mapping(target = "createdBy", ignore = true)
     OrderResponse toResponse(Order order);
 
     @Mapping(source = "customer.id", target = "customerId")

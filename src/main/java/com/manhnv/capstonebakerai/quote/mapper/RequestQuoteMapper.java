@@ -15,10 +15,12 @@ import org.mapstruct.Mapping;
 public interface RequestQuoteMapper {
     @Mapping(source = "customer.id", target = "customerId")
     @Mapping(source = "details", target = "items")
+    @Mapping(target = "handledBy", ignore = true)
     RequestQuoteResponse toResponse(RequestQuote quote, @Context QuoteLookup lookup);
 
     @Mapping(source = "customer.id", target = "customerId")
     @Mapping(target = "itemCount", expression = "java(quote.getDetails().size())")
+    @Mapping(target = "handledBy", ignore = true)
     RequestQuoteSummaryResponse toSummary(RequestQuote quote);
 
     // MapStruct tự dùng method này để map List<RequestQuoteDetail> thành List<RequestQuoteItemResponse>
