@@ -141,7 +141,7 @@ public class RequestQuoteServiceImplTest {
 
     private RequestQuoteSummaryResponse summaryOf(UUID handledBy) {
         return new RequestQuoteSummaryResponse(quoteId, customerId, "0900000000", "Old Name",
-                RequestQuoteStatus.IN_PROGRESS, 1, handledBy, null, LocalDateTime.now());
+                RequestQuoteStatus.IN_PROGRESS, 1, handledBy, LocalDateTime.now());
     }
 
     // Create
@@ -550,67 +550,6 @@ public class RequestQuoteServiceImplTest {
     }
 
     // Get all
-    // UTCID01
-    @Test
-    void getAll_noHandledBy_shouldNotQueryUsers() {
-        Pageable pageable = PageRequest.of(0, 10);
-        RequestQuote q = quoteOf(customer, RequestQuoteStatus.PENDING);
-        when(repository.findAll(any(Specification.class), eq(pageable)))
-                .thenReturn(new PageImpl<>(List.of(q), pageable, 1));
-        when(mapper.toSummary(q)).thenReturn(summaryOf(null));
-
-        Page<RequestQuoteSummaryResponse> result = service.getAll(null, pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).handledByName()).isNull();
-        verifyNoInteractions(userRepository);
-    }
-
-    // UTCID02
-    @Test
-    void getAll_withHandledBy_shouldFillStaffName() {
-        Pageable pageable = PageRequest.of(0, 10);
-        RequestQuote q = quoteOf(customer, RequestQuoteStatus.IN_PROGRESS);
-        q.setHandledBy(staffId);
-        User staff = mock(User.class);
-        when(staff.getUserId()).thenReturn(staffId);
-        when(staff.getFullName()).thenReturn("Staff A");
-        when(repository.findAll(any(Specification.class), eq(pageable)))
-                .thenReturn(new PageImpl<>(List.of(q), pageable, 1));
-        when(mapper.toSummary(q)).thenReturn(summaryOf(staffId));
-        when(userRepository.findAllById(Set.of(staffId))).thenReturn(List.of(staff));
-
-        Page<RequestQuoteSummaryResponse> result =
-                service.getAll(RequestQuoteStatus.IN_PROGRESS, pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).handledByName()).isEqualTo("Staff A");
-        verify(userRepository).findAllById(Set.of(staffId));
-    }
-
-    // UTCID03
-    @Test
-    void getAll_mixedHandledBy_shouldFillNameOnlyForHandledQuotes() {
-        Pageable pageable = PageRequest.of(0, 10);
-        RequestQuote handled = quoteOf(customer, RequestQuoteStatus.IN_PROGRESS);
-        handled.setHandledBy(staffId);
-        RequestQuote unhandled = quoteOf(customer, RequestQuoteStatus.PENDING);
-        User staff = mock(User.class);
-        when(staff.getUserId()).thenReturn(staffId);
-        when(staff.getFullName()).thenReturn("Staff A");
-        when(repository.findAll(any(Specification.class), eq(pageable)))
-                .thenReturn(new PageImpl<>(List.of(handled, unhandled), pageable, 2));
-        when(mapper.toSummary(handled)).thenReturn(summaryOf(staffId));
-        when(mapper.toSummary(unhandled)).thenReturn(summaryOf(null));
-        when(userRepository.findAllById(Set.of(staffId))).thenReturn(List.of(staff));
-
-        Page<RequestQuoteSummaryResponse> result = service.getAll(null, pageable);
-
-        assertThat(result.getContent()).hasSize(2);
-        assertThat(result.getContent().get(0).handledByName()).isEqualTo("Staff A");
-        assertThat(result.getContent().get(1).handledByName()).isNull();
-    }
-
     // UTCID04
     @Test
     void getAll_emptyPage_shouldReturnEmptyPage() {
