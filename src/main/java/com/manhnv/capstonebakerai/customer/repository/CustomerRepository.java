@@ -30,6 +30,14 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
             """)
     Optional<Customer> findByUserId(@Param("userId") UUID userId);
 
+    @Query("""
+            select c
+            from Customer c
+            join fetch c.user
+            where c.id = :id
+            """)
+    Optional<Customer> findByIdWithUser(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select c
