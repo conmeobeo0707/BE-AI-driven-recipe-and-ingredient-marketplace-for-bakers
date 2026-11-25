@@ -8,14 +8,19 @@ import com.manhnv.capstonebakerai.customer.exception.CustomerErrorCode;
 import com.manhnv.capstonebakerai.customer.repository.CustomerRepository;
 import com.manhnv.capstonebakerai.user.dto.UpdateAccountStatusRequest;
 import com.manhnv.capstonebakerai.user.entity.User;
+import com.manhnv.capstonebakerai.user.enums.UserStatus;
+import com.manhnv.capstonebakerai.user.exception.UserErrorCode;
 import com.manhnv.capstonebakerai.user.port.StaffAccountIdentityPort;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -27,12 +32,22 @@ public class AdminCustomerServiceImpl implements AdminCustomerService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AdminCustomerResponse> getCustomers() {
-        List<Customer> customers = customerRepository.findAllWithUserOrderByCreatedAtDesc();
-        return customers
-                .stream()
-                .map(this::toResponse)
-                .toList();
+    public Page<AdminCustomerResponse> getCustomers(UserStatus status, String search, Pageable pageable) {
+        if (pageable == null || pageable.getPageNumber() < 0 || pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
+            throw new AppException(UserErrorCode.INVALID_PAGE_REQUEST);
+        }
+        Specification<Customer> spec = (root, query, cb) -> cb.conjunction();
+        if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("user").get("status"), status));
+        }
+        if (search != null && !search.isBlank()) {
+            String keyword = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("user").get("fullName")), keyword),
+                    cb.like(cb.lower(root.get("user").get("email")), keyword)
+            ));
+        }
+        return customerRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     @Override
