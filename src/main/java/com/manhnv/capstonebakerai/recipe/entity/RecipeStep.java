@@ -33,13 +33,12 @@ public class RecipeStep {
     @Column(name = "step_number", nullable = false)
     private Integer stepNumber;
 
-    @Column(name = "instruction")
+    @NotNull
+    @Column(name = "instruction", nullable = false, columnDefinition = "TEXT")
     private String instruction;
 
-    @Builder.Default
-    @ColumnDefault("0")
-    @Column(name = "duration_minutes", nullable = false)
-    private Integer durationMinutes = 0;
+    @Column(name = "duration_minutes")
+    private Integer durationMinutes;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

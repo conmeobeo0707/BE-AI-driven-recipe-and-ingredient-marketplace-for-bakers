@@ -2,11 +2,16 @@ package com.manhnv.capstonebakerai.recipe.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
-@Table(name = "recipe_step_tools", uniqueConstraints = @UniqueConstraint(columnNames = {"recipe_step_id", "tool_id"}))
+@Table(name = "recipe_step_tools", uniqueConstraints = @UniqueConstraint(
+        name = "uk_recipe_step_tools_step_recipe_tool",
+        columnNames = {"recipe_step_id", "recipe_tool_id"}))
 @Data
 @Builder
 @NoArgsConstructor
@@ -19,13 +24,17 @@ public class RecipeStepTool {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "recipe_step_id", nullable = false)
-    @org.hibernate.annotations.OnDelete(action = org.hibernate.annotations.OnDeleteAction.CASCADE)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private RecipeStep recipeStep;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tool_id", nullable = false)
-    private Tool tool;
+    @JoinColumn(name = "recipe_tool_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_recipe_step_tools_recipe_tool"))
+    @OnDelete(action = OnDeleteAction.CASCADE)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private RecipeTool recipeTool;
 
-    @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
+    @Column(name = "quantity", precision = 10, scale = 2)
     private BigDecimal quantity;
 }

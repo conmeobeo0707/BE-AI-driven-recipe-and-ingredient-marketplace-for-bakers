@@ -141,6 +141,13 @@ public class SecurityConfig {
                                 HttpMethod.GET, "/api/v1/hobbies"
                         )
                         .hasAnyRole("CUSTOMER", "ADMIN")
+                        .requestMatchers(
+                                "/api/v1/admin/recipes/video-extractions",
+                                "/api/v1/admin/recipes/video-extractions/**"
+                        ).hasAnyRole("ADMIN", "MANAGER", "STAFF", "BAKER_STAFF")
+                        .requestMatchers(
+                                HttpMethod.POST, "/api/v1/recipes/video-extractions"
+                        ).hasRole("CUSTOMER")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         // Public auth endpoints work without the old access token.

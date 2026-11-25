@@ -33,13 +33,13 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.success(recipeService.getById(recipeId)));
     }
 
-    @Operation(summary = "Tạo recipe mới", description = "Request body: title, difficulty, prepTimeMinutes, cookTimeMinutes, servings và recipeStatus bắt buộc. tools nhận danh sách toolId và quantity; ingredients nhận ingredientId và quantity; steps là các bước hướng dẫn; mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. Người tạo lấy từ tài khoản đăng nhập.")
+    @Operation(summary = "Tạo recipe mới", description = "Request body: title, difficulty và recipeStatus bắt buộc; prepTimeMinutes, cookTimeMinutes, servings có thể bỏ trống. tools nhận danh sách toolId và quantity; ingredients nhận ingredientId, quantity và unit (tùy chọn, tối đa 50 ký tự); steps là các bước hướng dẫn; mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. Người tạo lấy từ tài khoản đăng nhập.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeResponse>> create(@Valid @RequestBody RecipeRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe", description = "Request body cập nhật toàn bộ recipe. tools nhận danh sách toolId và quantity; ingredients nhận ingredientId và quantity. Mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. Cập nhật thay thế toàn bộ danh sách; null/không gửi hoặc [] sẽ xóa danh sách tương ứng.")
+    @Operation(summary = "Cập nhật recipe", description = "Request body cập nhật toàn bộ recipe. tools nhận danh sách toolId và quantity; ingredients nhận ingredientId, quantity và unit (tùy chọn). Mỗi step nhận ingredients [{ingredientId, quantity}] và tools [{toolId, quantity}]. Cập nhật thay thế toàn bộ danh sách; null/không gửi hoặc [] sẽ xóa danh sách tương ứng.")
     @PutMapping("/{recipeId}")
     public ResponseEntity<ApiResponse<RecipeResponse>> update(@PathVariable UUID recipeId,
                                                               @Valid @RequestBody RecipeRequest request) {

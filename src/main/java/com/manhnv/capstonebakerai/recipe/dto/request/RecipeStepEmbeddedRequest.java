@@ -22,7 +22,6 @@ public class RecipeStepEmbeddedRequest {
     @NotNull(message = "instruction is required")
     private String instruction;
     @Schema(example = "10")
-    @NotNull(message = "durationMinutes is required")
     @Min(value = 0, message = "durationMinutes must be >= 0")
     private Integer durationMinutes;
     private String notes;

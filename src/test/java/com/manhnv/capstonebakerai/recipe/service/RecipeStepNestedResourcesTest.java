@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.common.security.SecurityUtils;
 import com.manhnv.capstonebakerai.recipe.dto.request.*;
 import com.manhnv.capstonebakerai.recipe.entity.*;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
+import com.manhnv.capstonebakerai.recipe.helper.RecipeStepDurationHelper;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeStepResourceHelper;
 import com.manhnv.capstonebakerai.recipe.repository.*;
 import com.manhnv.capstonebakerai.recipe.service.impl.RecipeServiceImpl;
@@ -14,8 +15,10 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -44,6 +47,8 @@ class RecipeStepNestedResourcesTest {
     @Mock RecipeStepResourceHelper resourceHelper;
     @Mock ApplicationEventPublisher publisher;
     @Mock EntityManager entityManager;
+    @Mock UserSummaryService userSummaryService;
+    @Spy RecipeStepDurationHelper durationHelper = new RecipeStepDurationHelper();
     @InjectMocks RecipeServiceImpl recipeService;
     @InjectMocks RecipeStepServiceImpl stepService;
 
@@ -59,20 +64,30 @@ class RecipeStepNestedResourcesTest {
                 .tools(List.of(new ToolEmbeddedRequest(UUID.randomUUID(), BigDecimal.ONE))).build();
     }
 
+    private static List<StepIngredientEmbeddedRequest> stepIngredients() {
+        return List.of(new StepIngredientEmbeddedRequest(UUID.randomUUID(), BigDecimal.TEN));
+    }
+
+    private static List<StepToolEmbeddedRequest> stepTools() {
+        return List.of(new StepToolEmbeddedRequest(UUID.randomUUID(), BigDecimal.ONE));
+    }
+
     @Test
     void standaloneCreateSavesNestedResources() {
-        var nested = stepRequest();
+        var ingredientRefs = stepIngredients();
+        var toolRefs = stepTools();
         var recipe = Recipe.builder().id(UUID.randomUUID()).build();
         when(recipes.findById(recipe.getId())).thenReturn(Optional.of(recipe));
         when(steps.save(any())).thenAnswer(c -> c.getArgument(0));
         stepService.createRecipeStep(RecipeStepRequest.builder().recipeId(recipe.getId())
-                .stepNumber(1).instruction("Mix").ingredients(nested.getIngredients()).tools(nested.getTools()).build());
-        verify(resourceHelper).replaceResources(any(RecipeStep.class), eq(nested.getIngredients()), eq(nested.getTools()));
+                .stepNumber(1).instruction("Mix").ingredients(ingredientRefs).tools(toolRefs).build());
+        verify(resourceHelper).replaceResources(any(RecipeStep.class), eq(ingredientRefs), eq(toolRefs));
     }
 
     @Test
     void standaloneUpdateReplacesNestedResources() {
-        var request = stepRequest();
+        var request = RecipeStepUpdateRequest.builder().stepNumber(1).instruction("Mix")
+                .ingredients(stepIngredients()).tools(stepTools()).build();
         var recipe = Recipe.builder().id(UUID.randomUUID()).build();
         var step = RecipeStep.builder().id(UUID.randomUUID()).recipe(recipe).stepNumber(1).build();
         when(steps.findById(step.getId())).thenReturn(Optional.of(step));
@@ -94,7 +109,8 @@ class RecipeStepNestedResourcesTest {
             security.when(SecurityUtils::getCurrentUserId).thenReturn(userId);
             recipeService.create(RecipeRequest.builder().steps(List.of(nested)).build());
         }
-        verify(resourceHelper).replaceResources(any(RecipeStep.class), eq(nested.getIngredients()), eq(nested.getTools()));
+        verify(resourceHelper).replaceEmbeddedResources(any(RecipeStep.class), eq(nested.getIngredients()),
+                eq(nested.getTools()), anyMap(), anyMap());
     }
 
     @Test
@@ -104,6 +120,7 @@ class RecipeStepNestedResourcesTest {
         when(recipes.findById(recipe.getId())).thenReturn(Optional.of(recipe));
         when(steps.saveAll(any())).thenAnswer(c -> c.getArgument(0));
         recipeService.update(recipe.getId(), RecipeRequest.builder().steps(List.of(nested)).build());
-        verify(resourceHelper).replaceResources(any(RecipeStep.class), eq(nested.getIngredients()), eq(nested.getTools()));
+        verify(resourceHelper).replaceEmbeddedResources(any(RecipeStep.class), eq(nested.getIngredients()),
+                eq(nested.getTools()), anyMap(), anyMap());
     }
 }

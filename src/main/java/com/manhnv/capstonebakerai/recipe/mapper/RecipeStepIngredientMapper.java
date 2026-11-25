@@ -2,19 +2,25 @@ package com.manhnv.capstonebakerai.recipe.mapper;
 
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepIngredientRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeStepIngredientResponse;
+import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepIngredient;
 
 public class RecipeStepIngredientMapper {
 
     public static RecipeStepIngredientResponse toDTO(RecipeStepIngredient entity) {
         if (entity == null) return null;
+        RecipeIngredient link = entity.getRecipeIngredient();
+        Ingredient ingredient = link.getIngredient();
         return RecipeStepIngredientResponse.builder()
                 .id(entity.getId())
                 .recipeStepId(entity.getRecipeStep().getId())
-                .ingredientId(entity.getIngredient().getId())
-                .ingredientName(entity.getIngredient().getName())
+                .recipeIngredientId(link.getId())
+                .ingredientId(ingredient == null ? null : ingredient.getId())
+                .ingredientName(ingredient == null ? link.getRawName() : ingredient.getName())
+                .rawName(link.getRawName())
                 .quantity(entity.getQuantity())
-                .unit(RecipeIngredientUnits.unitOf(entity.getRecipeStep().getRecipe(), entity.getIngredient().getId()))
+                .unit(link.getUnit())
                 .build();
     }
 

@@ -8,4 +8,5 @@ public class RecipeToolRequest {
  @NotNull private UUID recipeId;
  @NotNull private UUID toolId;
  @NotNull private BigDecimal quantity;
+ private String note;
 }

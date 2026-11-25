@@ -60,18 +60,16 @@ public class RecipeIngredientServiceImpl implements RecipeIngredientService {
     @Transactional
     public RecipeIngredientResponse update(UUID id, RecipeIngredientRequest request) {
         RecipeIngredient entity = find(id);
-        UUID oldRecipeId = entity.getRecipe().getId();
-        UUID oldIngredientId = entity.getIngredient().getId();
-        boolean pairChanged = !oldRecipeId.equals(request.getRecipeId())
-                || !oldIngredientId.equals(request.getIngredientId());
-        if (pairChanged) {
-            stepResourceHelper.requireIngredientUnusedBySteps(oldRecipeId, oldIngredientId);
-            if (repository.existsByRecipe_IdAndIngredient_Id(request.getRecipeId(), request.getIngredientId())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ingredient already exists in recipe");
-            }
+        boolean recipeChanged = !entity.getRecipe().getId().equals(request.getRecipeId());
+        UUID oldIngredientId = entity.getIngredient() == null ? null : entity.getIngredient().getId();
+        if (recipeChanged) {
+            stepResourceHelper.requireRecipeIngredientUnusedBySteps(entity.getId());
         }
-        stepResourceHelper.requireIngredientQuantityCoversSteps(
-                request.getRecipeId(), request.getIngredientId(), request.getQuantity());
+        if ((recipeChanged || !request.getIngredientId().equals(oldIngredientId))
+                && repository.existsByRecipe_IdAndIngredient_Id(request.getRecipeId(), request.getIngredientId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ingredient already exists in recipe");
+        }
+        stepResourceHelper.requireRecipeIngredientQuantityCoversSteps(entity.getId(), request.getQuantity());
         apply(entity, request);
         return RecipeIngredientMapper.toDTO(repository.save(entity));
     }
@@ -80,7 +78,7 @@ public class RecipeIngredientServiceImpl implements RecipeIngredientService {
     @Transactional
     public void delete(UUID id) {
         RecipeIngredient entity = find(id);
-        stepResourceHelper.requireIngredientUnusedBySteps(entity.getRecipe().getId(), entity.getIngredient().getId());
+        stepResourceHelper.requireRecipeIngredientUnusedBySteps(entity.getId());
         repository.delete(entity);
     }
 
@@ -96,5 +94,7 @@ public class RecipeIngredientServiceImpl implements RecipeIngredientService {
                 .orElseThrow(() -> new RuntimeException("Ingredient not found")));
         entity.setQuantity(request.getQuantity());
         entity.setUnit(request.getUnit().trim());
+        entity.setRawName(entity.getIngredient().getName());
+        entity.setNote(request.getNote());
     }
 }

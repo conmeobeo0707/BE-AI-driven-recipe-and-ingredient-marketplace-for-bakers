@@ -12,7 +12,10 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ToolResponse {
     private UUID id;
+    private UUID recipeToolId;
     private UUID recipeId;
     private String name;
+    private String rawName;
+    private String note;
     private BigDecimal quantity;
 }

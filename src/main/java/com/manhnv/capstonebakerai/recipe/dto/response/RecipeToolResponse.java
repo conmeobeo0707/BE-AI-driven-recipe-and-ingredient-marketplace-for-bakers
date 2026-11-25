@@ -15,5 +15,7 @@ public class RecipeToolResponse {
     private UUID recipeId;
     private UUID toolId;
     private String toolName;
+    private String rawName;
+    private String note;
     private BigDecimal quantity;
 }

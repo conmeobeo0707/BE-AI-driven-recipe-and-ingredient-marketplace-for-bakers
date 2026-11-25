@@ -38,13 +38,13 @@ public class RecipeStepIngredientController {
         return ResponseEntity.ok(ApiResponse.success(recipeStepIngredientService.getByRecipeStep(recipeStepId)));
     }
 
-    @Operation(summary = "Tạo recipe step ingredient")
+    @Operation(summary = "Tạo recipe step ingredient", description = "Request body: recipeStepId, recipeIngredientId (id dòng recipe ingredient cùng recipe với step), quantity.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeStepIngredientResponse>> create(@Valid @RequestBody RecipeStepIngredientRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeStepIngredientService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật recipe step ingredient")
+    @Operation(summary = "Cập nhật recipe step ingredient", description = "Request body: recipeStepId, recipeIngredientId (id dòng recipe ingredient cùng recipe với step), quantity.")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<RecipeStepIngredientResponse>> update(
             @PathVariable UUID id, @Valid @RequestBody RecipeStepIngredientRequest request) {

@@ -21,10 +21,16 @@ public class RecipeTool {
     @JoinColumn(name = "recipe_id", nullable = false)
     private Recipe recipe;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tool_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tool_id")
     private Tool tool;
 
-    @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
+    @Column(name = "raw_name")
+    private String rawName;
+
+    @Column(name = "quantity", precision = 10, scale = 2)
     private BigDecimal quantity;
+
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
 }

@@ -12,10 +12,11 @@ import com.manhnv.capstonebakerai.media.service.ShotstackService;
 import com.manhnv.capstonebakerai.recipe.dto.request.CreateRecipeVideoRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeVideoRenderResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
-import com.manhnv.capstonebakerai.recipe.mapper.RecipeIngredientUnits;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepImage;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeVideoRender;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStepType;
@@ -177,7 +178,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 .status(MediaStatus.ATTACHED)
                 .url(storedUrl)
                 .build());
-        recipe.setVideoMedia(video);
+        recipe.setMedia(video);
         recipeRepository.save(recipe);
 
         if (previous != null) {
@@ -205,27 +206,26 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
 
     private RecipeSnapshot snapshot(Recipe recipe) {
         List<VideoSlides.Row> ingredients = nullToEmpty(recipe.getIngredients()).stream()
-                .filter(link -> link.getIngredient() != null)
-                .map(link -> new VideoSlides.Row(link.getIngredient().getName(),
+                .filter(link -> displayName(link) != null)
+                .map(link -> new VideoSlides.Row(displayName(link),
                         amount(link.getQuantity(), link.getUnit()).trim()))
                 .toList();
         List<VideoSlides.Row> tools = nullToEmpty(recipe.getTools()).stream()
-                .filter(link -> link.getTool() != null)
-                .map(link -> new VideoSlides.Row(link.getTool().getName(),
+                .filter(link -> displayName(link) != null)
+                .map(link -> new VideoSlides.Row(displayName(link),
                         link.getQuantity() == null ? "" : "×" + link.getQuantity().stripTrailingZeros().toPlainString()))
                 .toList();
         List<StepSnapshot> steps = nullToEmpty(recipe.getSteps()).stream()
                 .sorted(Comparator.comparing(RecipeStep::getStepNumber, Comparator.nullsLast(Integer::compareTo)))
                 .map(step -> {
                     List<String> stepIngredients = nullToEmpty(step.getIngredients()).stream()
-                            .filter(link -> link.getIngredient() != null)
-                            .map(link -> (link.getIngredient().getName() + " "
-                                    + amount(link.getQuantity(),
-                                    RecipeIngredientUnits.unitOf(recipe, link.getIngredient().getId()))).trim())
+                            .filter(link -> displayName(link.getRecipeIngredient()) != null)
+                            .map(link -> (displayName(link.getRecipeIngredient()) + " "
+                                    + amount(link.getQuantity(), link.getRecipeIngredient().getUnit())).trim())
                             .toList();
                     List<String> stepTools = nullToEmpty(step.getTools()).stream()
-                            .filter(link -> link.getTool() != null)
-                            .map(link -> link.getTool().getName())
+                            .map(link -> displayName(link.getRecipeTool()))
+                            .filter(java.util.Objects::nonNull)
                             .toList();
                     List<String> stepPhotos = photoUrls(nullToEmpty(step.getImages()).stream()
                             .sorted(Comparator.comparing(RecipeStepImage::getSortOrder, Comparator.nullsLast(Integer::compareTo)))
@@ -385,6 +385,24 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         edit.put("timeline", timeline);
         edit.put("output", Map.of("format", "mp4", "resolution", "1080", "aspectRatio", "16:9"));
         return edit;
+    }
+
+    private static String displayName(RecipeIngredient link) {
+        if (link == null) {
+            return null;
+        }
+        return link.getIngredient() != null ? link.getIngredient().getName() : blankToNull(link.getRawName());
+    }
+
+    private static String displayName(RecipeTool link) {
+        if (link == null) {
+            return null;
+        }
+        return link.getTool() != null ? link.getTool().getName() : blankToNull(link.getRawName());
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static String amount(BigDecimal quantity, String unit) {

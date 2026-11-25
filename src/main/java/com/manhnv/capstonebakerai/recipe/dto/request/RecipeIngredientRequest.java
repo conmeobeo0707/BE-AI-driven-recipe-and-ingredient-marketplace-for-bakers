@@ -11,4 +11,5 @@ public class RecipeIngredientRequest {
  @NotNull private UUID ingredientId;
  @NotNull private BigDecimal quantity;
  @NotBlank @Size(max = 255) private String unit;
+ private String note;
 }
