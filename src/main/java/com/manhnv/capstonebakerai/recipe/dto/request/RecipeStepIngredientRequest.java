@@ -18,7 +18,7 @@ public class RecipeStepIngredientRequest {
     private UUID recipeStepId;
 
     @NotNull
-    private UUID ingredientId;
+    private UUID recipeIngredientId;
 
     @NotNull
     private BigDecimal quantity;

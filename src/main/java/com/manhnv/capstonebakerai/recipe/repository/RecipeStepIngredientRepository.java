@@ -12,4 +12,8 @@ public interface RecipeStepIngredientRepository extends JpaRepository<RecipeStep
     List<RecipeStepIngredient> findByRecipeStep_Id(UUID recipeStepId);
 
     List<RecipeStepIngredient> findByRecipeStep_Recipe_Id(UUID recipeId);
+
+    List<RecipeStepIngredient> findByRecipeIngredient_Id(UUID recipeIngredientId);
+
+    boolean existsByRecipeIngredient_Id(UUID recipeIngredientId);
 }

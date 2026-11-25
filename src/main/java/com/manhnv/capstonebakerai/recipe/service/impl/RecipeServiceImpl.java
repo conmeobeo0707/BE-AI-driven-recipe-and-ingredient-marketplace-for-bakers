@@ -6,8 +6,10 @@ import com.manhnv.capstonebakerai.recipe.helper.RecipeStepDurationHelper;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeStepResourceHelper;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
+import com.manhnv.capstonebakerai.recipe.dto.request.IngredientEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeRequest;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.ToolEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
@@ -85,6 +87,14 @@ public class RecipeServiceImpl implements RecipeService {
         return enrich(RecipeMapper.toDTO(entity), entity);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public RecipeResponse getDetail(UUID id) {
+        Recipe entity = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+        return enrich(RecipeMapper.toDTO(entity), entity);
+    }
+
     private RecipeResponse enrich(RecipeResponse response, Recipe entity) {
         UUID userId = entity.getUser() != null ? entity.getUser().getUserId() : null;
         response.setUser(userSummaryService.getSummary(userId));
@@ -116,7 +126,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         Recipe recipe = RecipeMapper.toEntity(request);
         if (request.getVideoId() != null) {
-            recipe.setVideoMedia(mediaHelper.resolveMedia(request.getVideoId(), MediaType.VIDEO, mediaById, noCurrentlyAttachedMedia));
+            recipe.setMedia(mediaHelper.resolveMedia(request.getVideoId(), MediaType.VIDEO, mediaById, noCurrentlyAttachedMedia));
         }
         recipe.setUser(user);
         recipe.setRecipeCategory(category);
@@ -131,18 +141,9 @@ public class RecipeServiceImpl implements RecipeService {
             saveRecipeImages(savedRecipe, request.getImageIds(), mediaById, noCurrentlyAttachedMedia);
         }
 
-        if (request.getTools() != null) recipeToolRepository.saveAll(request.getTools().stream().map(r -> {
-            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
-            RecipeTool link = new RecipeTool(); link.setRecipe(savedRecipe); link.setTool(tool); link.setQuantity(r.getQuantity()); return link;
-        }).toList());
-
-        if (request.getIngredients() != null) {
-            recipeIngredientRepository.saveAll(request.getIngredients().stream().map(r -> {
-                Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
-                if (r.getAliases() != null && !r.getAliases().isEmpty()) ingredientAliasService.addAll(ingredient, r.getAliases());
-                RecipeIngredient link = new RecipeIngredient(); link.setRecipe(savedRecipe); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); link.setUnit(requireUnit(r)); return link;
-            }).toList());
-        }
+        Map<UUID, RecipeTool> recipeToolsByToolId = byToolId(saveRecipeTools(savedRecipe, nullToEmpty(request.getTools())));
+        Map<UUID, RecipeIngredient> recipeIngredientsByIngredientId =
+                byIngredientId(saveRecipeIngredients(savedRecipe, nullToEmpty(request.getIngredients())));
 
         if (request.getSteps() != null) {
             List<RecipeStep> steps = request.getSteps().stream().map(stepRequest -> {
@@ -158,7 +159,8 @@ public class RecipeServiceImpl implements RecipeService {
             List<RecipeStep> savedSteps = recipeStepRepository.saveAll(steps);
             for (int i = 0; i < savedSteps.size(); i++) {
                 RecipeStepEmbeddedRequest stepRequest = request.getSteps().get(i);
-                stepResourceHelper.replaceResources(savedSteps.get(i), stepRequest.getIngredients(), stepRequest.getTools());
+                stepResourceHelper.replaceEmbeddedResources(savedSteps.get(i), stepRequest.getIngredients(),
+                        stepRequest.getTools(), recipeIngredientsByIngredientId, recipeToolsByToolId);
                 List<UUID> imageIds = stepRequest.getImageIds();
                 if (imageIds != null) mediaHelper.saveStepImages(savedSteps.get(i), imageIds, mediaById, noCurrentlyAttachedMedia);
             }
@@ -213,7 +215,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         existing.setTitle(request.getTitle());
         existing.setDescription(request.getDescription());
-        existing.setVideoMedia(request.getVideoId() == null ? null
+        existing.setMedia(request.getVideoId() == null ? null
                 : mediaHelper.resolveMedia(request.getVideoId(), MediaType.VIDEO, mediaById, currentlyAttachedMediaIds));
         existing.setDifficulty(request.getDifficulty());
         existing.setPrepTimeMinutes(request.getPrepTimeMinutes());
@@ -230,30 +232,22 @@ public class RecipeServiceImpl implements RecipeService {
         recipeImageRepository.flush();
         saveRecipeImages(existing, imageIds, mediaById, currentlyAttachedMediaIds);
 
-        // ---- Tools ----
-        recipeToolRepository.deleteByRecipe_Id(recipeId);
-        recipeToolRepository.flush();
-        recipeToolRepository.saveAll(tools.stream().map(r -> {
-            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
-            RecipeTool link = new RecipeTool(); link.setRecipe(existing); link.setTool(tool); link.setQuantity(r.getQuantity()); return link;
-        }).toList());
-
-        // ---- Ingredients ----
-        recipeIngredientRepository.deleteByRecipe_Id(recipeId);
-        recipeIngredientRepository.flush();
-        recipeIngredientRepository.saveAll(ingredients.stream().map(r -> {
-            Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
-            if (r.getAliases() != null && !r.getAliases().isEmpty()) ingredientAliasService.addAll(ingredient, r.getAliases());
-            RecipeIngredient link = new RecipeIngredient(); link.setRecipe(existing); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); link.setUnit(requireUnit(r)); return link;
-        }).toList());
-
-        // ---- Steps ----
         if (!existingSteps.isEmpty()) {
             recipeStepImageRepository.deleteByRecipeStepIds(existingSteps.stream().map(RecipeStep::getId).toList());
             recipeStepImageRepository.flush();
             recipeStepRepository.deleteAll(existingSteps);
             recipeStepRepository.flush();
         }
+
+        recipeToolRepository.deleteByRecipe_Id(recipeId);
+        recipeToolRepository.flush();
+        Map<UUID, RecipeTool> recipeToolsByToolId = byToolId(saveRecipeTools(existing, tools));
+
+        recipeIngredientRepository.deleteByRecipe_Id(recipeId);
+        recipeIngredientRepository.flush();
+        Map<UUID, RecipeIngredient> recipeIngredientsByIngredientId =
+                byIngredientId(saveRecipeIngredients(existing, ingredients));
+
         if (!steps.isEmpty()) {
             List<RecipeStep> newSteps = steps.stream().map(stepRequest -> {
                 RecipeStep newStep = new RecipeStep();
@@ -269,7 +263,8 @@ public class RecipeServiceImpl implements RecipeService {
             List<RecipeStep> savedSteps = recipeStepRepository.saveAll(newSteps);
             for (int i = 0; i < savedSteps.size(); i++) {
                 RecipeStepEmbeddedRequest stepRequest = steps.get(i);
-                stepResourceHelper.replaceResources(savedSteps.get(i), stepRequest.getIngredients(), stepRequest.getTools());
+                stepResourceHelper.replaceEmbeddedResources(savedSteps.get(i), stepRequest.getIngredients(),
+                        stepRequest.getTools(), recipeIngredientsByIngredientId, recipeToolsByToolId);
                 List<UUID> stepImageIds = nullToEmpty(stepRequest.getImageIds());
                 mediaHelper.saveStepImages(savedSteps.get(i), stepImageIds, mediaById, currentlyAttachedMediaIds);
             }
@@ -371,6 +366,53 @@ public class RecipeServiceImpl implements RecipeService {
                 .totalPages(page.getTotalPages())
                 .currentPage(page.getNumber())
                 .build();
+    }
+
+    private List<RecipeTool> saveRecipeTools(Recipe recipe, List<ToolEmbeddedRequest> requests) {
+        return recipeToolRepository.saveAll(requests.stream().map(r -> {
+            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
+            return RecipeTool.builder()
+                    .recipe(recipe)
+                    .tool(tool)
+                    .rawName(tool.getName())
+                    .quantity(r.getQuantity())
+                    .note(r.getNote())
+                    .build();
+        }).toList());
+    }
+
+    private List<RecipeIngredient> saveRecipeIngredients(Recipe recipe, List<IngredientEmbeddedRequest> requests) {
+        return recipeIngredientRepository.saveAll(requests.stream().map(r -> {
+            Ingredient ingredient = ingredientRepository.findById(r.getIngredientId())
+                    .orElseThrow(() -> new NotFoundException("Ingredient not found"));
+            if (r.getAliases() != null && !r.getAliases().isEmpty()) {
+                ingredientAliasService.addAll(ingredient, r.getAliases());
+            }
+            return RecipeIngredient.builder()
+                    .recipe(recipe)
+                    .ingredient(ingredient)
+                    .rawName(ingredient.getName())
+                    .quantity(r.getQuantity())
+                    .unit(requireUnit(r))
+                    .note(r.getNote())
+                    .build();
+        }).toList());
+    }
+
+    private static Map<UUID, RecipeTool> byToolId(List<RecipeTool> links) {
+        Map<UUID, RecipeTool> map = new HashMap<>();
+        for (RecipeTool link : nullToEmpty(links)) {
+            map.put(link.getTool().getId(), link);
+        }
+        return map;
+    }
+
+    private static Map<UUID, RecipeIngredient> byIngredientId(List<RecipeIngredient> links) {
+        Map<UUID, RecipeIngredient> map = new HashMap<>();
+        for (RecipeIngredient link : nullToEmpty(links)) {
+            map.put(link.getIngredient().getId(), link);
+        }
+        return map;
     }
 
     private static String requireUnit(com.manhnv.capstonebakerai.recipe.dto.request.IngredientEmbeddedRequest request) {

@@ -15,8 +15,11 @@ import java.util.UUID;
 @AllArgsConstructor
 public class IngredientResponse {
     private UUID id;
+    private UUID recipeIngredientId;
     private UUID recipeId;
     private String name;
+    private String rawName;
+    private String note;
     private String unit;
     private BigDecimal quantity;
     // Filled by create, update and get by id; left out of list endpoints.

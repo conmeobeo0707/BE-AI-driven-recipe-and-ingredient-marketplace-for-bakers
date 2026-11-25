@@ -2,16 +2,18 @@ package com.manhnv.capstonebakerai.recipe.helper;
 
 import com.manhnv.capstonebakerai.recipe.dto.request.IngredientEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.StepIngredientEmbeddedRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.StepToolEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.request.ToolEmbeddedRequest;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepIngredient;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepTool;
-import com.manhnv.capstonebakerai.recipe.repository.IngredientRepository;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeIngredientRepository;
-import com.manhnv.capstonebakerai.recipe.repository.RecipeToolRepository;
-import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepIngredientRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepToolRepository;
+import com.manhnv.capstonebakerai.recipe.repository.RecipeToolRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -29,49 +31,92 @@ import java.util.function.Function;
 @Component
 @RequiredArgsConstructor
 public class RecipeStepResourceHelper {
-    private final IngredientRepository ingredientRepository;
-    private final ToolRepository toolRepository;
     private final RecipeStepIngredientRepository stepIngredientRepository;
     private final RecipeStepToolRepository stepToolRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final RecipeToolRepository recipeToolRepository;
 
-    /** Full replacement, matching the PUT semantics of recipe and step images. */
     @Transactional
-    public void replaceResources(RecipeStep step, List<IngredientEmbeddedRequest> ingredients,
-                                 List<ToolEmbeddedRequest> tools) {
-        List<IngredientEmbeddedRequest> requestedIngredients = ingredients == null ? List.of() : ingredients;
-        List<ToolEmbeddedRequest> requestedTools = tools == null ? List.of() : tools;
-        validateUnique(requestedIngredients.stream().map(IngredientEmbeddedRequest::getIngredientId).toList(), "ingredient");
-        validateUnique(requestedTools.stream().map(ToolEmbeddedRequest::getToolId).toList(), "tool");
+    public void replaceResources(RecipeStep step, List<StepIngredientEmbeddedRequest> ingredients,
+                                 List<StepToolEmbeddedRequest> tools) {
+        List<StepIngredientEmbeddedRequest> requestedIngredients = nullToEmpty(ingredients);
+        List<StepToolEmbeddedRequest> requestedTools = nullToEmpty(tools);
+        validateUnique(requestedIngredients.stream().map(StepIngredientEmbeddedRequest::getRecipeIngredientId).toList(), "recipe ingredient");
+        validateUnique(requestedTools.stream().map(StepToolEmbeddedRequest::getRecipeToolId).toList(), "recipe tool");
 
-        // Resolve both lists before replacing existing links. The caller's transaction covers all changes.
         List<RecipeStepIngredient> ingredientLinks = requestedIngredients.stream().map(request ->
                 RecipeStepIngredient.builder().recipeStep(step)
-                        .ingredient(ingredientRepository.findById(request.getIngredientId())
-                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ingredient not found")))
+                        .recipeIngredient(findRecipeIngredient(step, request.getRecipeIngredientId()))
                         .quantity(request.getQuantity()).build()).toList();
         List<RecipeStepTool> toolLinks = requestedTools.stream().map(request ->
                 RecipeStepTool.builder().recipeStep(step)
-                        .tool(toolRepository.findById(request.getToolId())
-                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tool not found")))
+                        .recipeTool(findRecipeTool(step, request.getRecipeToolId()))
                         .quantity(request.getQuantity()).build()).toList();
 
+        replace(step, ingredientLinks, toolLinks);
+    }
+
+    @Transactional
+    public void replaceEmbeddedResources(RecipeStep step, List<IngredientEmbeddedRequest> ingredients,
+                                         List<ToolEmbeddedRequest> tools,
+                                         Map<UUID, RecipeIngredient> recipeIngredientsByIngredientId,
+                                         Map<UUID, RecipeTool> recipeToolsByToolId) {
+        List<IngredientEmbeddedRequest> requestedIngredients = nullToEmpty(ingredients);
+        List<ToolEmbeddedRequest> requestedTools = nullToEmpty(tools);
+        validateUnique(requestedIngredients.stream().map(IngredientEmbeddedRequest::getIngredientId).toList(), "ingredient");
+        validateUnique(requestedTools.stream().map(ToolEmbeddedRequest::getToolId).toList(), "tool");
+
+        List<RecipeStepIngredient> ingredientLinks = requestedIngredients.stream().map(request ->
+                RecipeStepIngredient.builder().recipeStep(step)
+                        .recipeIngredient(requirePresent(recipeIngredientsByIngredientId.get(request.getIngredientId()),
+                                "Ingredient " + request.getIngredientId() + " in step " + step.getStepNumber()
+                                        + " is not part of the recipe"))
+                        .quantity(request.getQuantity()).build()).toList();
+        List<RecipeStepTool> toolLinks = requestedTools.stream().map(request ->
+                RecipeStepTool.builder().recipeStep(step)
+                        .recipeTool(requirePresent(recipeToolsByToolId.get(request.getToolId()),
+                                "Tool " + request.getToolId() + " in step " + step.getStepNumber()
+                                        + " is not part of the recipe"))
+                        .quantity(request.getQuantity()).build()).toList();
+
+        replace(step, ingredientLinks, toolLinks);
+    }
+
+    private void replace(RecipeStep step, List<RecipeStepIngredient> ingredientLinks, List<RecipeStepTool> toolLinks) {
         stepIngredientRepository.deleteByRecipeStep_Id(step.getId());
         stepToolRepository.deleteByRecipeStep_Id(step.getId());
-        // Execute deletes before inserting the same step/resource pair under the unique constraints.
         stepIngredientRepository.flush();
         stepToolRepository.flush();
         step.setIngredients(stepIngredientRepository.saveAll(ingredientLinks));
         step.setTools(stepToolRepository.saveAll(toolLinks));
     }
 
+    public RecipeIngredient findRecipeIngredient(RecipeStep step, UUID recipeIngredientId) {
+        RecipeIngredient link = recipeIngredientRepository.findById(recipeIngredientId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Recipe ingredient " + recipeIngredientId + " not found"));
+        if (!sameRecipe(step, link.getRecipe().getId())) {
+            throw badRequest("Recipe ingredient " + recipeIngredientId + " is not part of the step's recipe");
+        }
+        return link;
+    }
+
+    public RecipeTool findRecipeTool(RecipeStep step, UUID recipeToolId) {
+        RecipeTool link = recipeToolRepository.findById(recipeToolId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Recipe tool " + recipeToolId + " not found"));
+        if (!sameRecipe(step, link.getRecipe().getId())) {
+            throw badRequest("Recipe tool " + recipeToolId + " is not part of the step's recipe");
+        }
+        return link;
+    }
+
     public void validateEmbeddedRecipe(List<IngredientEmbeddedRequest> recipeIngredients,
                                        List<ToolEmbeddedRequest> recipeTools,
                                        List<RecipeStepEmbeddedRequest> steps) {
-        List<IngredientEmbeddedRequest> ingredients = recipeIngredients == null ? List.of() : recipeIngredients;
-        List<ToolEmbeddedRequest> tools = recipeTools == null ? List.of() : recipeTools;
-        List<RecipeStepEmbeddedRequest> stepList = steps == null ? List.of() : steps;
+        List<IngredientEmbeddedRequest> ingredients = nullToEmpty(recipeIngredients);
+        List<ToolEmbeddedRequest> tools = nullToEmpty(recipeTools);
+        List<RecipeStepEmbeddedRequest> stepList = nullToEmpty(steps);
 
         Map<UUID, BigDecimal> recipeIngredientQty = toQuantityMap(ingredients,
                 IngredientEmbeddedRequest::getIngredientId, IngredientEmbeddedRequest::getQuantity, "ingredient", "recipe");
@@ -89,7 +134,7 @@ public class RecipeStepResourceHelper {
             }
             for (ToolEmbeddedRequest tool : nullToEmpty(step.getTools())) {
                 requireInRecipe(recipeToolQty, tool.getToolId(), "Tool", step.getStepNumber());
-                requireToolWithinRecipe(recipeToolQty, tool, step.getStepNumber());
+                requireToolWithinRecipe(recipeToolQty, tool.getToolId(), tool.getQuantity(), step.getStepNumber());
             }
         }
 
@@ -104,75 +149,84 @@ public class RecipeStepResourceHelper {
 
     @Transactional(readOnly = true)
     public void validateStepAgainstRecipe(UUID recipeId, UUID stepId, Integer stepNumber,
-                                          List<IngredientEmbeddedRequest> ingredients,
-                                          List<ToolEmbeddedRequest> tools) {
+                                          List<StepIngredientEmbeddedRequest> ingredients,
+                                          List<StepToolEmbeddedRequest> tools) {
         Map<UUID, BigDecimal> recipeIngredientQty = new HashMap<>();
         recipeIngredientRepository.findByRecipe_Id(recipeId)
-                .forEach(link -> recipeIngredientQty.put(link.getIngredient().getId(), qty(link.getQuantity())));
+                .forEach(link -> recipeIngredientQty.put(link.getId(), qty(link.getQuantity())));
         Map<UUID, BigDecimal> recipeToolQty = new HashMap<>();
         recipeToolRepository.findByRecipe_Id(recipeId)
-                .forEach(link -> recipeToolQty.put(link.getTool().getId(), qty(link.getQuantity())));
+                .forEach(link -> recipeToolQty.put(link.getId(), qty(link.getQuantity())));
 
         Map<UUID, BigDecimal> usedIngredientQty = new HashMap<>();
         stepIngredientRepository.findByRecipeStep_Recipe_Id(recipeId).stream()
                 .filter(link -> stepId == null || !stepId.equals(link.getRecipeStep().getId()))
-                .forEach(link -> usedIngredientQty.merge(link.getIngredient().getId(), qty(link.getQuantity()), BigDecimal::add));
+                .forEach(link -> usedIngredientQty.merge(link.getRecipeIngredient().getId(), qty(link.getQuantity()), BigDecimal::add));
 
-        for (IngredientEmbeddedRequest ingredient : nullToEmpty(ingredients)) {
-            requireInRecipe(recipeIngredientQty, ingredient.getIngredientId(), "Ingredient", stepNumber);
-            BigDecimal total = usedIngredientQty.getOrDefault(ingredient.getIngredientId(), BigDecimal.ZERO)
-                    .add(qty(ingredient.getQuantity()));
-            BigDecimal recipeQty = recipeIngredientQty.get(ingredient.getIngredientId());
+        for (StepIngredientEmbeddedRequest ingredient : nullToEmpty(ingredients)) {
+            UUID id = ingredient.getRecipeIngredientId();
+            requireInRecipe(recipeIngredientQty, id, "Recipe ingredient", stepNumber);
+            BigDecimal total = usedIngredientQty.getOrDefault(id, BigDecimal.ZERO).add(qty(ingredient.getQuantity()));
+            BigDecimal recipeQty = recipeIngredientQty.get(id);
             if (total.compareTo(recipeQty) > 0) {
-                throw badRequest("Total quantity of ingredient " + ingredient.getIngredientId() + " across steps ("
+                throw badRequest("Total quantity of recipe ingredient " + id + " across steps ("
                         + total.toPlainString() + ") exceeds the recipe quantity (" + recipeQty.toPlainString() + ")");
             }
         }
-        for (ToolEmbeddedRequest tool : nullToEmpty(tools)) {
-            requireInRecipe(recipeToolQty, tool.getToolId(), "Tool", stepNumber);
-            requireToolWithinRecipe(recipeToolQty, tool, stepNumber);
+        for (StepToolEmbeddedRequest tool : nullToEmpty(tools)) {
+            requireInRecipe(recipeToolQty, tool.getRecipeToolId(), "Recipe tool", stepNumber);
+            requireToolWithinRecipe(recipeToolQty, tool.getRecipeToolId(), tool.getQuantity(), stepNumber);
         }
     }
 
     @Transactional(readOnly = true)
-    public void requireIngredientUnusedBySteps(UUID recipeId, UUID ingredientId) {
-        if (stepIngredientRepository.findByRecipeStep_Recipe_Id(recipeId).stream()
-                .anyMatch(link -> link.getIngredient().getId().equals(ingredientId))) {
-            throw badRequest("Ingredient " + ingredientId + " is still used by steps of this recipe");
+    public void requireRecipeIngredientUnusedBySteps(UUID recipeIngredientId) {
+        if (stepIngredientRepository.existsByRecipeIngredient_Id(recipeIngredientId)) {
+            throw badRequest("Recipe ingredient " + recipeIngredientId + " is still used by steps of this recipe");
         }
     }
 
     @Transactional(readOnly = true)
-    public void requireIngredientQuantityCoversSteps(UUID recipeId, UUID ingredientId, BigDecimal recipeQuantity) {
-        BigDecimal used = stepIngredientRepository.findByRecipeStep_Recipe_Id(recipeId).stream()
-                .filter(link -> link.getIngredient().getId().equals(ingredientId))
+    public void requireRecipeIngredientQuantityCoversSteps(UUID recipeIngredientId, BigDecimal recipeQuantity) {
+        BigDecimal used = stepIngredientRepository.findByRecipeIngredient_Id(recipeIngredientId).stream()
                 .map(link -> qty(link.getQuantity()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (qty(recipeQuantity).compareTo(used) < 0) {
-            throw badRequest("Recipe quantity of ingredient " + ingredientId + " (" + qty(recipeQuantity).toPlainString()
-                    + ") is less than the total used by steps (" + used.toPlainString() + ")");
+            throw badRequest("Recipe quantity of recipe ingredient " + recipeIngredientId + " ("
+                    + qty(recipeQuantity).toPlainString() + ") is less than the total used by steps ("
+                    + used.toPlainString() + ")");
         }
     }
 
     @Transactional(readOnly = true)
-    public void requireToolUnusedBySteps(UUID recipeId, UUID toolId) {
-        if (stepToolRepository.findByRecipeStep_Recipe_Id(recipeId).stream()
-                .anyMatch(link -> link.getTool().getId().equals(toolId))) {
-            throw badRequest("Tool " + toolId + " is still used by steps of this recipe");
+    public void requireRecipeToolUnusedBySteps(UUID recipeToolId) {
+        if (stepToolRepository.existsByRecipeTool_Id(recipeToolId)) {
+            throw badRequest("Recipe tool " + recipeToolId + " is still used by steps of this recipe");
         }
     }
 
     @Transactional(readOnly = true)
-    public void requireToolQuantityCoversSteps(UUID recipeId, UUID toolId, BigDecimal recipeQuantity) {
-        BigDecimal maxUsed = stepToolRepository.findByRecipeStep_Recipe_Id(recipeId).stream()
-                .filter(link -> link.getTool().getId().equals(toolId))
+    public void requireRecipeToolQuantityCoversSteps(UUID recipeToolId, BigDecimal recipeQuantity) {
+        BigDecimal maxUsed = stepToolRepository.findByRecipeTool_Id(recipeToolId).stream()
                 .map(link -> qty(link.getQuantity()))
                 .max(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
         if (qty(recipeQuantity).compareTo(maxUsed) < 0) {
-            throw badRequest("Recipe quantity of tool " + toolId + " (" + qty(recipeQuantity).toPlainString()
-                    + ") is less than the quantity used in a step (" + maxUsed.toPlainString() + ")");
+            throw badRequest("Recipe quantity of recipe tool " + recipeToolId + " ("
+                    + qty(recipeQuantity).toPlainString() + ") is less than the quantity used in a step ("
+                    + maxUsed.toPlainString() + ")");
         }
+    }
+
+    private static boolean sameRecipe(RecipeStep step, UUID recipeId) {
+        return step.getRecipe() != null && recipeId != null && recipeId.equals(step.getRecipe().getId());
+    }
+
+    private static <T> T requirePresent(T value, String message) {
+        if (value == null) {
+            throw badRequest(message);
+        }
+        return value;
     }
 
     private static <T> Map<UUID, BigDecimal> toQuantityMap(List<T> items, Function<T, UUID> idOf,
@@ -192,11 +246,12 @@ public class RecipeStepResourceHelper {
         }
     }
 
-    private static void requireToolWithinRecipe(Map<UUID, BigDecimal> recipeToolQty, ToolEmbeddedRequest tool, Integer stepNumber) {
-        BigDecimal recipeQty = recipeToolQty.get(tool.getToolId());
-        if (qty(tool.getQuantity()).compareTo(recipeQty) > 0) {
-            throw badRequest("Quantity of tool " + tool.getToolId() + " in step " + stepNumber + " ("
-                    + qty(tool.getQuantity()).toPlainString() + ") exceeds the recipe quantity (" + recipeQty.toPlainString() + ")");
+    private static void requireToolWithinRecipe(Map<UUID, BigDecimal> recipeToolQty, UUID toolKey,
+                                                BigDecimal quantity, Integer stepNumber) {
+        BigDecimal recipeQty = recipeToolQty.get(toolKey);
+        if (qty(quantity).compareTo(recipeQty) > 0) {
+            throw badRequest("Quantity of tool " + toolKey + " in step " + stepNumber + " ("
+                    + qty(quantity).toPlainString() + ") exceeds the recipe quantity (" + recipeQty.toPlainString() + ")");
         }
     }
 
@@ -212,9 +267,9 @@ public class RecipeStepResourceHelper {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
-    private void validateUnique(List<UUID> ids, String resource) {
+    private static void validateUnique(List<UUID> ids, String resource) {
         if (new HashSet<>(ids).size() != ids.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duplicate " + resource + " IDs in recipe step");
+            throw badRequest("Duplicate " + resource + " IDs in recipe step");
         }
     }
 }

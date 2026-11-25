@@ -13,7 +13,9 @@ import java.util.UUID;
 public class RecipeStepToolResponse {
     private UUID id;
     private UUID recipeStepId;
+    private UUID recipeToolId;
     private UUID toolId;
     private String toolName;
+    private String rawName;
     private BigDecimal quantity;
 }

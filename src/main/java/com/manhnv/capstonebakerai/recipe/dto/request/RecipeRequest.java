@@ -4,6 +4,7 @@ import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import java.util.List;
@@ -25,14 +26,14 @@ public class RecipeRequest {
     private List<UUID> imageIds;
     @NotNull(message = "difficulty is required")
     private DifficultyEnum difficulty;
-    @Schema(example = "3.5")
-    @NotNull(message = "prepTimeMinutes is required")
+    @Schema(example = "15")
+    @Min(value = 0, message = "prepTimeMinutes must be >= 0")
     private Integer prepTimeMinutes;
     @Schema(example = "30")
-    @NotNull(message = "cookTimeMinutes is required")
+    @Min(value = 0, message = "cookTimeMinutes must be >= 0")
     private Integer cookTimeMinutes;
     @Schema(example = "3")
-    @NotNull(message = "servings is required")
+    @Min(value = 1, message = "servings must be >= 1")
     private Integer servings;
     @NotNull(message = "recipeStatus is required")
     private RecipeStatus recipeStatus;
@@ -40,7 +41,7 @@ public class RecipeRequest {
     @Valid
     private List<ToolEmbeddedRequest> tools;
     @Valid
-    private List<IngredientEmbeddedRequest> ingredients;
+    private List<@NotNull IngredientEmbeddedRequest> ingredients;
     @Valid
     private List<RecipeStepEmbeddedRequest> steps;
 }

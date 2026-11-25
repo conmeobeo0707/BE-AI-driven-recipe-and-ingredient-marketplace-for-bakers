@@ -24,7 +24,6 @@ public class RecipeStepRequest {
     @NotNull(message = "instruction is required")
     private String instruction;
     @Schema(example = "10")
-    @NotNull(message = "durationMinutes is required")
     @Min(value = 0, message = "durationMinutes must be >= 0")
     private Integer durationMinutes;
     private String notes;
@@ -34,8 +33,8 @@ public class RecipeStepRequest {
     private List<UUID> imageIds;
 
     @Valid
-    private List<@NotNull IngredientEmbeddedRequest> ingredients;
+    private List<@NotNull StepIngredientEmbeddedRequest> ingredients;
 
     @Valid
-    private List<@NotNull ToolEmbeddedRequest> tools;
+    private List<@NotNull StepToolEmbeddedRequest> tools;
 }

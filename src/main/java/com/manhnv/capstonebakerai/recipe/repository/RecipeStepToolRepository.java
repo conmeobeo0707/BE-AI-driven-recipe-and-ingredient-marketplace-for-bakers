@@ -12,4 +12,8 @@ public interface RecipeStepToolRepository extends JpaRepository<RecipeStepTool, 
     List<RecipeStepTool> findByRecipeStep_Id(UUID recipeStepId);
 
     List<RecipeStepTool> findByRecipeStep_Recipe_Id(UUID recipeId);
+
+    List<RecipeStepTool> findByRecipeTool_Id(UUID recipeToolId);
+
+    boolean existsByRecipeTool_Id(UUID recipeToolId);
 }

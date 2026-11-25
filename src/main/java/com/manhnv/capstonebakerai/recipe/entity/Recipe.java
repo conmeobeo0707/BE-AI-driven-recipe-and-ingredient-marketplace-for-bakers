@@ -5,7 +5,6 @@ import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -51,24 +50,17 @@ public class Recipe {
     @JoinColumn(name = "video_id")
     private Media media;
 
-    // Denormalized copy of media.url, kept in sync whenever a video is attached/removed — some
-    // callers read this column directly instead of joining media.
-    @Column(name = "video_url")
-    private String videoUrl;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "difficulty", nullable = false)
     private DifficultyEnum difficulty;
 
-    @NotNull
-    @Column(name = "prep_time_min", nullable = false)
-    private Integer prepTimeMinutes;;
+    @Column(name = "prep_time_min")
+    private Integer prepTimeMinutes;
 
-    @NotNull
-    @Column(name = "cook_time_min", nullable = false)
+    @Column(name = "cook_time_min")
     private Integer cookTimeMinutes;
 
-    @Column(name = "servings", nullable = false)
+    @Column(name = "servings")
     private Integer servings;
 
     @Builder.Default
@@ -112,10 +104,4 @@ public class Recipe {
 
     @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RecipeImage> images;
-
-    // Use instead of setMedia(...) so the denormalized videoUrl column never drifts from it.
-    public void setVideoMedia(Media media) {
-        this.media = media;
-        this.videoUrl = media == null ? null : media.getUrl();
-    }
 }

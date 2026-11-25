@@ -29,8 +29,10 @@ public class IngredientEmbeddedRequest {
     @Valid
     @Size(max = 20)
     private List<SaveIngredientAliasRequest> aliases;
+    @Schema(example = "đập nhuyễn", nullable = true, description = "Ghi chú cho nguyên liệu của công thức; bỏ qua ở nguyên liệu của từng bước")
+    private String note;
 
     public IngredientEmbeddedRequest(UUID ingredientId, BigDecimal quantity) {
-        this(ingredientId, quantity, null, null);
+        this(ingredientId, quantity, null, null, null);
     }
 }

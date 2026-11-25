@@ -13,8 +13,10 @@ import java.util.UUID;
 public class RecipeStepIngredientResponse {
     private UUID id;
     private UUID recipeStepId;
+    private UUID recipeIngredientId;
     private UUID ingredientId;
     private String ingredientName;
+    private String rawName;
     private BigDecimal quantity;
     private String unit;
 }
