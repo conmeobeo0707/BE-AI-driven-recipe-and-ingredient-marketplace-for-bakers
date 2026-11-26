@@ -47,7 +47,7 @@ class ExtractedRecipeMatcherTest {
         alias.setAlias("unsalted butter");
         alias.setNormalizedAlias("unsalted butter");
         when(aliasRepository.findAllByNormalizedAliasIn(anyCollection())).thenReturn(List.of(alias));
-        when(ingredientRepository.findAllShared()).thenReturn(List.of(oreo, butter));
+        when(ingredientRepository.findAllByOrderByNameAscIdAsc()).thenReturn(List.of(oreo, butter));
         when(toolRepository.findAll()).thenReturn(List.of(whisk));
     }
 

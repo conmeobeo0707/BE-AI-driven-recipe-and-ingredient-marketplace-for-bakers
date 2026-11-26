@@ -13,10 +13,15 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class StepIngredientEmbeddedRequest {
-    @Schema(description = "id của dòng recipe ingredient (RecipeResponse.ingredients[].recipeIngredientId)")
+    @Schema(description = "id của dòng recipe ingredient (RecipeResponse.ingredients[].id)")
     @NotNull(message = "recipeIngredientId is required")
     private UUID recipeIngredientId;
     @Schema(example = "100")
     @NotNull(message = "quantity is required")
     private BigDecimal quantity;
+    private String note;
+
+    public StepIngredientEmbeddedRequest(UUID recipeIngredientId, BigDecimal quantity) {
+        this(recipeIngredientId, quantity, null);
+    }
 }

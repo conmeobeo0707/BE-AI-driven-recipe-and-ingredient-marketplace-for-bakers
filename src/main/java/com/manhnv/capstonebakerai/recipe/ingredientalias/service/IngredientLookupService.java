@@ -39,7 +39,7 @@ public class IngredientLookupService {
             throw new AppException(IngredientAliasErrorCode.INVALID_SEARCH);
         }
         if (query.isEmpty()) {
-            return ingredientRepository.findAllShared().stream()
+            return ingredientRepository.findAllByOrderByNameAscIdAsc().stream()
                     .limit(limit)
                     .map(i -> new IngredientCandidate(i.getId(), i.getName(), i.getName(), 0, null))
                     .toList();
@@ -65,7 +65,7 @@ public class IngredientLookupService {
 
     private List<Term> terms() {
         List<Term> terms = new ArrayList<>();
-        for (var ingredient : ingredientRepository.findAllShared()) {
+        for (var ingredient : ingredientRepository.findAllByOrderByNameAscIdAsc()) {
             terms.add(new Term(ingredient.getId(), ingredient.getName(),
                     ingredient.getName(), normalizer.normalize(ingredient.getName())));
         }

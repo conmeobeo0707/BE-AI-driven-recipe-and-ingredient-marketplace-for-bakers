@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS recipe_step_ingredients ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE IF EXISTS recipe_step_tools ADD COLUMN IF NOT EXISTS note TEXT;

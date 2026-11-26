@@ -88,7 +88,7 @@ public class ExtractedRecipeMatcher {
         for (IngredientAlias alias : aliasRepository.findAllByNormalizedAliasIn(normalizedNames)) {
             byAlias.putIfAbsent(alias.getNormalizedAlias(), alias.getIngredient());
         }
-        Map<String, Ingredient> byName = byNormalizedName(ingredientRepository.findAllShared(), Ingredient::getName);
+        Map<String, Ingredient> byName = byNormalizedName(ingredientRepository.findAllByOrderByNameAscIdAsc(), Ingredient::getName);
 
         Set<UUID> usedIds = new HashSet<>();
         return items.stream().map(item -> {

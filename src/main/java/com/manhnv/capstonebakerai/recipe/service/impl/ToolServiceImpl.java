@@ -1,13 +1,16 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
+import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.recipe.dto.request.ToolRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.ToolResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Tool;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeCatalogErrorCode;
 import com.manhnv.capstonebakerai.recipe.mapper.ToolMapper;
 import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.ToolService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,9 +56,13 @@ public class ToolServiceImpl implements ToolService {
 
     @Override
     public ToolResponse create(ToolRequest request) {
+        String name = validName(request.getName());
+        if (repository.existsByNormalizedName(name)) {
+            throw nameTaken(name);
+        }
         Tool entity = ToolMapper.toEntity(request);
-
-        return ToolMapper.toDTO(repository.save(entity));
+        entity.setName(name);
+        return ToolMapper.toDTO(save(entity));
     }
 
     @Override
@@ -63,9 +70,12 @@ public class ToolServiceImpl implements ToolService {
         Tool existing = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-        existing.setName(request.getName());
-
-        return ToolMapper.toDTO(repository.save(existing));
+        String name = validName(request.getName());
+        if (repository.existsByNormalizedNameAndIdNot(name, id)) {
+            throw nameTaken(name);
+        }
+        existing.setName(name);
+        return ToolMapper.toDTO(save(existing));
     }
 
     @Override
@@ -76,4 +86,22 @@ public class ToolServiceImpl implements ToolService {
         repository.deleteById(id);
     }
 
+    private Tool save(Tool tool) {
+        try {
+            return repository.saveAndFlush(tool);
+        } catch (DataIntegrityViolationException exception) {
+            throw nameTaken(tool.getName());
+        }
+    }
+
+    private static String validName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new AppException(RecipeCatalogErrorCode.NAME_REQUIRED);
+        }
+        return name.trim();
+    }
+
+    private static AppException nameTaken(String name) {
+        return new AppException(RecipeCatalogErrorCode.TOOL_NAME_ALREADY_EXISTS, "Dụng cụ '" + name + "' đã tồn tại");
+    }
 }

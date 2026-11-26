@@ -6,6 +6,7 @@ import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepTool;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeStepResourceHelper;
+import com.manhnv.capstonebakerai.recipe.mapper.RecipeStepIngredientMapper;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeStepToolMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepToolRepository;
@@ -81,6 +82,7 @@ public class RecipeStepToolServiceImpl implements RecipeStepToolService {
         entity.setRecipeStep(step);
         entity.setRecipeTool(recipeTool);
         entity.setQuantity(request.getQuantity());
+        entity.setNote(RecipeStepIngredientMapper.trimToNull(request.getNote()));
     }
 
     private void validate(UUID entityId, RecipeStep step, RecipeTool recipeTool, BigDecimal quantity) {

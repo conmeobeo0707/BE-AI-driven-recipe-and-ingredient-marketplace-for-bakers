@@ -22,4 +22,6 @@ public class RecipeStepIngredientRequest {
 
     @NotNull
     private BigDecimal quantity;
+
+    private String note;
 }

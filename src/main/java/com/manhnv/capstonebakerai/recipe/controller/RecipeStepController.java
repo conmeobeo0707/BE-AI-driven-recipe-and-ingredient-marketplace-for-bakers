@@ -61,7 +61,7 @@ public class RecipeStepController {
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
-    @Operation(summary = "Tạo recipe step mới", description = "Request body: recipeId và stepNumber bắt buộc, không được null. instruction bắt buộc. Mỗi step nhận ingredients [{recipeIngredientId, quantity}] và tools [{recipeToolId, quantity}]; recipeIngredientId/recipeToolId là id dòng nguyên liệu/dụng cụ của recipe (RecipeResponse.ingredients[].recipeIngredientId, tools[].recipeToolId). imageIds có thể null/không gửi để tạo step không có ảnh. recipeId phải trỏ tới recipe hiện có; stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
+    @Operation(summary = "Tạo recipe step mới", description = "Request body: recipeId và stepNumber bắt buộc, không được null. instruction bắt buộc. Mỗi step nhận ingredients [{recipeIngredientId, quantity}] và tools [{recipeToolId, quantity}]; recipeIngredientId/recipeToolId là id dòng nguyên liệu/dụng cụ của recipe (RecipeResponse.ingredients[].id, tools[].id). imageIds có thể null/không gửi để tạo step không có ảnh. recipeId phải trỏ tới recipe hiện có; stepNumber phải duy trì thứ tự liên tục bắt đầu từ 1 trong recipe.")
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeStepResponse>> create(@Valid @RequestBody RecipeStepRequest request) {
         return ResponseEntity.ok(ApiResponse.success(recipeStepService.createRecipeStep(request)));

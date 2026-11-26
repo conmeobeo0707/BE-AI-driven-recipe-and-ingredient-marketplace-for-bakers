@@ -2,8 +2,8 @@ package com.manhnv.capstonebakerai.recipe.mapper;
 
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeResponse;
-import com.manhnv.capstonebakerai.recipe.dto.response.IngredientResponse;
-import com.manhnv.capstonebakerai.recipe.dto.response.ToolResponse;
+import com.manhnv.capstonebakerai.recipe.dto.response.RecipeIngredientItemResponse;
+import com.manhnv.capstonebakerai.recipe.dto.response.RecipeToolItemResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
@@ -43,10 +43,10 @@ public class RecipeMapper {
                 .bookmarkCount(entity.getBookmarkCount())
                 .ratingCount(entity.getRatingCount())
                 .tools(entity.getTools() != null
-                        ? entity.getTools().stream().map(link -> toToolResponse(link, entity)).collect(Collectors.toList())
+                        ? entity.getTools().stream().map(RecipeMapper::toToolResponse).collect(Collectors.toList())
                         : Collections.emptyList())
                 .ingredients(entity.getIngredients() != null
-                        ? entity.getIngredients().stream().map(link -> toIngredientResponse(link, entity)).collect(Collectors.toList())
+                        ? entity.getIngredients().stream().map(RecipeMapper::toIngredientResponse).collect(Collectors.toList())
                         : Collections.emptyList())
                 .steps(entity.getSteps() != null
                         ? entity.getSteps().stream().map(RecipeStepMapper::toDTO).collect(Collectors.toList())
@@ -67,12 +67,11 @@ public class RecipeMapper {
         return entity;
     }
 
-    private static ToolResponse toToolResponse(RecipeTool link, Recipe recipe) {
+    private static RecipeToolItemResponse toToolResponse(RecipeTool link) {
         Tool tool = link.getTool();
-        return ToolResponse.builder()
-                .id(tool == null ? null : tool.getId())
-                .recipeToolId(link.getId())
-                .recipeId(recipe.getId())
+        return RecipeToolItemResponse.builder()
+                .id(link.getId())
+                .toolId(tool == null ? null : tool.getId())
                 .name(tool == null ? link.getRawName() : tool.getName())
                 .rawName(link.getRawName())
                 .note(link.getNote())
@@ -80,12 +79,11 @@ public class RecipeMapper {
                 .build();
     }
 
-    private static IngredientResponse toIngredientResponse(RecipeIngredient link, Recipe recipe) {
+    private static RecipeIngredientItemResponse toIngredientResponse(RecipeIngredient link) {
         Ingredient ingredient = link.getIngredient();
-        return IngredientResponse.builder()
-                .id(ingredient == null ? null : ingredient.getId())
-                .recipeIngredientId(link.getId())
-                .recipeId(recipe.getId())
+        return RecipeIngredientItemResponse.builder()
+                .id(link.getId())
+                .ingredientId(ingredient == null ? null : ingredient.getId())
                 .name(ingredient == null ? link.getRawName() : ingredient.getName())
                 .rawName(link.getRawName())
                 .note(link.getNote())

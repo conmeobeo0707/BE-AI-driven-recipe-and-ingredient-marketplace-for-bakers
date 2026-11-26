@@ -47,11 +47,11 @@ public class RecipeStepResourceHelper {
         List<RecipeStepIngredient> ingredientLinks = requestedIngredients.stream().map(request ->
                 RecipeStepIngredient.builder().recipeStep(step)
                         .recipeIngredient(findRecipeIngredient(step, request.getRecipeIngredientId()))
-                        .quantity(request.getQuantity()).build()).toList();
+                        .quantity(request.getQuantity()).note(trimToNull(request.getNote())).build()).toList();
         List<RecipeStepTool> toolLinks = requestedTools.stream().map(request ->
                 RecipeStepTool.builder().recipeStep(step)
                         .recipeTool(findRecipeTool(step, request.getRecipeToolId()))
-                        .quantity(request.getQuantity()).build()).toList();
+                        .quantity(request.getQuantity()).note(trimToNull(request.getNote())).build()).toList();
 
         replace(step, ingredientLinks, toolLinks);
     }
@@ -71,15 +71,19 @@ public class RecipeStepResourceHelper {
                         .recipeIngredient(requirePresent(recipeIngredientsByIngredientId.get(request.getIngredientId()),
                                 "Ingredient " + request.getIngredientId() + " in step " + step.getStepNumber()
                                         + " is not part of the recipe"))
-                        .quantity(request.getQuantity()).build()).toList();
+                        .quantity(request.getQuantity()).note(trimToNull(request.getNote())).build()).toList();
         List<RecipeStepTool> toolLinks = requestedTools.stream().map(request ->
                 RecipeStepTool.builder().recipeStep(step)
                         .recipeTool(requirePresent(recipeToolsByToolId.get(request.getToolId()),
                                 "Tool " + request.getToolId() + " in step " + step.getStepNumber()
                                         + " is not part of the recipe"))
-                        .quantity(request.getQuantity()).build()).toList();
+                        .quantity(request.getQuantity()).note(trimToNull(request.getNote())).build()).toList();
 
         replace(step, ingredientLinks, toolLinks);
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private void replace(RecipeStep step, List<RecipeStepIngredient> ingredientLinks, List<RecipeStepTool> toolLinks) {

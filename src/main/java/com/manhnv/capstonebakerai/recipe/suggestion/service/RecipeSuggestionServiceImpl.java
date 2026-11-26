@@ -44,7 +44,7 @@ public class RecipeSuggestionServiceImpl implements RecipeSuggestionService {
         requireCustomer();
 
         Set<UUID> ids = new LinkedHashSet<>(ingredientIds);
-        Map<UUID, Ingredient> selected = ingredientRepository.findAllSharedByIdIn(ids).stream()
+        Map<UUID, Ingredient> selected = ingredientRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Ingredient::getId, ingredient -> ingredient));
         if (selected.size() != ids.size()) {
             throw new AppException(RecipeSuggestionErrorCode.INVALID_INGREDIENT_SELECTION);
