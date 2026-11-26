@@ -38,7 +38,7 @@ public class RecipeResponse {
     private Long bookmarkCount;
     private Long ratingCount;
 
-    private List<ToolResponse> tools;
-    private List<IngredientResponse> ingredients;
+    private List<RecipeToolItemResponse> tools;
+    private List<RecipeIngredientItemResponse> ingredients;
     private List<RecipeStepResponse> steps;
 }

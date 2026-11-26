@@ -1,5 +1,6 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
+import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.recipe.dto.request.IngredientRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.IngredientResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
@@ -10,7 +11,9 @@ import com.manhnv.capstonebakerai.recipe.ingredientalias.service.IngredientNorma
 import com.manhnv.capstonebakerai.recipe.mapper.IngredientMapper;
 import com.manhnv.capstonebakerai.recipe.repository.IngredientRepository;
 import com.manhnv.capstonebakerai.recipe.service.IngredientService;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.exception.IngredientAliasErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -64,8 +67,11 @@ public class IngredientServiceImpl implements IngredientService {
         aliasService.lockNameRegistry();
         Ingredient entity = IngredientMapper.toEntity(request);
         entity.setName(aliasService.validName(request.getName()));
+        if (repository.existsByNormalizedName(entity.getName())) {
+            throw nameTaken(entity.getName());
+        }
         aliasService.ensureIngredientNameAvailable(normalizer.normalize(entity.getName()), null);
-        Ingredient saved = repository.saveAndFlush(entity);
+        Ingredient saved = save(entity);
         aliasService.addAll(saved, request.getAliases());
         return withAliases(saved, aliasService.getAliases(saved.getId()));
     }
@@ -78,10 +84,13 @@ public class IngredientServiceImpl implements IngredientService {
                 .orElseThrow(() -> new RuntimeException("Ingredient not found"));
 
         String name = aliasService.validName(request.getName());
+        if (repository.existsByNormalizedNameAndIdNot(name, id)) {
+            throw nameTaken(name);
+        }
         aliasService.ensureIngredientNameAvailable(normalizer.normalize(name), id);
         existing.setName(name);
 
-        return withAliases(repository.save(existing), aliasService.getAliases(id));
+        return withAliases(save(existing), aliasService.getAliases(id));
     }
 
     @Override
@@ -90,6 +99,18 @@ public class IngredientServiceImpl implements IngredientService {
             throw new RuntimeException("Ingredient not found");
         }
         repository.deleteById(id);
+    }
+
+    private Ingredient save(Ingredient ingredient) {
+        try {
+            return repository.saveAndFlush(ingredient);
+        } catch (DataIntegrityViolationException exception) {
+            throw nameTaken(ingredient.getName());
+        }
+    }
+
+    private static AppException nameTaken(String name) {
+        return new AppException(IngredientAliasErrorCode.NAME_ALREADY_IN_USE, "Nguyên liệu '" + name + "' đã tồn tại");
     }
 
     private static IngredientResponse withAliases(Ingredient ingredient, List<IngredientAliasResponse> aliases) {

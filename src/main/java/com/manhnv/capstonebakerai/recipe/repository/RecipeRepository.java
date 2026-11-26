@@ -22,6 +22,9 @@ public interface RecipeRepository extends JpaRepository<Recipe, UUID>, JpaSpecif
     List<Recipe> findByRecipeStatusOrderByCreatedAtDesc(
             com.manhnv.capstonebakerai.recipe.enums.RecipeStatus recipeStatus);
 
+    @Query("select r.title from Recipe r where r.user.id = :userId and r.title is not null")
+    List<String> findTitlesByUserId(@Param("userId") UUID userId);
+
     @Modifying(flushAutomatically = true)
     @Query("update Recipe r set r.viewCount = r.viewCount + 1 where r.id = :id")
     int incrementViewCount(@Param("id") UUID id);

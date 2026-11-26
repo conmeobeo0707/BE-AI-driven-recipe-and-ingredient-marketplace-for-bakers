@@ -96,7 +96,7 @@ public class IngredientAliasService {
                 conflicts.add(byName.get(existing.getNormalizedAlias()).alias().trim());
             }
         }
-        for (Ingredient other : ingredientRepository.findAllShared()) {
+        for (Ingredient other : ingredientRepository.findAllByOrderByNameAscIdAsc()) {
             SaveIngredientAliasRequest request = byName.get(normalizer.normalize(other.getName()));
             if (request != null && !other.getId().equals(ingredient.getId())) {
                 conflicts.add(request.alias().trim());
@@ -151,7 +151,7 @@ public class IngredientAliasService {
     }
 
     private Optional<UUID> ownerOfIngredientName(String normalized) {
-        return ingredientRepository.findAllShared().stream()
+        return ingredientRepository.findAllByOrderByNameAscIdAsc().stream()
                 .filter(ingredient -> normalized.equals(normalizer.normalize(ingredient.getName())))
                 .map(Ingredient::getId)
                 .findFirst();

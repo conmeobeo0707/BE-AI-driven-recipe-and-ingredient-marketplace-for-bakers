@@ -29,7 +29,7 @@ public class IngredientResolver {
         if (byAlias.isPresent()) {
             return byAlias;
         }
-        return ingredientRepository.findAllShared().stream()
+        return ingredientRepository.findAllByOrderByNameAscIdAsc().stream()
                 .filter(ingredient -> normalized.equals(normalizer.normalize(ingredient.getName())))
                 .findFirst();
     }

@@ -81,6 +81,7 @@ public class RecipeStepIngredientServiceImpl implements RecipeStepIngredientServ
         entity.setRecipeStep(step);
         entity.setRecipeIngredient(recipeIngredient);
         entity.setQuantity(request.getQuantity());
+        entity.setNote(RecipeStepIngredientMapper.trimToNull(request.getNote()));
     }
 
     private void validateQuantity(UUID entityId, RecipeStep step, RecipeIngredient recipeIngredient, BigDecimal quantity) {

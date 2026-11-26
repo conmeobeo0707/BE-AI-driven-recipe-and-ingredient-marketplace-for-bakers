@@ -13,10 +13,15 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class StepToolEmbeddedRequest {
-    @Schema(description = "id của dòng recipe tool (RecipeResponse.tools[].recipeToolId)")
+    @Schema(description = "id của dòng recipe tool (RecipeResponse.tools[].id)")
     @NotNull(message = "recipeToolId is required")
     private UUID recipeToolId;
     @Schema(example = "1")
     @NotNull(message = "quantity is required")
     private BigDecimal quantity;
+    private String note;
+
+    public StepToolEmbeddedRequest(UUID recipeToolId, BigDecimal quantity) {
+        this(recipeToolId, quantity, null);
+    }
 }

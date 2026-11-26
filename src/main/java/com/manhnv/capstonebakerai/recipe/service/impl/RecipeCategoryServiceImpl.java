@@ -1,13 +1,16 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
+import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeCategoryRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeCategoryResponse;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeCategory;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeCatalogErrorCode;
 import com.manhnv.capstonebakerai.recipe.mapper.RecipeCategoryMapper;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeCategoryRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeCategoryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
@@ -29,16 +32,25 @@ public class RecipeCategoryServiceImpl implements RecipeCategoryService {
 
     @Override
     public RecipeCategoryResponse create(RecipeCategoryRequest request) {
+        String name = validName(request.getName());
+        if (repository.existsByNormalizedName(name)) {
+            throw nameTaken(name);
+        }
         RecipeCategory entity = RecipeCategoryMapper.toEntity(request);
-        return RecipeCategoryMapper.toDTO(repository.save(entity));
+        entity.setName(name);
+        return RecipeCategoryMapper.toDTO(save(entity));
     }
 
     @Override
     public RecipeCategoryResponse update(UUID id, RecipeCategoryRequest request) {
         RecipeCategory existing = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeCategory not found"));
-        existing.setName(request.getName());
-        return RecipeCategoryMapper.toDTO(repository.save(existing));
+        String name = validName(request.getName());
+        if (repository.existsByNormalizedNameAndIdNot(name, id)) {
+            throw nameTaken(name);
+        }
+        existing.setName(name);
+        return RecipeCategoryMapper.toDTO(save(existing));
     }
 
     @Override
@@ -71,5 +83,24 @@ public class RecipeCategoryServiceImpl implements RecipeCategoryService {
                 .totalPages(page.getTotalPages())
                 .currentPage(page.getNumber())
                 .build();
+    }
+
+    private RecipeCategory save(RecipeCategory category) {
+        try {
+            return repository.saveAndFlush(category);
+        } catch (DataIntegrityViolationException exception) {
+            throw nameTaken(category.getName());
+        }
+    }
+
+    private static String validName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new AppException(RecipeCatalogErrorCode.NAME_REQUIRED);
+        }
+        return name.trim();
+    }
+
+    private static AppException nameTaken(String name) {
+        return new AppException(RecipeCatalogErrorCode.CATEGORY_NAME_ALREADY_EXISTS, "Danh mục '" + name + "' đã tồn tại");
     }
 }

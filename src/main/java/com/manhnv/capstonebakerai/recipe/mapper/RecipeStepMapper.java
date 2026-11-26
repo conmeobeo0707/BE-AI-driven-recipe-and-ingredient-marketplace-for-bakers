@@ -23,9 +23,9 @@ public class RecipeStepMapper {
                         ? entity.getImages().stream().map(image -> image.getMedia().getUrl()).toList()
                         : java.util.Collections.emptyList())
                 .ingredients(entity.getIngredients() == null ? java.util.List.of()
-                        : entity.getIngredients().stream().map(RecipeStepIngredientMapper::toDTO).toList())
+                        : entity.getIngredients().stream().map(RecipeStepIngredientMapper::toItem).toList())
                 .tools(entity.getTools() == null ? java.util.List.of()
-                        : entity.getTools().stream().map(RecipeStepToolMapper::toDTO).toList())
+                        : entity.getTools().stream().map(RecipeStepToolMapper::toItem).toList())
                 .build();
     }
 

@@ -19,4 +19,5 @@ public class RecipeStepIngredientResponse {
     private String rawName;
     private BigDecimal quantity;
     private String unit;
+    private String note;
 }

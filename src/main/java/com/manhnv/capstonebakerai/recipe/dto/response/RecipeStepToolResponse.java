@@ -18,4 +18,5 @@ public class RecipeStepToolResponse {
     private String toolName;
     private String rawName;
     private BigDecimal quantity;
+    private String note;
 }
