@@ -8,6 +8,8 @@ import com.manhnv.capstonebakerai.media.enums.R2BucketType;
 import com.manhnv.capstonebakerai.media.event.ShotstackRenderVerifiedEvent;
 import com.manhnv.capstonebakerai.media.repository.MediaRepository;
 import com.manhnv.capstonebakerai.media.service.R2StorageService;
+import com.manhnv.capstonebakerai.notification.enums.NotificationRefType;
+import com.manhnv.capstonebakerai.notification.service.NotificationService;
 import com.manhnv.capstonebakerai.media.service.ShotstackService;
 import com.manhnv.capstonebakerai.recipe.dto.request.CreateRecipeVideoRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeVideoRenderResponse;
@@ -74,6 +76,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
     private final VideoThemeSelector themeSelector;
     private final VideoSlides slides;
     private final VideoPhotoEmbedder photoEmbedder;
+    private final NotificationService notificationService;
 
     @Value("${app.shotstack.tts-model:elevenlabs-turbo-v2.5}")
     private String ttsModel;
@@ -102,7 +105,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 recipe.steps().stream().map(StepSnapshot::instruction).toList());
         String renderId = shotstackService.createRender(buildEdit(buildScenes(recipe, design)));
         RecipeVideoRender saved = renderRepository.save(RecipeVideoRender.builder()
-                .recipeId(recipeId).renderId(renderId).status(PROCESSING).build());
+                .recipeId(recipeId).userId(SecurityUtils.getCurrentUserId()).renderId(renderId).status(PROCESSING).build());
         return toResponse(saved);
     }
 
@@ -140,6 +143,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
             render.setErrorMessage(truncate(result.errorMessage(), 2000));
             render.setCompletedAt(Instant.now());
             renderRepository.save(render);
+            notifyRender(render, false);
             return;
         }
         if (!status.equalsIgnoreCase("done") || result.videoUrl() == null) {
@@ -160,6 +164,27 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 log.error("Failed to clean up rendered video {} from R2", key, cleanupError);
             }
             throw e;
+        }
+        notifyRender(render, true);
+    }
+
+    /** Best-effort, called only on the PROCESSING -> DONE/FAILED transition, so it fires once per render. */
+    private void notifyRender(RecipeVideoRender render, boolean success) {
+        if (render.getUserId() == null) return;
+        try {
+            String name = recipeRepository.findById(render.getRecipeId())
+                    .map(Recipe::getTitle).filter(t -> !t.isBlank()).orElse("Công thức");
+            if (success) {
+                notificationService.create(render.getUserId(), "Video AI đã sẵn sàng",
+                        "Video của công thức \"" + name + "\" đã được tạo xong.",
+                        NotificationRefType.RECIPE_VIDEO, render.getRecipeId());
+            } else {
+                notificationService.create(render.getUserId(), "Tạo video AI thất bại",
+                        "Không thể tạo video cho công thức \"" + name + "\". Vui lòng thử lại.",
+                        NotificationRefType.RECIPE_VIDEO, render.getRecipeId());
+            }
+        } catch (RuntimeException e) {
+            log.error("Failed to send video notification for render {}", render.getRenderId(), e);
         }
     }
 
