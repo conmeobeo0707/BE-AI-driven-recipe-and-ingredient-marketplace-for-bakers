@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.springframework.http.HttpStatus;
 @Getter @AllArgsConstructor
 public enum WarehouseErrorCode implements ErrorCode {
+    FORBIDDEN("Access denied", HttpStatus.FORBIDDEN),
     NOT_FOUND("Warehouse record was not found", HttpStatus.NOT_FOUND),
     INVALID_REQUEST("Warehouse request is invalid", HttpStatus.BAD_REQUEST),
     CONFLICT("Warehouse record cannot transition to the requested state", HttpStatus.CONFLICT),

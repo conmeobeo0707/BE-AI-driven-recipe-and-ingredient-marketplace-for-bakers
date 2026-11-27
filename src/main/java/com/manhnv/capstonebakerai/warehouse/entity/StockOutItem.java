@@ -10,6 +10,8 @@ import java.util.UUID;
 @Entity @Table(name = "stock_out_item")
 @Getter @Setter @NoArgsConstructor
 public class StockOutItem {
+    @Column(name = "stocktake_item_id")
+    private UUID stocktakeItemId;
     @Id @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "item_id")
     private UUID itemId;

@@ -3,6 +3,7 @@ package com.manhnv.capstonebakerai.warehouse.controller;
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.product.service.ProductService;
 import com.manhnv.capstonebakerai.warehouse.entity.StockLot;
+import com.manhnv.capstonebakerai.warehouse.enums.LotStatus;
 import com.manhnv.capstonebakerai.warehouse.repository.StockLotRepository;
 import com.manhnv.capstonebakerai.warehouse.service.InventoryService;
 import jakarta.validation.constraints.Max;
@@ -17,9 +18,11 @@ public class InventoryController {
     private final InventoryService inventory;
     public InventoryController(ProductService products, StockLotRepository lots, InventoryService inventory){this.products=products;this.lots=lots;this.inventory=inventory;}
     @GetMapping("/lots")
-    public ApiResponse<List<StockLot>> lots(@RequestParam UUID productId){
+    public ApiResponse<List<StockLot>> lots(@RequestParam UUID productId, @RequestParam(defaultValue = "false") boolean includeHistorical) {
         products.getInventoryProduct(productId);
-        return ApiResponse.success(lots.findByProductIdOrderByExpiryDateAscCreatedAtAsc(productId));
+        return ApiResponse.success(includeHistorical
+                ? lots.findByProductIdOrderByExpiryDateAscCreatedAtAsc(productId)
+                : lots.findPositiveLotsByProduct(productId, List.of(LotStatus.STORAGE, LotStatus.EXPIRED)));
     }
     @GetMapping("/expiring-lots")
     public ApiResponse<List<StockLot>> expiring(@RequestParam(defaultValue="30") @Min(0) @Max(3650) int withinDays){

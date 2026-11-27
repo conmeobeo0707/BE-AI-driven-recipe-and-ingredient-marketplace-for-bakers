@@ -12,6 +12,7 @@ public record StockTransactionFilter(
         StockTransactionType transactionType,
         StockTransactionRefType refType,
         UUID refId,
+        String refCode,
         LocalDateTime from,
         LocalDateTime to) {
 }

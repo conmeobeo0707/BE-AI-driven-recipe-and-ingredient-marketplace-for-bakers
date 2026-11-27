@@ -42,6 +42,17 @@ class WarehouseSupport {
             throw new AppException(WarehouseErrorCode.CONFLICT,"Lot is locked by an active stocktake: "+lotId);
     }
     boolean isLotInDraftStocktake(UUID lotId) { return stocktakes.hasDraftStocktakeForLot(lotId); }
+    static boolean hasRole(String role) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + role));
+    }
+    static void requireRole(String role) {
+        if (!hasRole(role)) throw new AppException(WarehouseErrorCode.FORBIDDEN);
+    }
+    static void requireWarehouseUser() {
+        if (!hasRole("MANAGER")) requireRole("STAFF");
+    }
     static AppException error(String message) { return new AppException(WarehouseErrorCode.INVALID_REQUEST, message); }
     static java.math.BigDecimal money(java.math.BigDecimal value) { return value.setScale(2, java.math.RoundingMode.HALF_UP); }
     static String code(String prefix) { return prefix + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT); }

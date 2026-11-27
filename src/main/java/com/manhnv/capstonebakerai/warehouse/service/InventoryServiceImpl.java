@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,6 +33,16 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional(readOnly = true)
     public List<StockLot> getExpiredLots() {
         return stockLots.findExpiredLots(List.of(LotStatus.STORAGE, LotStatus.EXPIRED), LocalDate.now());
+    }
+
+    @Override
+    public void reserveForOrder(UUID orderId, List<StockLine> lines, LocalDateTime expiresAt) {
+        stockOutService.reserveForOrder(orderId, lines, expiresAt);
+    }
+
+    @Override
+    public void releaseOrderReservation(UUID orderId) {
+        stockOutService.releaseOrderReservation(orderId);
     }
 
     @Override

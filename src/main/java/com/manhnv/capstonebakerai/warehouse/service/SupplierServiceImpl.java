@@ -10,7 +10,9 @@ import com.manhnv.capstonebakerai.warehouse.exception.WarehouseErrorCode;
 import com.manhnv.capstonebakerai.warehouse.repository.StockInNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.SupplierRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
@@ -48,7 +50,13 @@ public class SupplierServiceImpl implements SupplierService {
     @Override @Transactional(readOnly = true)
     public Page<SupplierResponse> list(String keyword, Pageable pageable) {
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
-        Page<Supplier> results = normalizedKeyword == null ? suppliers.findAll(pageable) : suppliers.search(normalizedKeyword, pageable);
+        Pageable stablePage = pageable;
+        if (pageable.isPaged() && pageable.getSort().getOrderFor("supplierId") == null) {
+            Sort stableSort = pageable.getSort().and(Sort.by("supplierId"));
+            stablePage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), stableSort);
+        }
+        Page<Supplier> results = normalizedKeyword == null
+                ? suppliers.findAll(stablePage) : suppliers.search(normalizedKeyword, stablePage);
         return results.map(this::response);
     }
 

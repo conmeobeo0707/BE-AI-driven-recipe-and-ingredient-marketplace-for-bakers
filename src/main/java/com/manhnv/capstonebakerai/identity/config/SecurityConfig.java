@@ -106,6 +106,18 @@ public class SecurityConfig {
                         ).hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products/low-stock/alerts")
                         .hasAnyRole("MANAGER", "STAFF")
+                        .requestMatchers(HttpMethod.POST, "/api/products", "/api/product-categories")
+                        .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.PUT, "/api/products/{id}", "/api/products/{id}/combo-items",
+                                "/api/product-categories/{id}")
+                        .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/{id}", "/api/product-categories/{id}")
+                        .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/warehouse/stock-in",
+                                "/api/warehouse/stock-in/{id}/complete", "/api/warehouse/stock-in/{id}/cancel")
+                        .hasAnyRole("MANAGER", "STAFF")
+                        .requestMatchers(HttpMethod.PUT, "/api/warehouse/stock-in/{id}")
+                        .hasAnyRole("MANAGER", "STAFF")
                         .requestMatchers(
                                 "/api/v1/users/me",
                                 "/api/v1/users/me/**"

@@ -24,6 +24,6 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     List<Product> findByComboFalseAndStatusAndStockQuantityLessThanEqual(
             com.manhnv.capstonebakerai.product.enums.ProductStatus status, java.math.BigDecimal threshold);
 
-    @Query("select p from Product p where p.combo=false and p.status=:status and p.stockQuantity <= p.minStock order by p.name")
+    @Query("select p from Product p where p.combo=false and p.status<>:status and p.stockQuantity <= p.minStock order by p.name")
     List<Product> findLowStockProducts(@Param("status") com.manhnv.capstonebakerai.product.enums.ProductStatus status);
 }

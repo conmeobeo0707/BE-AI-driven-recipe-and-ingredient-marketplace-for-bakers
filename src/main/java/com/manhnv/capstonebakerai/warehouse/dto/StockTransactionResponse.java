@@ -17,6 +17,8 @@ public record StockTransactionResponse(
         BigDecimal balanceAfter,
         StockTransactionRefType refType,
         UUID refId,
-        UserSummaryResponse createdBy,
-        LocalDateTime createdAt) {
+        UUID createdBy,
+        LocalDateTime createdAt,
+        String refCode,
+        String createdByName) {
 }

@@ -1,2 +1,2 @@
 package com.manhnv.capstonebakerai.warehouse.enums;
-public enum StocktakeStatus { DRAFT, COMPLETED, CANCELLED }
+public enum StocktakeStatus { DRAFT, ASSIGNED, PENDING_DISPOSAL, COMPLETED, CANCELLED }

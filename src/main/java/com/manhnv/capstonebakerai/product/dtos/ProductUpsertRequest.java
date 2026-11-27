@@ -23,4 +23,5 @@ public record ProductUpsertRequest(
         ProductStatus status,
         @Size(max = 255) String brand,
         Boolean combo,
-        @jakarta.validation.Valid List<@jakarta.validation.Valid ProductUnitRequest> units) { }
+        @jakarta.validation.Valid List<@jakarta.validation.Valid ProductUnitRequest> units,
+        @jakarta.validation.Valid List<@jakarta.validation.Valid ComboItemRequest> comboItems) { }

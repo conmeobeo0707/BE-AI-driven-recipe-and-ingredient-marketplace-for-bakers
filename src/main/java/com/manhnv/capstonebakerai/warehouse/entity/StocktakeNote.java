@@ -27,6 +27,16 @@ public class StocktakeNote {
     @Enumerated(EnumType.STRING) @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "stocktake_status_enum")
     private StocktakeStatus status = StocktakeStatus.DRAFT;
+    @Column(name = "counts_submitted_at")
+    private LocalDateTime countsSubmittedAt;
+
+    // PostgreSQL's existing enum stores DRAFT until the stocktake is closed.
+    public StocktakeStatus getStatus() {
+        if (status != StocktakeStatus.DRAFT) return status;
+        if (countsSubmittedAt != null) return StocktakeStatus.PENDING_DISPOSAL;
+        return handleBy == null ? StocktakeStatus.DRAFT : StocktakeStatus.ASSIGNED;
+    }
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt = LocalDateTime.now();
     @Column(name = "created_at", updatable = false)
