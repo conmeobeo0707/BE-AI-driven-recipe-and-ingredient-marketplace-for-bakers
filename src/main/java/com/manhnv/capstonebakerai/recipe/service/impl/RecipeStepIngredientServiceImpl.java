@@ -11,10 +11,11 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeStepIngredientReposito
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeStepIngredientService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
+import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeErrorCode;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeStepErrors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -70,12 +71,12 @@ public class RecipeStepIngredientServiceImpl implements RecipeStepIngredientServ
 
     private RecipeStepIngredient find(UUID id) {
         return repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("RecipeStepIngredient not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_STEP_INGREDIENT_NOT_FOUND));
     }
 
     private void apply(RecipeStepIngredient entity, RecipeStepIngredientRequest request) {
         RecipeStep step = recipeStepRepository.findById(request.getRecipeStepId())
-                .orElseThrow(() -> new RuntimeException("RecipeStep not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_STEP_NOT_FOUND));
         RecipeIngredient recipeIngredient = stepResourceHelper.findRecipeIngredient(step, request.getRecipeIngredientId());
         validateQuantity(entity.getId(), step, recipeIngredient, request.getQuantity());
         entity.setRecipeStep(step);
@@ -89,19 +90,14 @@ public class RecipeStepIngredientServiceImpl implements RecipeStepIngredientServ
                 .filter(link -> entityId == null || !entityId.equals(link.getId()))
                 .toList();
         if (others.stream().anyMatch(link -> step.getId().equals(link.getRecipeStep().getId()))) {
-            throw badRequest("Ingredient already exists in this step");
+            throw RecipeStepErrors.ingredientDuplicateInStep(recipeIngredient.getId(), step.getStepNumber());
         }
         BigDecimal recipeQty = recipeIngredient.getQuantity() == null ? BigDecimal.ZERO : recipeIngredient.getQuantity();
         BigDecimal total = others.stream()
                 .map(link -> link.getQuantity() == null ? BigDecimal.ZERO : link.getQuantity())
                 .reduce(quantity, BigDecimal::add);
         if (total.compareTo(recipeQty) > 0) {
-            throw badRequest("Total quantity of recipe ingredient " + recipeIngredient.getId() + " across steps ("
-                    + total.toPlainString() + ") exceeds the recipe quantity (" + recipeQty.toPlainString() + ")");
+            throw RecipeStepErrors.ingredientTotalExceeds("recipeIngredientId", recipeIngredient.getId(), step.getStepNumber(), total, recipeQty);
         }
-    }
-
-    private static ResponseStatusException badRequest(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 }

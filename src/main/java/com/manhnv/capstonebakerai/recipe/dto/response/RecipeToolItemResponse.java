@@ -16,7 +16,7 @@ public class RecipeToolItemResponse {
     private UUID id;
     @Schema(description = "id dụng cụ trong danh mục")
     private UUID toolId;
-    private String name;
+    private String toolName;
     private String rawName;
     private String note;
     private BigDecimal quantity;

@@ -9,9 +9,11 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum RecipeCatalogErrorCode implements ErrorCode {
 
-    NAME_REQUIRED("Tên không được để trống", HttpStatus.BAD_REQUEST),
-    TOOL_NAME_ALREADY_EXISTS("Dụng cụ đã tồn tại", HttpStatus.CONFLICT),
-    CATEGORY_NAME_ALREADY_EXISTS("Danh mục đã tồn tại", HttpStatus.CONFLICT);
+    NAME_REQUIRED("Name is required", HttpStatus.BAD_REQUEST),
+    TOOL_NAME_ALREADY_EXISTS("Tool already exists", HttpStatus.CONFLICT),
+    CATEGORY_NAME_ALREADY_EXISTS("Category already exists", HttpStatus.CONFLICT),
+    TOOL_NOT_FOUND("Tool not found", HttpStatus.NOT_FOUND),
+    CATEGORY_NOT_FOUND("Recipe category not found", HttpStatus.NOT_FOUND);
 
     private final String message;
     private final HttpStatus httpStatus;

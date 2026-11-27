@@ -50,7 +50,7 @@ public class ToolServiceImpl implements ToolService {
     @Override
     public ToolResponse getById(UUID id) {
         Tool entity = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.TOOL_NOT_FOUND));
         return ToolMapper.toDTO(entity);
     }
 
@@ -68,7 +68,7 @@ public class ToolServiceImpl implements ToolService {
     @Override
     public ToolResponse update(UUID id, ToolRequest request) {
         Tool existing = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.TOOL_NOT_FOUND));
 
         String name = validName(request.getName());
         if (repository.existsByNormalizedNameAndIdNot(name, id)) {
@@ -81,7 +81,7 @@ public class ToolServiceImpl implements ToolService {
     @Override
     public void delete(UUID id) {
         if (!repository.existsById(id)) {
-            throw new RuntimeException("Tool not found");
+            throw new AppException(RecipeCatalogErrorCode.TOOL_NOT_FOUND);
         }
         repository.deleteById(id);
     }
@@ -102,6 +102,6 @@ public class ToolServiceImpl implements ToolService {
     }
 
     private static AppException nameTaken(String name) {
-        return new AppException(RecipeCatalogErrorCode.TOOL_NAME_ALREADY_EXISTS, "Dụng cụ '" + name + "' đã tồn tại");
+        return new AppException(RecipeCatalogErrorCode.TOOL_NAME_ALREADY_EXISTS, "Tool '" + name + "' already exists");
     }
 }

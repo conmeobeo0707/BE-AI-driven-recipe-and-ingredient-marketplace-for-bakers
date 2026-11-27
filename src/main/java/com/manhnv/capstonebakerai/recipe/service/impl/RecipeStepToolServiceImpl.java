@@ -12,10 +12,11 @@ import com.manhnv.capstonebakerai.recipe.repository.RecipeStepRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeStepToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeStepToolService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
+import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeErrorCode;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeStepErrors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -71,12 +72,12 @@ public class RecipeStepToolServiceImpl implements RecipeStepToolService {
 
     private RecipeStepTool find(UUID id) {
         return repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("RecipeStepTool not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_STEP_TOOL_NOT_FOUND));
     }
 
     private void apply(RecipeStepTool entity, RecipeStepToolRequest request) {
         RecipeStep step = recipeStepRepository.findById(request.getRecipeStepId())
-                .orElseThrow(() -> new RuntimeException("RecipeStep not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_STEP_NOT_FOUND));
         RecipeTool recipeTool = stepResourceHelper.findRecipeTool(step, request.getRecipeToolId());
         validate(entity.getId(), step, recipeTool, request.getQuantity());
         entity.setRecipeStep(step);
@@ -90,16 +91,11 @@ public class RecipeStepToolServiceImpl implements RecipeStepToolService {
                 .filter(link -> entityId == null || !entityId.equals(link.getId()))
                 .anyMatch(link -> step.getId().equals(link.getRecipeStep().getId()));
         if (alreadyInStep) {
-            throw badRequest("Tool already exists in this step");
+            throw RecipeStepErrors.toolDuplicateInStep(recipeTool.getId(), step.getStepNumber());
         }
         BigDecimal recipeQty = recipeTool.getQuantity() == null ? BigDecimal.ZERO : recipeTool.getQuantity();
         if (quantity.compareTo(recipeQty) > 0) {
-            throw badRequest("Quantity of recipe tool " + recipeTool.getId() + " in step (" + quantity.toPlainString()
-                    + ") exceeds the recipe quantity (" + recipeQty.toPlainString() + ")");
+            throw RecipeStepErrors.toolQuantityExceeds("recipeToolId", recipeTool.getId(), step.getStepNumber(), quantity, recipeQty);
         }
-    }
-
-    private static ResponseStatusException badRequest(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 }
