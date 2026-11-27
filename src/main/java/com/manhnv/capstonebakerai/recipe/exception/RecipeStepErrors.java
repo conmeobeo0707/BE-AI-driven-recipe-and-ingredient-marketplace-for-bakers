@@ -37,7 +37,7 @@ public final class RecipeStepErrors {
                 idField, id, "stepNumber", stepNumber, "total", total, "recipeQuantity", recipeQuantity);
     }
 
-    public static AppException toolQuantityExceeds(String idField, UUID id, Integer stepNumber,
+    public static AppException toolQuantityExceeds(String idField, Object id, Integer stepNumber,
                                                    BigDecimal quantity, BigDecimal recipeQuantity) {
         return error(RecipeErrorCode.STEP_QUANTITY_EXCEEDS_RECIPE,
                 "Tool quantity in a step (" + quantity.toPlainString() + ") exceeds the recipe quantity ("
@@ -45,17 +45,35 @@ public final class RecipeStepErrors {
                 idField, id, "stepNumber", stepNumber, "quantity", quantity, "recipeQuantity", recipeQuantity);
     }
 
-    public static AppException ingredientTotalMismatch(UUID ingredientId, BigDecimal total, BigDecimal recipeQuantity) {
+    public static AppException ingredientTotalMismatch(String idField, Object id, BigDecimal total, BigDecimal recipeQuantity) {
         return error(RecipeErrorCode.STEP_QUANTITY_MISMATCH,
                 "Total quantity across steps (" + total.toPlainString() + ") must equal the recipe quantity ("
                         + recipeQuantity.toPlainString() + ")",
-                "ingredientId", ingredientId, "total", total, "recipeQuantity", recipeQuantity);
+                idField, id, "total", total, "recipeQuantity", recipeQuantity);
     }
 
-    public static AppException notInRecipe(String idField, UUID id, Integer stepNumber) {
+    public static AppException notInRecipe(String idField, Object id, Integer stepNumber) {
         return error(RecipeErrorCode.STEP_ITEM_NOT_IN_RECIPE,
                 RecipeErrorCode.STEP_ITEM_NOT_IN_RECIPE.getMessage(),
                 idField, id, "stepNumber", stepNumber);
+    }
+
+    public static AppException unmatchedItemNotAllowed(String itemType, int index, String rawName) {
+        return error(RecipeErrorCode.UNMATCHED_ITEM_NOT_ALLOWED,
+                "Every " + itemType + " must be chosen from the catalog unless the recipe is PERSONAL",
+                "itemType", itemType, "index", index, "rawName", rawName);
+    }
+
+    public static AppException rawNameRequired(String itemType, int index) {
+        return error(RecipeErrorCode.RAW_NAME_REQUIRED,
+                "rawName is required for a " + itemType + " that is not chosen from the catalog",
+                "itemType", itemType, "index", index);
+    }
+
+    public static AppException refRequired(String itemType, int index) {
+        return error(RecipeErrorCode.REF_REQUIRED,
+                "ref is required for a " + itemType + " that is not chosen from the catalog",
+                "itemType", itemType, "index", index);
     }
 
     public static AppException usedBySteps(String idField, UUID id) {

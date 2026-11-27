@@ -26,7 +26,11 @@ public enum RecipeErrorCode implements ErrorCode {
     STEP_QUANTITY_MISMATCH("Total quantity across steps must equal the recipe quantity", HttpStatus.BAD_REQUEST),
     STEP_ITEM_NOT_IN_RECIPE("Step item is not part of the recipe", HttpStatus.BAD_REQUEST),
     RECIPE_ITEM_USED_BY_STEPS("Item is still used by steps of this recipe", HttpStatus.BAD_REQUEST),
-    RECIPE_QUANTITY_BELOW_STEP_USAGE("Recipe quantity is less than the quantity used by steps", HttpStatus.BAD_REQUEST);
+    RECIPE_QUANTITY_BELOW_STEP_USAGE("Recipe quantity is less than the quantity used by steps", HttpStatus.BAD_REQUEST),
+    UNMATCHED_ITEM_NOT_ALLOWED("Items not matched to the catalog are only allowed in personal recipes", HttpStatus.BAD_REQUEST),
+    RAW_NAME_REQUIRED("rawName is required for items not matched to the catalog", HttpStatus.BAD_REQUEST),
+    REF_REQUIRED("ref is required for items not matched to the catalog", HttpStatus.BAD_REQUEST),
+    STEP_DURATION_MISMATCH("Total step duration must equal the recipe time", HttpStatus.BAD_REQUEST);
 
     private final String message;
     private final HttpStatus httpStatus;

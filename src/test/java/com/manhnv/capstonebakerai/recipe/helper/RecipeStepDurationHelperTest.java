@@ -47,7 +47,10 @@ class RecipeStepDurationHelperTest {
                 .doesNotThrowAnyException();
         assertThatThrownBy(() -> helper.validateEmbeddedSteps(10, 20, List.of(
                 request(RecipeStepType.PREPARATION, 10), request(RecipeStepType.COOKING, 30))))
-                .hasMessageContaining("COOKING");
+                .hasMessageContaining("COOKING")
+                .isInstanceOfSatisfying(com.manhnv.capstonebakerai.common.exception.AppException.class, e ->
+                        assertThat(e.getErrorCode())
+                                .isEqualTo(com.manhnv.capstonebakerai.recipe.exception.RecipeErrorCode.STEP_DURATION_MISMATCH));
     }
 
     @Test

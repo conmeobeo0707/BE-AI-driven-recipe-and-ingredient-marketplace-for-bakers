@@ -1,13 +1,17 @@
 package com.manhnv.capstonebakerai.recipe.helper;
 
+import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStepType;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -25,13 +29,21 @@ public class RecipeStepDurationHelper {
                 RecipeStepEmbeddedRequest::getRecipeStepType, RecipeStepEmbeddedRequest::getDurationMinutes));
 
         if (zeroIfNull(prepTimeMinutes) != prepSum) {
-            throw new RuntimeException("Total durationMinutes of PREPARATION steps (" + prepSum
-                    + ") must equal prepTimeMinutes (" + prepTimeMinutes + ")");
+            throw mismatch(RecipeStepType.PREPARATION, "prepTimeMinutes", prepSum, prepTimeMinutes);
         }
         if (zeroIfNull(cookTimeMinutes) != cookSum) {
-            throw new RuntimeException("Total durationMinutes of COOKING steps (" + cookSum
-                    + ") must equal cookTimeMinutes (" + cookTimeMinutes + ")");
+            throw mismatch(RecipeStepType.COOKING, "cookTimeMinutes", cookSum, cookTimeMinutes);
         }
+    }
+
+    private static AppException mismatch(RecipeStepType type, String recipeField, int stepSum, Integer recipeTime) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("recipeStepType", type);
+        data.put("stepDurationTotal", stepSum);
+        data.put(recipeField, recipeTime);
+        return new AppException(RecipeErrorCode.STEP_DURATION_MISMATCH,
+                "Total durationMinutes of " + type + " steps (" + stepSum + ") must equal "
+                        + recipeField + " (" + recipeTime + ")", data);
     }
 
     public void syncRecipeTimes(Recipe recipe, Collection<RecipeStep> steps) {
