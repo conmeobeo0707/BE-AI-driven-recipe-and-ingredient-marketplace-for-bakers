@@ -17,6 +17,8 @@ public interface StockOutService {
     Page<StockOutNote> list(NoteStatus status, StockOutType type, Pageable pageable);
     StockOutDetailResponse get(UUID noteId);
     StockOutNote create(StockOutCreateRequest request);
+    StockOutNote approveDisposal(UUID noteId);
+    StockOutNote startDisposal(UUID noteId);
     StockOutNote complete(UUID noteId);
     StockOutNote cancel(UUID noteId, String reason);
     StockOutNote createStocktakeDisposal(UUID stocktakeNoteId);

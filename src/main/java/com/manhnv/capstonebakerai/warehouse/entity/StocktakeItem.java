@@ -24,6 +24,16 @@ public class StocktakeItem {
     private BigDecimal systemQuantity;
     @Column(name = "actual_quantity", precision = 10, scale = 2)
     private BigDecimal actualQuantity;
+    @Column(name = "damaged_quantity", precision = 10, scale = 2)
+    private BigDecimal damagedQuantity;
+    @Column(name = "damage_reason", length = 255)
+    private String damageReason;
+
+    public BigDecimal getGoodQuantity() {
+        if (actualQuantity == null) return null;
+        return actualQuantity.subtract(damagedQuantity == null ? BigDecimal.ZERO : damagedQuantity);
+    }
+
     @Column(name = "diff_quantity", precision = 10, scale = 2)
     private BigDecimal diffQuantity;
     @Column(name = "unit_cost", nullable = false, precision = 15, scale = 2)

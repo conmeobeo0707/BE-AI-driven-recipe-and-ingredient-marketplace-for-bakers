@@ -41,7 +41,7 @@ class WarehouseSupport {
         for(UUID lotId:lotIds) if(stocktakes.hasDraftStocktakeForLot(lotId))
             throw new AppException(WarehouseErrorCode.CONFLICT,"Lot is locked by an active stocktake: "+lotId);
     }
-    boolean isLotInDraftStocktake(UUID lotId) { return stocktakes.hasDraftStocktakeForLot(lotId); }
+    boolean isLotInDraftStocktake(UUID lotId) { return stocktakes.hasUnreviewedStocktakeForLot(lotId); }
     static boolean hasRole(String role) {
         var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         return authentication != null && authentication.getAuthorities().stream()

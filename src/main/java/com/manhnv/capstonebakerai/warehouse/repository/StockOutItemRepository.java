@@ -14,6 +14,18 @@ public interface StockOutItemRepository extends JpaRepository<StockOutItem, UUID
     void deleteByNoteId(UUID noteId);
 
     @Query("""
+            select coalesce(sum(i.quantity), 0) from StockOutItem i
+            join StockOutNote n on n.noteId = i.noteId
+            where i.lotId = :lotId and n.status = :status and n.type = :type
+                and n.approvedAt is not null and (:excludedNoteId is null or n.noteId <> :excludedNoteId)
+                and not exists (select s.noteId from StocktakeNote s
+                    where s.noteId = n.stocktakeNoteId and s.reviewedAt is not null)
+            """)
+    java.math.BigDecimal sumApprovedDisposalQuantity(@Param("lotId") UUID lotId,
+            @Param("status") NoteStatus status, @Param("type") StockOutType type,
+            @Param("excludedNoteId") UUID excludedNoteId);
+
+    @Query("""
             select count(i) > 0 from StockOutItem i
             join StockOutNote n on n.noteId = i.noteId
             where i.lotId = :lotId and n.status = :status and n.type = :type

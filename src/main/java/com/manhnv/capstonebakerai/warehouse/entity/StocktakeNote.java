@@ -30,10 +30,22 @@ public class StocktakeNote {
     @Column(name = "counts_submitted_at")
     private LocalDateTime countsSubmittedAt;
 
+    @Column(name = "review_required")
+    private Boolean reviewRequired;
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+    @Column(name = "review_return_reason", length = 1000)
+    private String reviewReturnReason;
+
     // PostgreSQL's existing enum stores DRAFT until the stocktake is closed.
     public StocktakeStatus getStatus() {
         if (status != StocktakeStatus.DRAFT) return status;
-        if (countsSubmittedAt != null) return StocktakeStatus.PENDING_DISPOSAL;
+        if (countsSubmittedAt != null) {
+            return Boolean.TRUE.equals(reviewRequired) && reviewedAt == null
+                    ? StocktakeStatus.PENDING_REVIEW : StocktakeStatus.PENDING_DISPOSAL;
+        }
         return handleBy == null ? StocktakeStatus.DRAFT : StocktakeStatus.ASSIGNED;
     }
 

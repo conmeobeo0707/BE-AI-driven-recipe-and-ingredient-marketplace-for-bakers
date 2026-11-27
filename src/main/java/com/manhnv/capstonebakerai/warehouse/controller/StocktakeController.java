@@ -20,6 +20,9 @@ public class StocktakeController {
  @PutMapping("/{noteId}/assignee/{staffId}") public ApiResponse<StocktakeDetailResponse> assign(@PathVariable UUID noteId,@PathVariable UUID staffId){return ApiResponse.success(service.assign(noteId,staffId));}
  @PutMapping("/{noteId}/counts") public ApiResponse<StocktakeDetailResponse> count(@PathVariable UUID noteId,@Valid @RequestBody StocktakeCountRequest request){return ApiResponse.success(service.count(noteId,request));}
  @PostMapping("/{noteId}/complete") public ApiResponse<StocktakeDetailResponse> complete(@PathVariable UUID noteId, @Valid @RequestBody(required=false) StocktakeCountRequest request){return ApiResponse.success(service.complete(noteId, request));}
+ @PostMapping("/{noteId}/approve") public ApiResponse<StocktakeDetailResponse> approve(@PathVariable UUID noteId){return ApiResponse.success(service.approve(noteId));}
+ public record ReviewReturn(String reason) { }
+ @PostMapping("/{noteId}/return") public ApiResponse<StocktakeDetailResponse> returnForCorrection(@PathVariable UUID noteId, @RequestBody ReviewReturn request){return ApiResponse.success(service.returnForCorrection(noteId, request.reason()));}
  @PostMapping("/{noteId}/cancel") public ApiResponse<StocktakeNote> cancel(@PathVariable UUID noteId){return ApiResponse.success(service.cancel(noteId));}
  @GetMapping public ApiResponse<Page<StocktakeNote>> list(@RequestParam(required=false) StocktakeStatus status,
          @PageableDefault(size=20,sort="createdAt",direction=Sort.Direction.DESC) Pageable pageable){return ApiResponse.success(service.list(status,pageable));}

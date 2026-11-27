@@ -38,7 +38,7 @@ class StocktakeDisposalTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    void assignedStaffRecordsShortageAndOnlyManagerPostsDisposalOnce(boolean hasSurplus) {
+    void postsNewDamageOrLegacyShortageOnlyOnce(boolean hasSurplus) {
         var stocktakes = mock(StocktakeNoteRepository.class);
         var counts = mock(StocktakeItemRepository.class);
         var lots = mock(StockLotRepository.class);
@@ -115,8 +115,10 @@ class StocktakeDisposalTest {
         var stockOutService = new StockOutServiceImpl(stockOutNotes, stockOutItems, lots, warehouse,
                 mock(ProductService.class), transactions, stocktakes, counts, users,
                 mock(StockReservationRepository.class), mock(StockReservationItemRepository.class));
+        var damage = hasSurplus ? new BigDecimal("1.00") : BigDecimal.ZERO;
         var shortage = new StocktakeCountRequest.CountedProduct(productId,
-                List.of(new StocktakeCountRequest.CountedLot(countId, actual, "Missing", null)));
+                List.of(new StocktakeCountRequest.CountedLot(countId, actual, "Missing", null,
+                        damage, hasSurplus ? "Damaged packaging" : null)));
         var surplus = new StocktakeCountRequest.CountedProduct(surplusLot.getProductId(),
                 List.of(new StocktakeCountRequest.CountedLot(surplusCount.getItemId(), surplusActual, "Surplus", null)));
         var request = new StocktakeCountRequest(hasSurplus ? List.of(shortage, surplus) : List.of(shortage));
@@ -132,12 +134,44 @@ class StocktakeDisposalTest {
         stocktakeService.count(stocktakeId, request);
         assertEquals(StocktakeStatus.ASSIGNED, stocktake.getStatus());
         var submitted = stocktakeService.complete(stocktakeId, request);
-        assertEquals(StocktakeStatus.PENDING_DISPOSAL, submitted.note().getStatus());
+        assertEquals(StocktakeStatus.PENDING_REVIEW, submitted.note().getStatus());
+        assertEquals(actual.subtract(damage), count.getGoodQuantity());
         assertNull(submitted.pendingDisposalCode());
         assertEquals(initial, surplusLot.getCurrentQuantity());
         verify(warehouse, never()).adjustStock(any());
         verifyNoInteractions(transactions);
         assertEquals(initial, lot.getCurrentQuantity());
+
+        assertThrows(AppException.class, () -> stockOutService.createStocktakeDisposal(stocktakeId));
+        BigDecimal beforeDisposal;
+        if (hasSurplus) {
+            authenticate(managerId, "MANAGER");
+            stocktakeService.returnForCorrection(stocktakeId, "Check quantities");
+            assertEquals(StocktakeStatus.ASSIGNED, stocktake.getStatus());
+            assertEquals("Check quantities", stocktake.getReviewReturnReason());
+            verifyNoInteractions(transactions);
+            authenticate(staffId, "STAFF");
+            stocktakeService.complete(stocktakeId, request);
+            authenticate(managerId, "MANAGER");
+            assertEquals(StocktakeStatus.PENDING_DISPOSAL, stocktakeService.approve(stocktakeId).note().getStatus());
+            assertThrows(AppException.class, () -> stocktakeService.approve(stocktakeId));
+            beforeDisposal = actual;
+            assertEquals(actual, lot.getCurrentQuantity());
+            assertEquals(surplusActual, surplusLot.getCurrentQuantity());
+            verify(warehouse).adjustStock(Map.of(productId, new BigDecimal("-2.00"),
+                    surplusLot.getProductId(), new BigDecimal("3.00")));
+            verify(transactions).record(lotId, productId, StockTransactionType.STOCKTAKE_DECREASE,
+                    new BigDecimal("-2.00"), actual, StockTransactionRefType.STOCKTAKE_NOTE, stocktakeId);
+            verify(transactions).record(surplusLot.getLotId(), surplusLot.getProductId(),
+                    StockTransactionType.STOCKTAKE_INCREASE, new BigDecimal("3.00"), surplusActual,
+                    StockTransactionRefType.STOCKTAKE_NOTE, stocktakeId);
+        } else {
+            // A previously submitted note has no review flag in the database.
+            stocktake.setReviewRequired(null);
+            beforeDisposal = initial;
+        }
+        authenticate(staffId, "STAFF");
+        var disposalQuantity = hasSurplus ? damage : new BigDecimal("2.00");
 
         when(stockOutItems.saveAll(any())).thenAnswer(invocation -> {
             List<StockOutItem> pending = invocation.getArgument(0);
@@ -151,33 +185,51 @@ class StocktakeDisposalTest {
 
         assertEquals(NoteStatus.PENDING, disposal.getStatus());
         assertEquals(staffId, disposal.getCreatedBy());
+        assertEquals(disposalQuantity, stockOutItems.findByNoteIdOrderByItemId(noteId).getFirst().getQuantity());
         assertThrows(AppException.class, () -> stockOutService.createStocktakeDisposal(stocktakeId));
         assertThrows(AppException.class, () -> stockOutService.complete(noteId));
-        assertEquals(initial, lot.getCurrentQuantity());
+        assertEquals(beforeDisposal, lot.getCurrentQuantity());
+
+        assertThrows(AppException.class, () -> stockOutService.startDisposal(noteId));
+        assertThrows(AppException.class, () -> stockOutService.approveDisposal(noteId));
 
         authenticate(managerId, "MANAGER");
+        stockOutService.approveDisposal(noteId);
+        assertEquals(NoteStatus.PENDING, disposal.getStatus());
+        assertEquals(StocktakeStatus.PENDING_DISPOSAL, stocktake.getStatus());
+        assertNotNull(disposal.getApprovedAt());
+        assertThrows(AppException.class, () -> stockOutService.complete(noteId));
+        assertThrows(AppException.class, () -> stockOutService.cancel(noteId, "Rejected"));
+        assertEquals(beforeDisposal, lot.getCurrentQuantity());
+        verify(transactions, never()).record(eq(lotId), eq(productId), eq(StockTransactionType.DISPOSAL), any(), any(), any(), any());
+
+        authenticate(staffId, "STAFF");
+        assertThrows(AppException.class, () -> stockOutService.complete(noteId));
+        stockOutService.startDisposal(noteId);
+        assertEquals(staffId, disposal.getStartedBy());
+        assertNotNull(disposal.getStartedAt());
+        assertEquals(beforeDisposal, lot.getCurrentQuantity());
+        verify(transactions, never()).record(eq(lotId), eq(productId), eq(StockTransactionType.DISPOSAL), any(), any(), any(), any());
+
+        authenticate(UUID.randomUUID(), "STAFF");
+        assertThrows(AppException.class, () -> stockOutService.complete(noteId));
+        authenticate(staffId, "STAFF");
         stockOutService.complete(noteId);
         assertEquals(NoteStatus.COMPLETED, disposal.getStatus());
+        assertNotNull(disposal.getCompletedAt());
         assertEquals(StocktakeStatus.COMPLETED, stocktake.getStatus());
         assertEquals(managerId, disposal.getApprovedBy());
-        assertEquals(actual, lot.getCurrentQuantity());
+        BigDecimal afterDisposal = beforeDisposal.subtract(disposalQuantity);
+        assertEquals(afterDisposal, lot.getCurrentQuantity());
         assertThrows(AppException.class, () -> stockOutService.complete(noteId));
-        if (hasSurplus) {
-            assertEquals(surplusActual, surplusLot.getCurrentQuantity());
-            verify(warehouse).adjustStock(Map.of(productId, new BigDecimal("-2.00"),
-                    surplusLot.getProductId(), new BigDecimal("3.00")));
-            verify(transactions).record(surplusLot.getLotId(), surplusLot.getProductId(),
-                    StockTransactionType.STOCKTAKE_INCREASE, new BigDecimal("3.00"), surplusActual,
-                    StockTransactionRefType.STOCKTAKE_NOTE, stocktakeId);
-        } else {
-            verify(warehouse).adjustStock(Map.of(productId, new BigDecimal("-2.00")));
-        }
+        verify(warehouse).adjustStock(Map.of(productId, disposalQuantity.negate()));
         verify(transactions).record(lotId, productId, StockTransactionType.DISPOSAL,
-                new BigDecimal("-2.00"), actual, StockTransactionRefType.STOCK_OUT_NOTE, noteId);
+                disposalQuantity.negate(), afterDisposal, StockTransactionRefType.STOCK_OUT_NOTE, noteId);
     }
 
-    @Test
-    void surplusOnlyUpdatesExpiredLotAndRecordsIncreaseOnce() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void pureDiscrepancyPostsOnlyOnManagerApproval(boolean isSurplus) {
         var stocktakes = mock(StocktakeNoteRepository.class);
         var counts = mock(StocktakeItemRepository.class);
         var lots = mock(StockLotRepository.class);
@@ -201,25 +253,77 @@ class StocktakeDisposalTest {
         count.setLotId(lot.getLotId());
         count.setSystemQuantity(lot.getCurrentQuantity());
         count.setUnitCost(BigDecimal.ONE);
-        var actual = new BigDecimal("12.00");
+        var actual = new BigDecimal(isSurplus ? "12.00" : "8.00");
 
         when(stocktakes.lockById(note.getNoteId())).thenReturn(Optional.of(note));
+        when(stocktakes.save(note)).thenReturn(note);
         when(counts.findByNoteIdOrderByItemId(note.getNoteId())).thenReturn(List.of(count));
         when(lots.lockByLotIds(List.of(lot.getLotId()))).thenReturn(List.of(lot));
 
         authenticate(staffId, "STAFF");
         var request = new StocktakeCountRequest(List.of(new StocktakeCountRequest.CountedProduct(lot.getProductId(),
                 List.of(new StocktakeCountRequest.CountedLot(count.getItemId(), actual, "Surplus", null)))));
-        assertEquals(StocktakeStatus.COMPLETED, service.complete(note.getNoteId(), request).note().getStatus());
+        assertEquals(StocktakeStatus.PENDING_REVIEW, service.complete(note.getNoteId(), request).note().getStatus());
+        assertEquals(new BigDecimal("10.00"), lot.getCurrentQuantity());
+        verifyNoInteractions(transactions);
+        authenticate(UUID.randomUUID(), "MANAGER");
+        assertEquals(StocktakeStatus.COMPLETED, service.approve(note.getNoteId()).note().getStatus());
         assertEquals(actual, lot.getCurrentQuantity());
         assertEquals(LotStatus.EXPIRED, lot.getStatus());
-        assertThrows(AppException.class, () -> service.complete(note.getNoteId(), request));
+        assertThrows(AppException.class, () -> service.approve(note.getNoteId()));
 
-        var increase = new BigDecimal("2.00");
+        var increase = new BigDecimal(isSurplus ? "2.00" : "-2.00");
         verify(warehouse).adjustStock(Map.of(lot.getProductId(), increase));
-        verify(transactions).record(lot.getLotId(), lot.getProductId(), StockTransactionType.STOCKTAKE_INCREASE,
+        verify(transactions).record(lot.getLotId(), lot.getProductId(), isSurplus ? StockTransactionType.STOCKTAKE_INCREASE : StockTransactionType.STOCKTAKE_DECREASE,
                 increase, actual, StockTransactionRefType.STOCKTAKE_NOTE, note.getNoteId());
         verifyNoMoreInteractions(transactions);
+    }
+
+    @Test
+    void savingCountsKeepsDamageUntilAnExplicitZeroIsSaved() throws Exception {
+        var notes = mock(StocktakeNoteRepository.class);
+        var items = mock(StocktakeItemRepository.class);
+        var service = new StocktakeServiceImpl(notes, items, mock(StockLotRepository.class),
+                mock(WarehouseSupport.class), mock(StockOutNoteRepository.class),
+                mock(UserRepository.class), mock(StockTransactionService.class));
+        UUID staffId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        var note = new StocktakeNote();
+        note.setNoteId(UUID.randomUUID());
+        note.setHandleBy(staffId);
+        var item = new StocktakeItem();
+        item.setItemId(UUID.randomUUID());
+        item.setProductId(productId);
+        item.setLotId(UUID.randomUUID());
+        when(notes.lockById(note.getNoteId())).thenReturn(Optional.of(note));
+        when(notes.findById(note.getNoteId())).thenReturn(Optional.of(note));
+        when(items.findByNoteIdOrderByItemId(note.getNoteId())).thenReturn(List.of(item));
+        authenticate(staffId, "STAFF");
+
+        String json = """
+                {"products":[{"productId":"%s","lots":[{"itemId":"%s","actualQuantity":8,
+                "damagedQuantity":1,"damageReason":"Torn packaging"}]}]}
+                """.formatted(productId, item.getItemId());
+        var request = new tools.jackson.databind.json.JsonMapper().readValue(json, StocktakeCountRequest.class);
+
+        service.count(note.getNoteId(), request);
+        StocktakeItem saved = service.get(note.getNoteId()).products().getFirst().lots().getFirst();
+        assertEquals(BigDecimal.ONE, saved.getDamagedQuantity());
+        assertEquals(new BigDecimal("7"), saved.getGoodQuantity());
+        assertEquals("Torn packaging", saved.getDamageReason());
+
+        service.count(note.getNoteId(), new StocktakeCountRequest(List.of(
+                new StocktakeCountRequest.CountedProduct(productId, List.of(
+                        new StocktakeCountRequest.CountedLot(item.getItemId(), new BigDecimal("8"), null, "Recounted"))))));
+        assertEquals(BigDecimal.ONE, item.getDamagedQuantity());
+        assertEquals("Torn packaging", item.getDamageReason());
+
+        service.count(note.getNoteId(), new StocktakeCountRequest(List.of(
+                new StocktakeCountRequest.CountedProduct(productId, List.of(
+                        new StocktakeCountRequest.CountedLot(item.getItemId(), new BigDecimal("8"), null, null,
+                                BigDecimal.ZERO, null))))));
+        assertEquals(BigDecimal.ZERO, item.getDamagedQuantity());
+        assertNull(item.getDamageReason());
     }
 
     private void authenticate(UUID userId, String role) {

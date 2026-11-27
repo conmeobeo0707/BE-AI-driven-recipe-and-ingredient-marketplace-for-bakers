@@ -38,6 +38,12 @@ public class StockOutNote {
     private UUID approvedBy;
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;
+    @Column(name = "started_by")
+    private UUID startedBy;
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
     @Column(name = "rejection_reason", columnDefinition = "text")
     private String rejectionReason;
     @Column(name = "stocktake_note_id", updatable = false)
