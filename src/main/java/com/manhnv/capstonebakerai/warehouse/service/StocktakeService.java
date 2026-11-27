@@ -18,5 +18,7 @@ public interface StocktakeService {
     StocktakeDetailResponse create(StocktakeCreateRequest request);
     StocktakeDetailResponse count(UUID noteId, StocktakeCountRequest request);
     StocktakeDetailResponse complete(UUID noteId, StocktakeCountRequest request);
+    StocktakeDetailResponse approve(UUID noteId);
+    StocktakeDetailResponse returnForCorrection(UUID noteId, String reason);
     StocktakeNote cancel(UUID noteId);
 }

@@ -65,6 +65,9 @@ public class StocktakeServiceImpl implements StocktakeService {
         if (lots.hasActiveReservations(lotIds, StockReservationStatus.ACTIVE, LocalDateTime.now())) {
             throw new AppException(WarehouseErrorCode.CONFLICT, "Wait for active order reservations before stocktaking these lots");
         }
+        if (lots.hasApprovedDisposal(lotIds)) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "A lot is held for an approved disposal");
+        }
         List<StockLot> lockedLots = lots.lockByLotIds(lotIds);
         support.ensureLotsNotInDraftStocktake(lotIds);
         StocktakeNote stocktakeNote = new StocktakeNote();
@@ -141,7 +144,22 @@ public class StocktakeServiceImpl implements StocktakeService {
                 if (!productLotItemIds.add(lotCount.itemId()) || !countedItemIds.add(lotCount.itemId())) throw WarehouseSupport.error("Duplicate stocktake item counts are not allowed");
                 StocktakeItem stocktakeItem = itemsById.get(lotCount.itemId());
                 if (stocktakeItem == null || !stocktakeItem.getProductId().equals(productCount.productId())) throw WarehouseSupport.error("Stocktake item is not part of the specified product in this note");
-                stocktakeItem.setActualQuantity(lotCount.actualQuantity()); stocktakeItem.setReason(lotCount.reason()); stocktakeItem.setNote(lotCount.note());
+                BigDecimal damaged = lotCount.damagedQuantity();
+                String damageReason = lotCount.damageReason();
+                if (damaged == null) {
+                    damaged = stocktakeItem.getDamagedQuantity();
+                    if (damaged == null) damaged = BigDecimal.ZERO;
+                    if (damageReason == null) damageReason = stocktakeItem.getDamageReason();
+                }
+                if (lotCount.actualQuantity() == null || lotCount.actualQuantity().signum() < 0
+                        || damaged.signum() < 0 || damaged.compareTo(lotCount.actualQuantity()) > 0) {
+                    throw WarehouseSupport.error("Damaged quantity must be between zero and actual quantity");
+                }
+                stocktakeItem.setActualQuantity(lotCount.actualQuantity());
+                stocktakeItem.setDamagedQuantity(damaged);
+                stocktakeItem.setDamageReason(damaged.signum() > 0 ? damageReason : null);
+                stocktakeItem.setReason(lotCount.reason());
+                stocktakeItem.setNote(lotCount.note());
             }
         }
     }
@@ -159,7 +177,7 @@ public class StocktakeServiceImpl implements StocktakeService {
         List<StockLot> lockedLots = lots.lockByLotIds(stocktakeItems.stream().map(StocktakeItem::getLotId).toList());
         Map<UUID, StockLot> lotsById = new HashMap<>();
         lockedLots.forEach(stockLot -> lotsById.put(stockLot.getLotId(), stockLot));
-        boolean hasShortage = false;
+        boolean requiresReview = false;
         for (StocktakeItem stocktakeItem : stocktakeItems) {
             if (stocktakeItem.getActualQuantity() == null) throw WarehouseSupport.error("Enter actual quantity for every lot before completing");
             StockLot stockLot = lotsById.get(stocktakeItem.getLotId());
@@ -170,20 +188,17 @@ public class StocktakeServiceImpl implements StocktakeService {
             BigDecimal costAmount = WarehouseSupport.money(difference.multiply(stocktakeItem.getUnitCost()));
             if (costAmount.precision() - costAmount.scale() > 13) throw WarehouseSupport.error("Stocktake cost amount exceeds the database precision limit");
             stocktakeItem.setDiffQuantity(difference); stocktakeItem.setCostAmount(costAmount);
-            hasShortage |= difference.signum() < 0;
+            BigDecimal damaged = stocktakeItem.getDamagedQuantity();
+            if (damaged != null && damaged.signum() > 0
+                    && (stocktakeItem.getDamageReason() == null || stocktakeItem.getDamageReason().isBlank())) {
+                throw WarehouseSupport.error("A damage reason is required");
+            }
+            requiresReview |= difference.signum() != 0 || (damaged != null && damaged.signum() > 0);
         }
         LocalDateTime now = LocalDateTime.now();
-        if (!hasShortage) {
-            Map<UUID, BigDecimal> stockDeltas = new HashMap<>();
-            for (StocktakeItem count : stocktakeItems) {
-                if (count.getDiffQuantity().signum() > 0) {
-                    StocktakeSurplus.post(noteId, count, lotsById.get(count.getLotId()), now.toLocalDate(),
-                            stockTransactions, stockDeltas);
-                }
-            }
-            if (!stockDeltas.isEmpty()) support.adjustStock(stockDeltas);
-            stocktakeNote.setStatus(StocktakeStatus.COMPLETED);
-        }
+        if (!requiresReview) stocktakeNote.setStatus(StocktakeStatus.COMPLETED);
+        stocktakeNote.setReviewRequired(requiresReview);
+        stocktakeNote.setReviewReturnReason(null);
         stocktakeNote.setCountsSubmittedAt(now);
         stocktakeNote.setUpdatedAt(now);
         notes.save(stocktakeNote);
@@ -191,13 +206,66 @@ public class StocktakeServiceImpl implements StocktakeService {
     }
 
     @Override @Transactional
+    public StocktakeDetailResponse approve(UUID noteId) {
+        StocktakeNote note = lockPendingReview(noteId);
+        List<StocktakeItem> counts = items.findByNoteIdOrderByItemId(noteId);
+        if (counts.isEmpty()) throw WarehouseSupport.error("Stocktake must contain at least one lot");
+        support.lockProducts(counts.stream().map(StocktakeItem::getProductId).distinct().sorted().toList());
+        List<UUID> lotIds = counts.stream().map(StocktakeItem::getLotId).toList();
+        Map<UUID, StockLot> lockedLots = new HashMap<>();
+        lots.lockByLotIds(lotIds).forEach(lot -> lockedLots.put(lot.getLotId(), lot));
+        LocalDateTime now = LocalDateTime.now();
+        Map<UUID, BigDecimal> stockDeltas = new HashMap<>();
+        boolean hasDamage = false;
+        for (StocktakeItem count : counts) {
+            StockLot lot = lockedLots.get(count.getLotId());
+            if (lot == null || lot.getCurrentQuantity().compareTo(count.getSystemQuantity()) != 0
+                    || (lot.getStatus() != LotStatus.STORAGE && lot.getStatus() != LotStatus.EXPIRED)) {
+                throw new AppException(WarehouseErrorCode.CONFLICT, "Lot changed during stocktake; cancel and create a new stocktake");
+            }
+            if (count.getDiffQuantity().signum() != 0) {
+                StocktakeSurplus.post(noteId, count, lot, now.toLocalDate(), stockTransactions, stockDeltas);
+            }
+            hasDamage |= count.getDamagedQuantity() != null && count.getDamagedQuantity().signum() > 0;
+        }
+        if (!stockDeltas.isEmpty()) support.adjustStock(stockDeltas);
+        note.setReviewedBy(SecurityUtils.getCurrentUserId());
+        note.setReviewedAt(now);
+        note.setUpdatedAt(now);
+        if (!hasDamage) note.setStatus(StocktakeStatus.COMPLETED);
+        return detail(notes.save(note), counts);
+    }
+
+    @Override @Transactional
+    public StocktakeDetailResponse returnForCorrection(UUID noteId, String reason) {
+        StocktakeNote note = lockPendingReview(noteId);
+        if (reason == null || reason.isBlank() || reason.strip().length() > 1000) {
+            throw WarehouseSupport.error("Enter a return reason of up to 1000 characters");
+        }
+        note.setCountsSubmittedAt(null);
+        note.setReviewReturnReason(reason.strip());
+        note.setUpdatedAt(LocalDateTime.now());
+        return detail(notes.save(note), items.findByNoteIdOrderByItemId(noteId));
+    }
+
+    private StocktakeNote lockPendingReview(UUID noteId) {
+        WarehouseSupport.requireRole("MANAGER");
+        StocktakeNote note = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND));
+        if (note.getStatus() != StocktakeStatus.PENDING_REVIEW) throw new AppException(WarehouseErrorCode.CONFLICT);
+        return note;
+    }
+
+    @Override @Transactional
     public StocktakeNote cancel(UUID noteId) {
         StocktakeNote stocktakeNote = notes.lockById(noteId).orElseThrow(() -> new AppException(WarehouseErrorCode.NOT_FOUND, "Stocktake note not found"));
         WarehouseSupport.requireRole("MANAGER");
-        if (stocktakeNote.getStatus() == StocktakeStatus.COMPLETED || stocktakeNote.getStatus() == StocktakeStatus.CANCELLED) {
+        if (stocktakeNote.getStatus() == StocktakeStatus.COMPLETED || stocktakeNote.getStatus() == StocktakeStatus.CANCELLED || stocktakeNote.getReviewedAt() != null) {
             throw new AppException(WarehouseErrorCode.CONFLICT);
         }
         stockOutNotes.findByStocktakeNoteIdAndStatus(noteId, NoteStatus.PENDING).ifPresent(disposal -> {
+            if (disposal.getApprovedAt() != null) {
+                throw new AppException(WarehouseErrorCode.CONFLICT, "An approved disposal is open for this stocktake");
+            }
             disposal.setStatus(NoteStatus.CANCELLED);
             disposal.setUpdatedAt(LocalDateTime.now());
         });

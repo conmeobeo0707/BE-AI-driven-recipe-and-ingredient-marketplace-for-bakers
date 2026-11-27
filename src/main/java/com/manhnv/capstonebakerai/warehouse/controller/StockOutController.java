@@ -20,6 +20,8 @@ import java.util.UUID;
 public class StockOutController {
  private final StockOutService service; public StockOutController(StockOutService service){this.service=service;}
  @PostMapping @ResponseStatus(HttpStatus.CREATED) public ApiResponse<StockOutNote> create(@Valid @RequestBody StockOutCreateRequest request){return ApiResponse.success(service.create(request));}
+ @PostMapping("/{id}/approve") public ApiResponse<StockOutNote> approve(@PathVariable UUID id){return ApiResponse.success(service.approveDisposal(id));}
+ @PostMapping("/{id}/start") public ApiResponse<StockOutNote> start(@PathVariable UUID id){return ApiResponse.success(service.startDisposal(id));}
  @PostMapping("/{id}/complete") public ApiResponse<StockOutNote> complete(@PathVariable UUID id){return ApiResponse.success(service.complete(id));}
  public record Cancellation(String reason) { }
  @PostMapping("/{id}/cancel") public ApiResponse<StockOutNote> cancel(@PathVariable UUID id,@RequestBody(required=false) Cancellation request){return ApiResponse.success(service.cancel(id,request == null ? null : request.reason()));}

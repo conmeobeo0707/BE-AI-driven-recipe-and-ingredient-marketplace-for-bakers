@@ -18,6 +18,14 @@ public interface StocktakeItemRepository extends JpaRepository<StocktakeItem, UU
     @Query(value = "select exists (select 1 from stocktake_items i join stocktake_notes n on n.note_id=i.note_id " +
             "where i.lot_id=:lotId and n.status::text='DRAFT')", nativeQuery = true)
     boolean hasDraftStocktakeForLot(@Param("lotId") UUID lotId);
+    @Query(value = """
+            select exists (
+                select 1 from stocktake_items i join stocktake_notes n on n.note_id = i.note_id
+                where i.lot_id = :lotId and n.status = 'DRAFT' and n.reviewed_at is null
+            )
+            """, nativeQuery = true)
+    boolean hasUnreviewedStocktakeForLot(@Param("lotId") UUID lotId);
+
     @Query("select distinct i.productId from StocktakeItem i where i.noteId=:noteId")
     List<UUID> findProductIdsByNoteId(@Param("noteId") UUID noteId);
 

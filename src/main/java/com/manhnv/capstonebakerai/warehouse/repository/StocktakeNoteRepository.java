@@ -16,6 +16,7 @@ public interface StocktakeNoteRepository extends JpaRepository<StocktakeNote, UU
               and (:status is null or :status = case
                 when cast(n.status as String) = 'COMPLETED' then 'COMPLETED'
                 when cast(n.status as String) = 'CANCELLED' then 'CANCELLED'
+                when n.countsSubmittedAt is not null and n.reviewRequired = true and n.reviewedAt is null then 'PENDING_REVIEW'
                 when n.countsSubmittedAt is not null then 'PENDING_DISPOSAL'
                 when n.handleBy is not null then 'ASSIGNED'
                 else 'DRAFT' end)
