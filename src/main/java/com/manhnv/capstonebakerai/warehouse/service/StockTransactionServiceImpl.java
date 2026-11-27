@@ -10,8 +10,6 @@ import com.manhnv.capstonebakerai.warehouse.repository.StockInNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.StockOutNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.StocktakeNoteRepository;
 import com.manhnv.capstonebakerai.warehouse.repository.StockTransactionRepository;
-import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
-import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,8 +33,6 @@ import java.util.UUID;
 @Service
 public class StockTransactionServiceImpl implements StockTransactionService {
     private final StockTransactionRepository transactions;
-    private final UserSummaryService userSummaryService;
-
     private final StockInNoteRepository stockInNotes;
     private final StockOutNoteRepository stockOutNotes;
     private final StocktakeNoteRepository stocktakes;
