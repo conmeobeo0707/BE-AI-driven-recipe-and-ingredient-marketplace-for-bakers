@@ -26,12 +26,14 @@ public class StocktakeServiceImpl implements StocktakeService {
     private final WarehouseSupport support;
     private final StockOutNoteRepository stockOutNotes;
     private final UserRepository users;
+    private final StockTransactionService stockTransactions;
 
     public StocktakeServiceImpl(StocktakeNoteRepository notes, StocktakeItemRepository items, StockLotRepository lots,
                                 WarehouseSupport support, StockOutNoteRepository stockOutNotes,
-                                UserRepository users) {
+                                UserRepository users, StockTransactionService stockTransactions) {
         this.notes = notes; this.items = items; this.lots = lots; this.support = support;
         this.stockOutNotes = stockOutNotes; this.users = users;
+        this.stockTransactions = stockTransactions;
     }
 
     @Override @Transactional(readOnly = true)
@@ -55,11 +57,14 @@ public class StocktakeServiceImpl implements StocktakeService {
         List<UUID> productIds = request.productIds().stream().distinct().sorted().toList();
         if (productIds.size() != request.productIds().size()) throw WarehouseSupport.error("Duplicate productIds are not allowed");
         support.lockProducts(productIds);
-        List<StockLot> foundLots = lots.findByProductIdInAndStatusInOrderByProductIdAscExpiryDateAscCreatedAtAsc(productIds, List.of(LotStatus.STORAGE, LotStatus.EXPIRED, LotStatus.EMPTY));
+        List<StockLot> foundLots = lots.findCountableLots(productIds, List.of(LotStatus.STORAGE, LotStatus.EXPIRED));
         Map<UUID, List<StockLot>> lotsByProduct = new HashMap<>();
         foundLots.forEach(stockLot -> lotsByProduct.computeIfAbsent(stockLot.getProductId(), productId -> new ArrayList<>()).add(stockLot));
         for (UUID productId : productIds) if (!lotsByProduct.containsKey(productId)) throw WarehouseSupport.error("Product has no stock lots to count: " + productId);
         List<UUID> lotIds = foundLots.stream().map(StockLot::getLotId).toList();
+        if (lots.hasActiveReservations(lotIds, StockReservationStatus.ACTIVE, LocalDateTime.now())) {
+            throw new AppException(WarehouseErrorCode.CONFLICT, "Wait for active order reservations before stocktaking these lots");
+        }
         List<StockLot> lockedLots = lots.lockByLotIds(lotIds);
         support.ensureLotsNotInDraftStocktake(lotIds);
         StocktakeNote stocktakeNote = new StocktakeNote();
@@ -71,7 +76,10 @@ public class StocktakeServiceImpl implements StocktakeService {
         StocktakeNote savedNote = notes.save(stocktakeNote);
         List<StocktakeItem> stocktakeItems = new ArrayList<>();
         for (StockLot stockLot : lockedLots) {
-            if (stockLot.getStatus() == LotStatus.CANCELED) throw WarehouseSupport.error("Cancelled lots cannot be stocktaken");
+            if (stockLot.getCurrentQuantity().signum() <= 0
+                    || (stockLot.getStatus() != LotStatus.STORAGE && stockLot.getStatus() != LotStatus.EXPIRED)) {
+                throw new AppException(WarehouseErrorCode.CONFLICT, "Lot is no longer available for stocktaking");
+            }
             StocktakeItem stocktakeItem = new StocktakeItem();
             stocktakeItem.setNoteId(savedNote.getNoteId()); stocktakeItem.setProductId(stockLot.getProductId()); stocktakeItem.setLotId(stockLot.getLotId());
             stocktakeItem.setSystemQuantity(stockLot.getCurrentQuantity()); stocktakeItem.setUnitCost(stockLot.getUnitCost());
@@ -164,9 +172,20 @@ public class StocktakeServiceImpl implements StocktakeService {
             stocktakeItem.setDiffQuantity(difference); stocktakeItem.setCostAmount(costAmount);
             hasShortage |= difference.signum() < 0;
         }
-        stocktakeNote.setCountsSubmittedAt(LocalDateTime.now());
-        if (!hasShortage) stocktakeNote.setStatus(StocktakeStatus.COMPLETED);
-        stocktakeNote.setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        if (!hasShortage) {
+            Map<UUID, BigDecimal> stockDeltas = new HashMap<>();
+            for (StocktakeItem count : stocktakeItems) {
+                if (count.getDiffQuantity().signum() > 0) {
+                    StocktakeSurplus.post(noteId, count, lotsById.get(count.getLotId()), now.toLocalDate(),
+                            stockTransactions, stockDeltas);
+                }
+            }
+            if (!stockDeltas.isEmpty()) support.adjustStock(stockDeltas);
+            stocktakeNote.setStatus(StocktakeStatus.COMPLETED);
+        }
+        stocktakeNote.setCountsSubmittedAt(now);
+        stocktakeNote.setUpdatedAt(now);
         notes.save(stocktakeNote);
         return detail(stocktakeNote, stocktakeItems);
     }

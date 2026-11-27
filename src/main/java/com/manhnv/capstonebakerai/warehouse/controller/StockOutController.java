@@ -1,6 +1,7 @@
 package com.manhnv.capstonebakerai.warehouse.controller;
 import com.manhnv.capstonebakerai.common.response.ApiResponse;
 import com.manhnv.capstonebakerai.warehouse.dto.StockOutCreateRequest;
+import com.manhnv.capstonebakerai.warehouse.dto.PendingLotDisposal;
 import com.manhnv.capstonebakerai.warehouse.entity.StockOutNote;
 import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import com.manhnv.capstonebakerai.warehouse.enums.StockOutType;
@@ -13,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.domain.Sort;
+import java.util.List;
 import java.util.UUID;
 @RestController @RequestMapping("/api/warehouse/stock-out")
 public class StockOutController {
@@ -23,6 +25,10 @@ public class StockOutController {
  @PostMapping("/{id}/cancel") public ApiResponse<StockOutNote> cancel(@PathVariable UUID id,@RequestBody(required=false) Cancellation request){return ApiResponse.success(service.cancel(id,request == null ? null : request.reason()));}
  @PostMapping("/stocktakes/{noteId}") @ResponseStatus(HttpStatus.CREATED) public ApiResponse<StockOutNote> createStocktakeDisposal(@PathVariable UUID noteId){return ApiResponse.success(service.createStocktakeDisposal(noteId));}
  @PostMapping("/expired-lots/{lotId}/dispose") public ApiResponse<StockOutNote> disposeExpiredLot(@PathVariable UUID lotId){return ApiResponse.success(service.disposeExpiredLot(lotId));}
+ @GetMapping("/expired-lots/pending")
+ public ApiResponse<List<PendingLotDisposal>> pendingExpiredLotDisposals() {
+     return ApiResponse.success(service.pendingExpiredLotDisposals());
+ }
  @GetMapping public ApiResponse<Page<StockOutNote>> list(@RequestParam(required=false) NoteStatus status,
          @RequestParam(required=false) StockOutType type,
          @PageableDefault(size=20,sort="createdAt",direction=Sort.Direction.DESC) Pageable pageable){return ApiResponse.success(service.list(status,type,pageable));}

@@ -37,11 +37,12 @@ public class StockTransactionController {
             @RequestParam(required = false) StockTransactionType transactionType,
             @RequestParam(required = false) StockTransactionRefType refType,
             @RequestParam(required = false) UUID refId,
+            @RequestParam(required = false) String refCode,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         StockTransactionFilter filter = new StockTransactionFilter(
-                productId, stockLotId, transactionType, refType, refId, from, to);
+                productId, stockLotId, transactionType, refType, refId, refCode, from, to);
         return ApiResponse.success(service.search(filter, pageable));
     }
 }

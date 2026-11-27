@@ -8,6 +8,6 @@ import java.util.UUID;
 
 public record ProductResponse(UUID productId, String sku, String name, String description,
         UUID categoryId, String imgUrl, BigDecimal discountPercent, String storageGuide,
-        BigDecimal minStock, BigDecimal maxStock, BigDecimal stockQuantity, ProductStatus status,
+        BigDecimal minStock, BigDecimal maxStock, BigDecimal stockQuantity, BigDecimal saleableQuantity, ProductStatus status,
         String brand, boolean combo, LocalDateTime createdAt, LocalDateTime updatedAt,
         List<ProductUnitResponse> units) { }

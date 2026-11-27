@@ -17,5 +17,7 @@ public record StockTransactionResponse(
         StockTransactionRefType refType,
         UUID refId,
         UUID createdBy,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        String refCode,
+        String createdByName) {
 }

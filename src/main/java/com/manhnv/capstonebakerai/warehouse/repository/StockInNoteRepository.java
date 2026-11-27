@@ -13,6 +13,7 @@ import com.manhnv.capstonebakerai.warehouse.enums.NoteStatus;
 import java.util.Collection;
 import java.util.List;
 public interface StockInNoteRepository extends JpaRepository<StockInNote, UUID> {
+    java.util.Optional<StockInNote> findByCodeIgnoreCase(String code);
     boolean existsByCode(String code);
     boolean existsBySupplierId(UUID supplierId);
     Page<StockInNote> findByStatus(NoteStatus status, Pageable pageable);

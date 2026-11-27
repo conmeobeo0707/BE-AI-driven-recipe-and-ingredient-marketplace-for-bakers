@@ -21,6 +21,7 @@ public interface StockOutNoteRepository extends JpaRepository<StockOutNote, UUID
     Optional<StockOutNote> findByStocktakeNoteIdAndStatus(UUID stocktakeNoteId, NoteStatus status);
     @Query("select n.stocktakeNoteId from StockOutNote n where n.noteId = :id")
     Optional<UUID> findStocktakeNoteId(@Param("id") UUID id);
+    java.util.Optional<StockOutNote> findByCodeIgnoreCase(String code);
     boolean existsByCode(String code);
     Page<StockOutNote> findByStatus(NoteStatus status, Pageable pageable);
     Page<StockOutNote> findByType(StockOutType type, Pageable pageable);

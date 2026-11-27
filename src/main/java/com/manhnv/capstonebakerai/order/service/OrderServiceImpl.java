@@ -351,7 +351,7 @@ public class OrderServiceImpl implements OrderService {
             if (unit == null) throw new AppException(OrderErrorCode.PRODUCT_UNIT_NOT_FOUND);
 
             Product product = products.get(unit.getProductId());
-            if (product == null || product.getStatus() != ProductStatus.ACTIVE
+            if (product == null || product.getStatus() == ProductStatus.DISCONTINUE
                     || unit.getStatus() != UnitStatus.ACTIVE || !unit.isSale()) {
                 throw new AppException(OrderErrorCode.PRODUCT_NOT_AVAILABLE);
             }

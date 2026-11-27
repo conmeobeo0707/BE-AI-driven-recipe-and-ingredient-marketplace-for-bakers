@@ -7,7 +7,10 @@ import com.manhnv.capstonebakerai.product.enums.ProductStatus;
 import com.manhnv.capstonebakerai.product.exception.ProductErrorCode;
 import com.manhnv.capstonebakerai.product.repository.*;
 import com.manhnv.capstonebakerai.common.security.SecurityUtils;
+import com.manhnv.capstonebakerai.warehouse.repository.StockLotRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -16,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.function.Function;
 import java.util.*;
 
 @Service
@@ -26,15 +31,17 @@ public class ProductServiceImpl implements ProductService {
     private final ChildProductRepository children;
     private final UnitPriceHistoryRepository priceHistory;
     private final ProductCategoryRepository categories;
+    private final StockLotRepository stockLots;
 
     public ProductServiceImpl(ProductRepository products, ProductUnitRepository units,
             ChildProductRepository children, UnitPriceHistoryRepository priceHistory,
-            ProductCategoryRepository categories) {
+            ProductCategoryRepository categories, StockLotRepository stockLots) {
         this.products = products;
         this.units = units;
         this.children = children;
         this.priceHistory = priceHistory;
         this.categories = categories;
+        this.stockLots = stockLots;
     }
 
     @Override
@@ -51,23 +58,26 @@ public class ProductServiceImpl implements ProductService {
         apply(product, request, true);
         Product savedProduct = products.save(product);
         synchronizeUnits(savedProduct.getProductId(), request.units());
+        applyComboItems(savedProduct, request.comboItems(), savedProduct.isCombo());
         return toResponse(savedProduct);
     }
 
     @Override
     public ProductResponse update(UUID productId, ProductUpsertRequest request) {
         validateProductRequest(request);
-        Product product = getEntity(productId);
+        Product product = lockEntity(productId);
         if (!product.getSku().equalsIgnoreCase(request.sku().trim())
                 && products.existsBySkuIgnoreCase(request.sku().trim()))
             throw new AppException(ProductErrorCode.DUPLICATE_SKU);
         validateCategory(request.categoryId());
+        boolean creatingCombo = !product.isCombo() && Boolean.TRUE.equals(request.combo());
         apply(product, request, false);
         Product updatedProduct = products.save(product);
         if (request.units() != null) {
             if (request.units().isEmpty()) throw invalid("The unit list cannot be empty");
             synchronizeUnits(productId, request.units());
         }
+        applyComboItems(updatedProduct, request.comboItems(), creatingCombo);
         return toResponse(updatedProduct);
     }
 
@@ -75,16 +85,21 @@ public class ProductServiceImpl implements ProductService {
     public ProductResponse get(UUID productId) { return toResponse(getEntity(productId)); }
 
     @Override @Transactional(readOnly = true)
-    public Page<ProductResponse> list(UUID categoryId, String brand, String name, ProductStatus status, Pageable pageable) {
+    public Page<ProductResponse> list(UUID categoryId, String brand, String name, String keyword, ProductStatus status, Pageable pageable) {
         if (pageable == null || pageable.isUnpaged() || pageable.getPageNumber() < 0
                 || pageable.getPageSize() < 1 || pageable.getPageSize() > 100)
             throw invalid("Page must be non-negative and page size cannot exceed 100");
         if (brand != null && brand.length() > 255) throw invalid("Brand filter cannot exceed 255 characters");
         if (name != null && name.length() > 255) throw invalid("Product name search cannot exceed 255 characters");
+        if (keyword != null && keyword.length() > 255) throw invalid("Product search cannot exceed 255 characters");
         Set<String> sortableFields = Set.of("productId", "sku", "name", "brand", "status", "createdAt", "updatedAt", "stockQuantity");
         for (Sort.Order order : pageable.getSort()) {
             if (!sortableFields.contains(order.getProperty())) throw invalid("Unsupported product sort field");
         }
+        Sort sort = pageable.getSort();
+        if (sort.getOrderFor("productId") == null) sort = sort.and(Sort.by("productId"));
+        Pageable stablePage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+
         Specification<Product> spec = (root, query, cb) -> cb.conjunction();
         if (categoryId != null)
             spec = spec.and((root, query, cb) -> cb.equal(root.get("categoryId"), categoryId));
@@ -94,16 +109,49 @@ public class ProductServiceImpl implements ProductService {
             String nameKeyword = "%" + name.trim().toLowerCase(Locale.ROOT) + "%";
             spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("name")), nameKeyword));
         }
-        if (status != null)
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
-        return products.findAll(spec, pageable).map(this::toResponse);
+        if (keyword != null && !keyword.isBlank()) {
+            String search = "%" + keyword.trim().toLowerCase(Locale.ROOT)
+                    .replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("name")), search, '!'),
+                    cb.like(cb.lower(root.get("sku")), search, '!')));
+        }
+        if (status == ProductStatus.DISCONTINUE) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), ProductStatus.DISCONTINUE));
+        } else if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("status"), ProductStatus.DISCONTINUE));
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Sort.Order statusOrder = sort.getOrderFor("status");
+        if ((status == null || status == ProductStatus.DISCONTINUE) && statusOrder == null) {
+            return products.findAll(spec, stablePage).map(product -> toResponse(product, saleableQuantity(product, now)));
+        }
+
+        Sort otherSort = Sort.by(sort.stream().filter(order -> !order.getProperty().equals("status")).toList());
+        List<ProductAvailability> matches = new ArrayList<>();
+        for (Product product : products.findAll(spec, otherSort)) {
+            BigDecimal quantity = saleableQuantity(product, now);
+            ProductStatus effectiveStatus = effectiveStatus(product, quantity, unitsForAvailability(product, quantity));
+            if (status == null || status == effectiveStatus) {
+                matches.add(new ProductAvailability(product, quantity, effectiveStatus));
+            }
+        }
+        if (statusOrder != null) {
+            Comparator<ProductAvailability> byStatus = Comparator.comparing(item -> item.status().name());
+            matches.sort(statusOrder.isAscending() ? byStatus : byStatus.reversed());
+        }
+        int start = (int) Math.min(pageable.getOffset(), matches.size());
+        int end = (int) Math.min((long) start + pageable.getPageSize(), matches.size());
+        return new PageImpl<>(matches.subList(start, end).stream()
+                .map(item -> toResponse(item.product(), item.quantity(), item.status())).toList(), stablePage, matches.size());
     }
 
     /** Soft delete: the schema has status values but no deleted_at column. */
     @Override
     public void deactivate(UUID productId) {
-        Product product = getEntity(productId);
-        product.setStatus(ProductStatus.INACTIVE);
+        Product product = lockEntity(productId);
+        product.setStatus(ProductStatus.DISCONTINUE);
         products.save(product);
     }
 
@@ -178,7 +226,17 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<ComboItemRequest> setComboItems(UUID productId, List<ComboItemRequest> items) {
-        Product parent = getEntity(productId);
+        Product parent = lockEntity(productId);
+        replaceComboItems(parent, items);
+        return List.copyOf(items);
+    }
+
+    private void applyComboItems(Product parent, List<ComboItemRequest> items, boolean required) {
+        if (items != null || required) replaceComboItems(parent, items);
+    }
+
+    private void replaceComboItems(Product parent, List<ComboItemRequest> items) {
+        UUID productId = parent.getProductId();
         if (!parent.isCombo()) throw invalid("Product must have is_combo=true before adding combo items");
         if (items == null || items.isEmpty()) throw invalid("A combo must contain at least one product");
         Set<UUID> unique = new HashSet<>();
@@ -200,7 +258,6 @@ public class ProductServiceImpl implements ProductService {
             child.setQuantity(item.quantity());
             children.save(child);
         }
-        return List.copyOf(items);
     }
 
     @Override
@@ -217,7 +274,18 @@ public class ProductServiceImpl implements ProductService {
     public BigDecimal calculateComboStock(UUID productId) {
         Product product = getEntity(productId);
         if (!product.isCombo()) throw invalid("Product is not a combo");
-        return calculateStock(productId, new HashSet<>());
+        BigDecimal quantity = saleableQuantity(product, LocalDateTime.now());
+        ProductStatus status = effectiveStatus(product, quantity, unitsForAvailability(product, quantity));
+        return status == ProductStatus.ACTIVE ? quantity : BigDecimal.ZERO;
+    }
+
+    @Override @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> getSaleRequirements(UUID productId) {
+        Map<UUID, BigDecimal> requirements = new HashMap<>();
+        if (!collectRequirements(getEntity(productId), BigDecimal.ONE, new HashSet<>(), requirements, true)) {
+            throw new AppException(ProductErrorCode.CONFLICT, "Product or combo component is discontinued or incomplete");
+        }
+        return Map.copyOf(requirements);
     }
 
     @Override
@@ -226,13 +294,13 @@ public class ProductServiceImpl implements ProductService {
         List<UUID> sorted = productIds.stream().distinct().sorted().toList();
         List<Product> locked = products.lockProducts(sorted);
         if (locked.size() != sorted.size()) throw new AppException(ProductErrorCode.NOT_FOUND, "One or more products were not found");
-        return locked.stream().map(product -> new InventoryProduct(product.getProductId(), nz(product.getStockQuantity()), product.isCombo())).toList();
+        return locked.stream().map(product -> new InventoryProduct(product.getProductId(), nz(product.getStockQuantity()), product.isCombo(), product.getStatus())).toList();
     }
 
     @Override @Transactional(readOnly = true)
     public InventoryProduct getInventoryProduct(UUID productId) {
         Product product = getEntity(productId);
-        return new InventoryProduct(product.getProductId(), nz(product.getStockQuantity()), product.isCombo());
+        return new InventoryProduct(product.getProductId(), nz(product.getStockQuantity()), product.isCombo(), product.getStatus());
     }
 
     @Override @Transactional(readOnly = true)
@@ -272,23 +340,67 @@ public class ProductServiceImpl implements ProductService {
 
     @Override @Transactional(readOnly = true)
     public List<ProductResponse> listLowStockProducts() {
-        return products.findLowStockProducts(ProductStatus.ACTIVE).stream().map(this::toResponse).toList();
+        return products.findLowStockProducts(ProductStatus.DISCONTINUE).stream().map(this::toResponse).toList();
     }
 
-    private BigDecimal calculateStock(UUID productId, Set<UUID> visiting) {
-        Product product = getEntity(productId);
-        if (!product.isCombo()) return nz(product.getStockQuantity());
-        if (!visiting.add(productId)) throw invalid("Combo composition contains a cycle");
-        List<ChildProduct> parts = children.findByParentProductId(productId);
-        if (parts.isEmpty()) { visiting.remove(productId); return BigDecimal.ZERO; }
-        BigDecimal available = null;
-        for (ChildProduct part : parts) {
-            BigDecimal componentStock = calculateStock(part.getChildrenProductId(), visiting);
-            BigDecimal possible = componentStock.divide(part.getQuantity(), 6, RoundingMode.DOWN);
-            if (available == null || possible.compareTo(available) < 0) available = possible;
+    private record ProductAvailability(Product product, BigDecimal quantity, ProductStatus status) { }
+
+    private List<ProductUnit> unitsForAvailability(Product product, BigDecimal saleable) {
+        if (saleable.signum() <= 0 || product.getStatus() == ProductStatus.DISCONTINUE) return List.of();
+        return units.findByProductId(product.getProductId());
+    }
+
+    private ProductStatus effectiveStatus(Product product, BigDecimal saleable, List<ProductUnit> productUnits) {
+        if (product.getStatus() == ProductStatus.DISCONTINUE) return ProductStatus.DISCONTINUE;
+        boolean canSell = productUnits.stream().anyMatch(unit -> unit.getStatus() == UnitStatus.ACTIVE
+                && unit.isSale() && unit.getWeightGram() != null && unit.getWeightGram() > 0
+                && saleable.compareTo(unit.getConversionFactor()) >= 0);
+        return canSell ? ProductStatus.ACTIVE : ProductStatus.INACTIVE;
+    }
+
+    private BigDecimal saleableQuantity(Product product, LocalDateTime now) {
+        return calculateStock(product, item -> saleableStock(item, now), true);
+    }
+
+    private BigDecimal saleableStock(Product product, LocalDateTime now) {
+        return nz(stockLots.sumSaleableQuantity(product.getProductId(), now.toLocalDate(), now)).max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal calculateStock(Product product, Function<Product, BigDecimal> componentQuantity, boolean saleable) {
+        if (saleable && product.getStatus() == ProductStatus.DISCONTINUE) return BigDecimal.ZERO;
+        if (!product.isCombo()) return componentQuantity.apply(product);
+
+        Map<UUID, BigDecimal> requirements = new HashMap<>();
+        if (!collectRequirements(product, BigDecimal.ONE, new HashSet<>(), requirements, saleable)) {
+            return BigDecimal.ZERO;
         }
-        visiting.remove(productId);
-        return available == null ? BigDecimal.ZERO : available;
+        return requirements.entrySet().stream()
+                .map(entry -> componentQuantity.apply(getEntity(entry.getKey()))
+                        .divide(entry.getValue(), 6, RoundingMode.DOWN))
+                .min(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
+    }
+
+    private boolean collectRequirements(Product product, BigDecimal quantity, Set<UUID> path,
+                                        Map<UUID, BigDecimal> requirements, boolean saleable) {
+        if (saleable && product.getStatus() == ProductStatus.DISCONTINUE) return false;
+        UUID productId = product.getProductId();
+        if (!product.isCombo()) {
+            requirements.merge(productId, quantity, BigDecimal::add);
+            return true;
+        }
+
+        if (!path.add(productId)) throw invalid("Combo composition contains a cycle");
+        List<ChildProduct> parts = children.findByParentProductId(productId);
+        if (parts.isEmpty()) return false;
+        for (ChildProduct part : parts) {
+            if (!collectRequirements(getEntity(part.getChildrenProductId()), quantity.multiply(part.getQuantity()),
+                    path, requirements, saleable)) {
+                return false;
+            }
+        }
+        path.remove(productId);
+        return true;
     }
 
     private boolean canReach(UUID from, UUID target, Set<UUID> visited) {
@@ -300,14 +412,22 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private ProductResponse toResponse(Product product) {
-        BigDecimal stock = product.isCombo() ? calculateStock(product.getProductId(), new HashSet<>())
-                : nz(product.getStockQuantity());
-        List<ProductUnitResponse> productUnits = units.findByProductId(product.getProductId()).stream()
-                .map(this::toUnitResponse).toList();
+        return toResponse(product, saleableQuantity(product, LocalDateTime.now()));
+    }
+
+    private ProductResponse toResponse(Product product, BigDecimal saleable) {
+        return toResponse(product, saleable, null);
+    }
+
+    private ProductResponse toResponse(Product product, BigDecimal saleable, ProductStatus status) {
+        BigDecimal stock = calculateStock(product, item -> nz(item.getStockQuantity()), false);
+        List<ProductUnit> productUnits = units.findByProductId(product.getProductId());
+        ProductStatus responseStatus = status == null ? effectiveStatus(product, saleable, productUnits) : status;
+        BigDecimal saleableInUnits = product.isCombo() && responseStatus != ProductStatus.ACTIVE ? BigDecimal.ZERO : saleable;
         return new ProductResponse(product.getProductId(), product.getSku(), product.getName(), product.getDescription(),
                 product.getCategoryId(), product.getImgUrl(), product.getDiscountPercent(), product.getStorageGuide(),
-                product.getMinStock(), product.getMaxStock(), stock, product.getStatus(), product.getBrand(),
-                product.isCombo(), product.getCreatedAt(), product.getUpdatedAt(), productUnits);
+                product.getMinStock(), product.getMaxStock(), stock, saleableInUnits, responseStatus, product.getBrand(),
+                product.isCombo(), product.getCreatedAt(), product.getUpdatedAt(), productUnits.stream().map(this::toUnitResponse).toList());
     }
 
     private ProductUnitResponse toUnitResponse(ProductUnit unit) {
@@ -318,6 +438,11 @@ public class ProductServiceImpl implements ProductService {
     private Product getEntity(UUID id) {
         return products.findById(id).orElseThrow(() -> new AppException(ProductErrorCode.NOT_FOUND));
     }
+    private Product lockEntity(UUID id) {
+        return products.lockProducts(List.of(id)).stream().findFirst()
+                .orElseThrow(() -> new AppException(ProductErrorCode.NOT_FOUND));
+    }
+
     private void validateCategory(UUID id) {
         if (id != null && !categories.existsById(id)) throw new AppException(ProductErrorCode.NOT_FOUND, "Category was not found");
     }
@@ -328,7 +453,8 @@ public class ProductServiceImpl implements ProductService {
         product.setDiscountPercent(request.discountPercent() == null ? BigDecimal.ZERO : request.discountPercent());
         product.setStorageGuide(request.storageGuide()); product.setMinStock(request.minStock() == null ? BigDecimal.ZERO : request.minStock());
         product.setMaxStock(request.maxStock()); product.setBrand(request.brand());
-        if (request.status() != null) product.setStatus(request.status());
+        // Only discontinuation is persisted. In-stock and out-of-stock are derived from availability.
+        if (request.status() == ProductStatus.DISCONTINUE) product.setStatus(ProductStatus.DISCONTINUE);
         if (request.combo() != null) product.setCombo(request.combo()); else if (creating) product.setCombo(false);
         if (clearingCombo) children.deleteByParentProductId(product.getProductId());
     }

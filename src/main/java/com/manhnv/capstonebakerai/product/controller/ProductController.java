@@ -33,8 +33,9 @@ public class ProductController {
     public ApiResponse<Page<ProductResponse>> list(@RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String brand,
             @RequestParam(required = false) String name,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) ProductStatus status,
-            Pageable pageable) { return ApiResponse.success(service.list(categoryId, brand, name, status, pageable)); }
+            Pageable pageable) { return ApiResponse.success(service.list(categoryId, brand, name, keyword, status, pageable)); }
     @PostMapping("/low-stock/alerts")
     public ApiResponse<LowStockAlertSummary> sendLowStockAlerts() {
         return ApiResponse.success(lowStockAlertService.sendLowStockAlerts());
@@ -44,6 +45,10 @@ public class ProductController {
     @GetMapping("/{productId}/units/{unitId}/price-history")
     public ApiResponse<List<UnitPriceHistoryResponse>> unitPriceHistory(@PathVariable UUID productId, @PathVariable UUID unitId) {
         return ApiResponse.success(service.getUnitPriceHistory(productId, unitId));
+    }
+    @GetMapping("/{productId}/combo-items")
+    public ApiResponse<List<ComboItemRequest>> getComboItems(@PathVariable UUID productId) {
+        return ApiResponse.success(service.getComboItems(productId));
     }
     @PutMapping("/{productId}/combo-items")
     public ApiResponse<List<ComboItemRequest>> setComboItems(@PathVariable UUID productId,

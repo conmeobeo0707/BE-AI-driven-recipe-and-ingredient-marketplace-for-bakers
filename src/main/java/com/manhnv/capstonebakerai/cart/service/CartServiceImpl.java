@@ -13,6 +13,7 @@ import com.manhnv.capstonebakerai.cart.repository.CartRepository;
 import com.manhnv.capstonebakerai.common.exception.AppException;
 import com.manhnv.capstonebakerai.product.dtos.ProductResponse;
 import com.manhnv.capstonebakerai.product.entities.Product;
+import com.manhnv.capstonebakerai.product.enums.ProductStatus;
 import com.manhnv.capstonebakerai.product.entities.ProductUnit;
 import com.manhnv.capstonebakerai.product.repository.ProductRepository;
 import com.manhnv.capstonebakerai.product.repository.ProductUnitRepository;
@@ -50,6 +51,10 @@ public class CartServiceImpl implements CartService{
 
         Product product = productRepository.findById(request.productId())
                 .orElseThrow(() -> new AppException(CartErrorCode.CART_PRODUCT_NOT_FOUND));
+
+        if (product.getStatus() == ProductStatus.DISCONTINUE) {
+            throw new AppException(CartErrorCode.CART_PRODUCT_NOT_FOUND);
+        }
 
         ProductUnit unit = productUnitRepository.findById(request.uomId())
                 .orElseThrow(() -> new AppException(CartErrorCode.CART_UNIT_NOT_FOUND));

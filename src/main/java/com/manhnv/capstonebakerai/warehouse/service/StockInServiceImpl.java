@@ -12,12 +12,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
 
 @Service
 public class StockInServiceImpl implements StockInService {
+    private static final ZoneId RECEIPT_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final StockInNoteRepository notes;
     private final StockInItemRepository items;
     private final StockLotRepository lots;
@@ -38,7 +41,12 @@ public class StockInServiceImpl implements StockInService {
 
     @Override @Transactional(readOnly = true)
     public Page<StockInNote> list(NoteStatus status, Pageable pageable) {
-        return status == null ? notes.findAll(pageable) : notes.findByStatus(status, pageable);
+        Pageable stablePage = pageable;
+        if (pageable.isPaged() && pageable.getSort().getOrderFor("code") == null) {
+            stablePage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                    pageable.getSort().and(Sort.by("code")));
+        }
+        return status == null ? notes.findAll(stablePage) : notes.findByStatus(status, stablePage);
     }
 
     @Override @Transactional(readOnly = true)
@@ -59,7 +67,7 @@ public class StockInServiceImpl implements StockInService {
         StockInNote stockInNote = new StockInNote();
         stockInNote.setCode(WarehouseSupport.code("SIN"));
         stockInNote.setSupplierId(request.supplierId());
-        stockInNote.setReceiptDate(request.receiptDate() == null ? LocalDateTime.now() : request.receiptDate());
+        stockInNote.setReceiptDate(resolveReceiptDate(request.receiptDate(), null));
         stockInNote.setNote(request.note());
         for (StockInItemRequest itemRequest : request.items()) {
             InventoryProduct inventoryProduct = productsById.get(itemRequest.productId());
@@ -140,7 +148,7 @@ public class StockInServiceImpl implements StockInService {
         }
 
         stockInNote.setSupplierId(request.supplierId());
-        stockInNote.setReceiptDate(request.receiptDate() == null ? LocalDateTime.now() : request.receiptDate());
+        stockInNote.setReceiptDate(resolveReceiptDate(request.receiptDate(), stockInNote.getReceiptDate()));
         stockInNote.setNote(request.note());
         stockInNote.setTotalAmount(totalAmount);
         stockInNote.setPaidAmount(paidAmount);
@@ -154,6 +162,13 @@ public class StockInServiceImpl implements StockInService {
         items.saveAll(replacementItems);
         StockInNote updatedNote = notes.save(stockInNote);
         return new StockInDetailResponse(updatedNote, items.findByNoteIdOrderByItemId(noteId));
+    }
+
+    private LocalDateTime resolveReceiptDate(LocalDateTime requested, LocalDateTime existing) {
+        LocalDateTime now = LocalDateTime.now(RECEIPT_ZONE);
+        if (requested == null) return existing == null ? now : existing;
+        if (requested.isAfter(now)) throw WarehouseSupport.error("Ngày nhập không được ở tương lai.");
+        return requested;
     }
 
     @Override @Transactional

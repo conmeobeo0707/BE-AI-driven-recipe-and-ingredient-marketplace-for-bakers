@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 public interface StocktakeNoteRepository extends JpaRepository<StocktakeNote, UUID> {
+    java.util.Optional<StocktakeNote> findByCodeIgnoreCase(String code);
     boolean existsByCode(String code);
     @Query("""
             select n from StocktakeNote n
