@@ -57,7 +57,7 @@ public class IngredientServiceImpl implements IngredientService {
     @Transactional(readOnly = true)
     public IngredientResponse getById(UUID id) {
         Ingredient entity = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ingredient not found"));
+                .orElseThrow(() -> new AppException(IngredientAliasErrorCode.INGREDIENT_NOT_FOUND));
         return withAliases(entity, aliasService.getAliases(id));
     }
 
@@ -81,7 +81,7 @@ public class IngredientServiceImpl implements IngredientService {
     public IngredientResponse update(UUID id, IngredientRequest request) {
         aliasService.lockNameRegistry();
         Ingredient existing = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ingredient not found"));
+                .orElseThrow(() -> new AppException(IngredientAliasErrorCode.INGREDIENT_NOT_FOUND));
 
         String name = aliasService.validName(request.getName());
         if (repository.existsByNormalizedNameAndIdNot(name, id)) {
@@ -96,7 +96,7 @@ public class IngredientServiceImpl implements IngredientService {
     @Override
     public void delete(UUID id) {
         if (!repository.existsById(id)) {
-            throw new RuntimeException("Ingredient not found");
+            throw new AppException(IngredientAliasErrorCode.INGREDIENT_NOT_FOUND);
         }
         repository.deleteById(id);
     }
@@ -110,7 +110,7 @@ public class IngredientServiceImpl implements IngredientService {
     }
 
     private static AppException nameTaken(String name) {
-        return new AppException(IngredientAliasErrorCode.NAME_ALREADY_IN_USE, "Nguyên liệu '" + name + "' đã tồn tại");
+        return new AppException(IngredientAliasErrorCode.NAME_ALREADY_IN_USE, "Ingredient '" + name + "' already exists");
     }
 
     private static IngredientResponse withAliases(Ingredient ingredient, List<IngredientAliasResponse> aliases) {

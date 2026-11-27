@@ -16,7 +16,7 @@ public class RecipeIngredientItemResponse {
     private UUID id;
     @Schema(description = "id nguyên liệu trong danh mục")
     private UUID ingredientId;
-    private String name;
+    private String ingredientName;
     private String rawName;
     private String note;
     private String unit;

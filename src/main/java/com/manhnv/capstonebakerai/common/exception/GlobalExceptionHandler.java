@@ -26,11 +26,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAppException(AppException exception) {
+    public ResponseEntity<ApiResponse<Object>> handleAppException(AppException exception) {
         ErrorCode errorCode = exception.getErrorCode();
 
         return ResponseEntity.status(errorCode.getHttpStatus())
-                .body(ApiResponse.error(exception.getMessage()));
+                .body(ApiResponse.error(errorCode.getCode(), exception.getMessage(), exception.getData()));
     }
 
     // Many services throw `ResponseStatusException` directly (400/404/409/...) instead of the

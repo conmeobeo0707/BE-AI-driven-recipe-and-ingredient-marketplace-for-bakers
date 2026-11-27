@@ -47,7 +47,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import vn.payos.exception.NotFoundException;
+import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeCatalogErrorCode;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeErrorCode;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -79,11 +83,10 @@ public class RecipeServiceImpl implements RecipeService {
     @Override
     @Transactional
     public RecipeResponse getById(UUID id) {
-        if (repository.incrementViewCount(id) == 0) {
-            throw new RuntimeException("Recipe not found");
-        }
         Recipe entity = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        ensureCanView(entity);
+        repository.incrementViewCount(id);
         return enrich(RecipeMapper.toDTO(entity), entity);
     }
 
@@ -91,8 +94,37 @@ public class RecipeServiceImpl implements RecipeService {
     @Transactional(readOnly = true)
     public RecipeResponse getDetail(UUID id) {
         Recipe entity = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
         return enrich(RecipeMapper.toDTO(entity), entity);
+    }
+
+    private static final Set<String> INTERNAL_ROLES =
+            Set.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_STAFF", "ROLE_BAKER_STAFF");
+
+    private static boolean isOwner(Recipe recipe) {
+        return recipe.getUser() != null
+                && recipe.getUser().getUserId().equals(SecurityUtils.getCurrentUserId());
+    }
+
+    private static boolean isInternalStaff() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> INTERNAL_ROLES.contains(a.getAuthority()));
+    }
+
+    private static void ensureCanView(Recipe recipe) {
+        if (recipe.getRecipeStatus() == RecipeStatus.PERSONAL && !isOwner(recipe)) {
+            throw new AppException(RecipeErrorCode.RECIPE_NOT_FOUND);
+        }
+    }
+
+    private static void ensureCanModify(Recipe recipe) {
+        if (isOwner(recipe)) {
+            return;
+        }
+        if (recipe.getRecipeStatus() == RecipeStatus.PERSONAL || !isInternalStaff()) {
+            throw new AppException(RecipeErrorCode.RECIPE_ACCESS_DENIED);
+        }
     }
 
     private RecipeResponse enrich(RecipeResponse response, Recipe entity) {
@@ -106,11 +138,11 @@ public class RecipeServiceImpl implements RecipeService {
     public RecipeResponse create(RecipeRequest request) {
         UUID currentUserId = SecurityUtils.getCurrentUserId();
         User user = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.USER_NOT_FOUND));
 
         RecipeCategory category = request.getCategoryId() == null ? null
                 : categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new NotFoundException("RecipeCategory not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND));
 
         mediaHelper.validateContinuousStepNumbers(nullToEmpty(request.getSteps()).stream()
                 .map(RecipeStepEmbeddedRequest::getStepNumber)
@@ -170,7 +202,7 @@ public class RecipeServiceImpl implements RecipeService {
         entityManager.clear();
 
         Recipe detail = repository.findById(recipeId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
 
 
         return enrich(RecipeMapper.toDTO(detail), detail);
@@ -180,7 +212,13 @@ public class RecipeServiceImpl implements RecipeService {
     @Transactional
     public RecipeResponse update(UUID recipeId, RecipeRequest request) {
         Recipe existing = repository.findById(recipeId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        ensureCanModify(existing);
+        if (request.getRecipeStatus() == RecipeStatus.PERSONAL
+                && existing.getRecipeStatus() != RecipeStatus.PERSONAL
+                && !isOwner(existing)) {
+            throw new AppException(RecipeErrorCode.PERSONAL_STATUS_LOCKED);
+        }
 
         List<RecipeStepEmbeddedRequest> steps = nullToEmpty(request.getSteps());
         List<UUID> imageIds = nullToEmpty(request.getImageIds());
@@ -210,7 +248,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         RecipeCategory category = request.getCategoryId() == null ? null
                 : categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("RecipeCategory not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND));
         existing.setRecipeCategory(category);
 
         existing.setTitle(request.getTitle());
@@ -289,7 +327,7 @@ public class RecipeServiceImpl implements RecipeService {
         mediaHelper.deleteMediaAfterCommit(detachedMediaIds);
 
         Recipe detail = repository.findById(recipeId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
 
 
         return enrich(RecipeMapper.toDTO(detail), detail);
@@ -299,10 +337,11 @@ public class RecipeServiceImpl implements RecipeService {
     @Transactional
     public void delete(UUID id) {
         Recipe recipe = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        ensureCanModify(recipe);
 
         if (recipe.getRecipeStatus() == RecipeStatus.HIDDEN) {
-            throw new RuntimeException("Recipe is already hidden");
+            throw new AppException(RecipeErrorCode.RECIPE_ALREADY_HIDDEN);
         }
 
         recipe.setRecipeStatus(RecipeStatus.HIDDEN);
@@ -370,7 +409,7 @@ public class RecipeServiceImpl implements RecipeService {
 
     private List<RecipeTool> saveRecipeTools(Recipe recipe, List<ToolEmbeddedRequest> requests) {
         return recipeToolRepository.saveAll(requests.stream().map(r -> {
-            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
+            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new AppException(RecipeCatalogErrorCode.TOOL_NOT_FOUND));
             return RecipeTool.builder()
                     .recipe(recipe)
                     .tool(tool)
@@ -384,7 +423,7 @@ public class RecipeServiceImpl implements RecipeService {
     private List<RecipeIngredient> saveRecipeIngredients(Recipe recipe, List<IngredientEmbeddedRequest> requests) {
         return recipeIngredientRepository.saveAll(requests.stream().map(r -> {
             Ingredient ingredient = ingredientRepository.findById(r.getIngredientId())
-                    .orElseThrow(() -> new NotFoundException("Ingredient not found"));
+                    .orElseThrow(() -> new AppException(com.manhnv.capstonebakerai.recipe.ingredientalias.exception.IngredientAliasErrorCode.INGREDIENT_NOT_FOUND));
             if (r.getAliases() != null && !r.getAliases().isEmpty()) {
                 ingredientAliasService.addAll(ingredient, r.getAliases());
             }

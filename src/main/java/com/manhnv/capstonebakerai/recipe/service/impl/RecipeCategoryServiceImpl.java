@@ -26,7 +26,7 @@ public class RecipeCategoryServiceImpl implements RecipeCategoryService {
     @Override
     public RecipeCategoryResponse getById(UUID id) {
         RecipeCategory entity = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("RecipeCategory not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND));
         return RecipeCategoryMapper.toDTO(entity);
     }
 
@@ -44,7 +44,7 @@ public class RecipeCategoryServiceImpl implements RecipeCategoryService {
     @Override
     public RecipeCategoryResponse update(UUID id, RecipeCategoryRequest request) {
         RecipeCategory existing = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("RecipeCategory not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND));
         String name = validName(request.getName());
         if (repository.existsByNormalizedNameAndIdNot(name, id)) {
             throw nameTaken(name);
@@ -56,7 +56,7 @@ public class RecipeCategoryServiceImpl implements RecipeCategoryService {
     @Override
     public void delete(UUID id) {
         if (!repository.existsById(id)) {
-            throw new RuntimeException("RecipeCategory not found");
+            throw new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND);
         }
         repository.deleteById(id);
     }
@@ -101,6 +101,6 @@ public class RecipeCategoryServiceImpl implements RecipeCategoryService {
     }
 
     private static AppException nameTaken(String name) {
-        return new AppException(RecipeCatalogErrorCode.CATEGORY_NAME_ALREADY_EXISTS, "Danh mục '" + name + "' đã tồn tại");
+        return new AppException(RecipeCatalogErrorCode.CATEGORY_NAME_ALREADY_EXISTS, "Category '" + name + "' already exists");
     }
 }

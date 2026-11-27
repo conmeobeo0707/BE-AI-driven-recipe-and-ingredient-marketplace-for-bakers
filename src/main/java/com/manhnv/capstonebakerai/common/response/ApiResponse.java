@@ -20,6 +20,9 @@ public class ApiResponse<T> {
     @Schema(description = "Cho biết request thành công hay thất bại", example = "true")
     private boolean success;
 
+    @Schema(description = "Mã lỗi ổn định để client map; chỉ có trong response lỗi", nullable = true, example = "TOOL_NAME_ALREADY_EXISTS")
+    private String code;
+
     @Schema(description = "Dữ liệu kết quả của API; kiểu dữ liệu phụ thuộc endpoint", nullable = true)
     private T data;
 
@@ -34,6 +37,15 @@ public class ApiResponse<T> {
         return ApiResponse.<T>builder()
                 .success(false)
                 .message(message)
+                .build();
+    }
+
+    public static <T> ApiResponse<T> error(String code, String message, T data) {
+        return ApiResponse.<T>builder()
+                .success(false)
+                .code(code)
+                .message(message)
+                .data(data)
                 .build();
     }
 }
