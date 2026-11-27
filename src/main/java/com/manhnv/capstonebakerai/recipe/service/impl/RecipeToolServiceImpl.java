@@ -60,18 +60,16 @@ public class RecipeToolServiceImpl implements RecipeToolService {
     @Transactional
     public RecipeToolResponse update(UUID id, RecipeToolRequest request) {
         RecipeTool entity = find(id);
-        UUID oldRecipeId = entity.getRecipe().getId();
-        UUID oldToolId = entity.getTool().getId();
-        boolean pairChanged = !oldRecipeId.equals(request.getRecipeId())
-                || !oldToolId.equals(request.getToolId());
-        if (pairChanged) {
-            stepResourceHelper.requireToolUnusedBySteps(oldRecipeId, oldToolId);
-            if (repository.existsByRecipe_IdAndTool_Id(request.getRecipeId(), request.getToolId())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tool already exists in recipe");
-            }
+        boolean recipeChanged = !entity.getRecipe().getId().equals(request.getRecipeId());
+        UUID oldToolId = entity.getTool() == null ? null : entity.getTool().getId();
+        if (recipeChanged) {
+            stepResourceHelper.requireRecipeToolUnusedBySteps(entity.getId());
         }
-        stepResourceHelper.requireToolQuantityCoversSteps(
-                request.getRecipeId(), request.getToolId(), request.getQuantity());
+        if ((recipeChanged || !request.getToolId().equals(oldToolId))
+                && repository.existsByRecipe_IdAndTool_Id(request.getRecipeId(), request.getToolId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tool already exists in recipe");
+        }
+        stepResourceHelper.requireRecipeToolQuantityCoversSteps(entity.getId(), request.getQuantity());
         apply(entity, request);
         return RecipeToolMapper.toDTO(repository.save(entity));
     }
@@ -80,7 +78,7 @@ public class RecipeToolServiceImpl implements RecipeToolService {
     @Transactional
     public void delete(UUID id) {
         RecipeTool entity = find(id);
-        stepResourceHelper.requireToolUnusedBySteps(entity.getRecipe().getId(), entity.getTool().getId());
+        stepResourceHelper.requireRecipeToolUnusedBySteps(entity.getId());
         repository.delete(entity);
     }
 
@@ -95,5 +93,7 @@ public class RecipeToolServiceImpl implements RecipeToolService {
         entity.setTool(toolRepository.findById(request.getToolId())
                 .orElseThrow(() -> new RuntimeException("Tool not found")));
         entity.setQuantity(request.getQuantity());
+        entity.setRawName(entity.getTool().getName());
+        entity.setNote(request.getNote());
     }
 }

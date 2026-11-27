@@ -21,6 +21,6 @@ public class RecipeStepResponse {
     private RecipeStepType recipeStepType;
     private List<UUID> imageIds;
     private List<String> imageUrls;
-    private List<RecipeStepIngredientResponse> ingredients;
-    private List<RecipeStepToolResponse> tools;
+    private List<RecipeStepIngredientItemResponse> ingredients;
+    private List<RecipeStepToolItemResponse> tools;
 }

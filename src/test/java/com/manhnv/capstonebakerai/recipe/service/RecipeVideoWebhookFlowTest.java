@@ -72,8 +72,10 @@ class RecipeVideoWebhookFlowTest {
         var storage = mock(R2StorageService.class);
         var mediaHelper = mock(RecipeMediaHelper.class);
         var transactionManager = mock(PlatformTransactionManager.class);
+        var notifications = mock(com.manhnv.capstonebakerai.notification.service.NotificationService.class);
+        var userId = UUID.randomUUID();
         var recipeId = UUID.randomUUID();
-        var render = RecipeVideoRender.builder().recipeId(recipeId)
+        var render = RecipeVideoRender.builder().recipeId(recipeId).userId(userId)
                 .renderId("render-1").status("PROCESSING").build();
         when(renders.findByRenderId("render-1")).thenReturn(Optional.of(render));
         when(renders.findById(any())).thenReturn(Optional.of(render));
@@ -93,7 +95,7 @@ class RecipeVideoWebhookFlowTest {
             doReturn(videoBytes).when(shotstack).downloadOutput(VERIFIED_URL);
             var service = new RecipeVideoServiceImpl(shotstack, renders, recipes, mediaRepository,
                     storage, mediaHelper, transactionManager, mock(VideoThemeSelector.class), mock(VideoSlides.class),
-                    mock(VideoPhotoEmbedder.class));
+                    mock(VideoPhotoEmbedder.class), notifications);
             context.registerBean(RecipeVideoService.class, () -> service);
             context.refresh();
             var callback = new ShotstackWebhookRequest();
@@ -105,6 +107,8 @@ class RecipeVideoWebhookFlowTest {
             shotstack.handleWebhook(callback);
             assertEquals(completed ? "DONE" : "FAILED", render.getStatus());
             assertNotNull(render.getCompletedAt());
+            verify(notifications).create(eq(userId), eq(completed ? "Video AI đã sẵn sàng" : "Tạo video AI thất bại"),
+                    anyString(), eq(com.manhnv.capstonebakerai.notification.enums.NotificationRefType.RECIPE_VIDEO), eq(recipeId));
             verify(renders).save(render);
             verify(shotstack, never()).downloadOutput("https://untrusted.test/video.mp4");
             if (completed) {
@@ -114,7 +118,7 @@ class RecipeVideoWebhookFlowTest {
                 verify(recipes).save(recipe);
             } else {
                 assertEquals(error, render.getErrorMessage());
-                verifyNoInteractions(recipes, mediaRepository, storage);
+                verifyNoInteractions(mediaRepository, storage);
             }
         }
         server.verify();

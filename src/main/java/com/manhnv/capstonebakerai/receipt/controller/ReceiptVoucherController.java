@@ -6,6 +6,7 @@ import com.manhnv.capstonebakerai.receipt.dto.request.CreateReceiptVoucherReques
 import com.manhnv.capstonebakerai.receipt.dto.request.ReceiptCategoryRequest;
 import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptCategoryResponse;
 import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptVoucherResponse;
+import com.manhnv.capstonebakerai.receipt.dto.response.ReceiptVoucherSummaryResponse;
 import com.manhnv.capstonebakerai.receipt.service.ReceiptCategoryService;
 import com.manhnv.capstonebakerai.receipt.service.ReceiptVoucherService;
 import jakarta.validation.Valid;
@@ -33,6 +34,13 @@ public class ReceiptVoucherController {
     public ResponseEntity<ApiResponse<ReceiptVoucherResponse>> create(@Valid @RequestBody CreateReceiptVoucherRequest request) {
         UUID userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.success(service.create(userId, request)));
+    }
+
+    @GetMapping("/summary")
+    @PreAuthorize("hasAnyRole('MANAGER', 'STAFF')")
+    public ResponseEntity<ApiResponse<ReceiptVoucherSummaryResponse>> getSummary() {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.success(service.getSummary(userId)));
     }
 
     @GetMapping("/{id}")

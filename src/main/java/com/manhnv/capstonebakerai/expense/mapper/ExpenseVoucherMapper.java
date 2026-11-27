@@ -9,5 +9,6 @@ import org.mapstruct.Mapping;
 public interface ExpenseVoucherMapper {
     @Mapping(source = "expenseCategory.id", target = "expenseCategoryId")
     @Mapping(source = "expenseCategory.name", target = "expenseCategoryName")
+    @Mapping(target = "createdBy", ignore = true)
     ExpenseVoucherResponse toResponse(ExpenseVoucher entity);
 }

@@ -1,7 +1,7 @@
 package com.manhnv.capstonebakerai.recipe.service.impl;
 
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepRequest;
-import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepUpdateRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeStepResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
@@ -114,7 +114,7 @@ public class RecipeStepServiceImpl implements RecipeStepService {
 
     @Override
     @Transactional
-    public RecipeStepResponse updateRecipeStep(UUID id, RecipeStepEmbeddedRequest request) {
+    public RecipeStepResponse updateRecipeStep(UUID id, RecipeStepUpdateRequest request) {
         RecipeStep existing = recipeStepRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RecipeStep not found"));
         UUID recipeId = existing.getRecipe().getId();   // không lấy recipe từ request

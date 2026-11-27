@@ -10,5 +10,6 @@ public interface ReceiptVoucherMapper {
     @Mapping(source = "receiptCategory.id", target = "receiptCategoryId")
     @Mapping(source = "receiptCategory.name", target = "receiptCategoryName")
     @Mapping(source = "receiptCategory.type", target = "receiptCategoryType")
+    @Mapping(target = "createdBy", ignore = true)
     ReceiptVoucherResponse toResponse(ReceiptVoucher entity);
 }

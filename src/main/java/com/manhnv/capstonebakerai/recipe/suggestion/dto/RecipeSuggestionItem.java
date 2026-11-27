@@ -10,7 +10,6 @@ public record RecipeSuggestionItem(
         int totalIngredientCount,
         double coverage,
         List<String> matchedIngredients,
-        List<String> missingIngredients,
-        int unmappedIngredientCount
+        List<String> missingIngredients
 ) {
 }

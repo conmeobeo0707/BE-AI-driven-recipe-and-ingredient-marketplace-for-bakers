@@ -21,10 +21,19 @@ public class RecipeIngredient {
     @JoinColumn(name = "recipe_id", nullable = false)
     private Recipe recipe;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "ingredient_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ingredient_id")
     private Ingredient ingredient;
 
-    @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
+    @Column(name = "raw_name")
+    private String rawName;
+
+    @Column(name = "quantity", precision = 10, scale = 2)
     private BigDecimal quantity;
+
+    @Column(name = "unit")
+    private String unit;
+
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
 }

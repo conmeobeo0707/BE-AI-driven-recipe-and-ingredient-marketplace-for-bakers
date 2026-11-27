@@ -3,7 +3,6 @@ import com.manhnv.capstonebakerai.order.enums.OrderStatus;
 import com.manhnv.capstonebakerai.report.dto.response.MonthAmount;
 import com.manhnv.capstonebakerai.warehouse.entity.StockOutNote;
 import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -33,6 +32,7 @@ public interface StockOutNoteRepository extends JpaRepository<StockOutNote, UUID
     @Query("select n from StockOutNote n where n.referenceOrderId = :orderId and n.type = :type")
     Optional<StockOutNote> lockByReferenceOrderIdAndType(@Param("orderId") UUID orderId,
             @Param("type") StockOutType type);
+
     // Giá vốn: tính theo tháng giao hàng của đơn
     @Query("""
     select new com.manhnv.capstonebakerai.report.dto.response.MonthAmount(

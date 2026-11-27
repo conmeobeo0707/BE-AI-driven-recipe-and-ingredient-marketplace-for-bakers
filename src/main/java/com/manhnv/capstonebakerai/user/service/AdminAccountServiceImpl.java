@@ -15,6 +15,9 @@ import com.manhnv.capstonebakerai.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,14 +88,28 @@ public class AdminAccountServiceImpl implements  AdminAccountService{
 
     @Override
     @Transactional(readOnly = true)
-    public List<StaffAccountResponse> getAccounts(UserStatus status) {
-        List<User> users = status == null
-                ? userRepository.findByRoleInOrderByCreatedAtDescUserIdAsc(MANAGED_ROLES)
-                : userRepository.findByRoleInAndStatusOrderByCreatedAtDescUserIdAsc(MANAGED_ROLES, status);
-        return users
-                .stream()
-                .map(this::toResponse)
-                .toList();
+    public Page<StaffAccountResponse> getAccounts(UserStatus status, Role role, String search, Pageable pageable) {
+        if (pageable == null || pageable.getPageNumber() < 0 || pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
+            throw new AppException(UserErrorCode.INVALID_PAGE_REQUEST);
+        }
+        if (role != null) {
+            validateRole(role);
+        }
+        Specification<User> spec = (root, query, cb) -> root.get("role").in(MANAGED_ROLES);
+        if (role != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("role"), role));
+        }
+        if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
+        }
+        if (search != null && !search.isBlank()) {
+            String keyword = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("fullName")), keyword),
+                    cb.like(cb.lower(root.get("email")), keyword)
+            ));
+        }
+        return userRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     @Override

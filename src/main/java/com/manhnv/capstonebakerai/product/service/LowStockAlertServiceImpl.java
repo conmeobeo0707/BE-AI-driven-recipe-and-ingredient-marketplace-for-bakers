@@ -48,7 +48,7 @@ public class LowStockAlertServiceImpl implements LowStockAlertService {
                         recipientId, NotificationRefType.PRODUCT, product.productId(), cooldownStart)) {
                     continue;
                 }
-                notificationService.create(recipientId, "Low stock alert", alertContent(product),
+                notificationService.create(recipientId, "Cảnh báo sắp hết hàng", alertContent(product),
                         NotificationRefType.PRODUCT, product.productId());
                 sentCount++;
             }

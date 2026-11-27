@@ -12,6 +12,7 @@ import org.mapstruct.Mapping;
 public interface VoucherMapper {
     @Mapping(target = "displayStatus", expression = "java(voucher.displayStatus(java.time.LocalDateTime.now()))")
     @Mapping(target = "remainingQuantity", expression = "java(voucher.remainingQuantity())")
+    @Mapping(target = "createdBy", ignore = true)
     VoucherResponse toResponse(Voucher voucher);
 
     @Mapping(target = "remainingQuantity", expression = "java(voucher.remainingQuantity())")

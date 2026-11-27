@@ -5,5 +5,6 @@ public enum NotificationRefType {
     COMMENT,
     RATING,
     REQUEST_QUOTE,
-    PRODUCT
+    PRODUCT,
+    RECIPE_VIDEO
 }

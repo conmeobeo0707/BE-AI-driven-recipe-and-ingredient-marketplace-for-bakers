@@ -12,6 +12,7 @@ public enum UserErrorCode implements ErrorCode {
     EMAIL_ALREADY_EXISTS("Email is already registered", HttpStatus.CONFLICT),
     ACCOUNT_NOT_FOUND("Managed staff account was not found", HttpStatus.NOT_FOUND),
     INVALID_STAFF_ROLE("Only STAFF, MANAGER and BAKER_STAFF roles are supported", HttpStatus.BAD_REQUEST),
+    INVALID_PAGE_REQUEST("Page must be non-negative and page size must be between 1 and 100", HttpStatus.BAD_REQUEST),
     AVATAR_REQUIRED("Avatar file is required", HttpStatus.BAD_REQUEST),
     INVALID_AVATAR_TYPE("Avatar must be JPEG, PNG or WebP", HttpStatus.BAD_REQUEST),
     AVATAR_TOO_LARGE("Avatar must not exceed 5 MB", HttpStatus.BAD_REQUEST),

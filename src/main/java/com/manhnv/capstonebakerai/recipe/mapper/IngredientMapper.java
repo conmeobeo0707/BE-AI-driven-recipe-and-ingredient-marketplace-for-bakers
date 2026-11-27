@@ -11,12 +11,6 @@ public class IngredientMapper {
         return IngredientResponse.builder()
                 .id(entity.getId())
                 .name(entity.getName())
-                .unit(entity.getUnit())
-                .catalogIngredientId(
-                        entity.getCatalogIngredient() == null
-                                ? null
-                                : entity.getCatalogIngredient().getId()
-                )
                 .build();
     }
 
@@ -24,7 +18,6 @@ public class IngredientMapper {
         if (request == null) return null;
         Ingredient entity = new Ingredient();
         entity.setName(request.getName());
-        entity.setUnit(request.getUnit());
         return entity;
     }
 }

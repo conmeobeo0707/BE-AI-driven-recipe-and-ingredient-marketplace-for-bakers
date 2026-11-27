@@ -5,7 +5,6 @@ import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -55,15 +54,13 @@ public class Recipe {
     @Column(name = "difficulty", nullable = false)
     private DifficultyEnum difficulty;
 
-    @NotNull
-    @Column(name = "prep_time_min", nullable = false)
-    private Integer prepTimeMinutes;;
+    @Column(name = "prep_time_min")
+    private Integer prepTimeMinutes;
 
-    @NotNull
-    @Column(name = "cook_time_min", nullable = false)
+    @Column(name = "cook_time_min")
     private Integer cookTimeMinutes;
 
-    @Column(name = "servings", nullable = false)
+    @Column(name = "servings")
     private Integer servings;
 
     @Builder.Default

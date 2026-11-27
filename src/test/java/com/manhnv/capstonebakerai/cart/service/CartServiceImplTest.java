@@ -345,4 +345,88 @@ public class CartServiceImplTest {
         verify(cartItemRepository, never()).save(any());
     }
 
+    // Remove item
+    // UTCID01
+    @Test
+    void removeItem_validItemWithRemainingItems_shouldDeleteAndReturnRemaining() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        CartItem item = CartItem.builder()
+                .cart(cart)
+                .quantity(new BigDecimal("2"))
+                .build();
+        CartItem remainingItem = CartItem.builder()
+                .cart(cart)
+                .quantity(new BigDecimal("3"))
+                .build();
+        CartItemResponse remainingResponse = mock(CartItemResponse.class);
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, userId)).thenReturn(Optional.of(item));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of(remainingItem));
+        when(cartMapper.toItemResponse(remainingItem)).thenReturn(remainingResponse);
+        when(remainingResponse.subtotal()).thenReturn(new BigDecimal("30000"));
+
+        // Action
+        CartResponse response = cartService.removeItem(userId, itemId);
+
+        // Assert
+        verify(cartItemRepository).delete(item);
+        assertThat(response).isNotNull();
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.totalAmount()).isEqualByComparingTo("30000");
+    }
+
+    // UTCID02
+    @Test
+    void removeItem_lastItemInCart_shouldReturnEmptyCart() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        CartItem item = CartItem.builder()
+                .cart(cart)
+                .quantity(new BigDecimal("1"))
+                .build();
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, userId)).thenReturn(Optional.of(item));
+        when(cart.getId()).thenReturn(cartId);
+        when(cartItemRepository.findAllByCartId(cartId)).thenReturn(List.of());
+
+        // Action
+        CartResponse response = cartService.removeItem(userId, itemId);
+
+        // Assert
+        verify(cartItemRepository).delete(item);
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // UTCID03
+    @Test
+    void removeItem_itemNotFound_shouldThrow() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, userId)).thenReturn(Optional.empty());
+
+        // Action - Assert
+        assertThatThrownBy(() -> cartService.removeItem(userId, itemId))
+                .isInstanceOf(AppException.class);
+        verify(cartItemRepository, never()).delete(any());
+    }
+
+    // UTCID04
+    @Test
+    void removeItem_itemBelongsToOtherUser_shouldThrow() {
+        // Arrange
+        UUID itemId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        when(cartItemRepository.findByIdAndCartUserId(itemId, otherUserId)).thenReturn(Optional.empty());
+
+        // Action - Assert
+        assertThatThrownBy(() -> cartService.removeItem(otherUserId, itemId))
+                .isInstanceOf(AppException.class);
+        verify(cartItemRepository, never()).delete(any());
+    }
+
 }

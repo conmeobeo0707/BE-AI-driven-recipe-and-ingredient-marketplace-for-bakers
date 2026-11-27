@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum CommonErrorCode implements ErrorCode {
     UNAUTHENTICATED("No authentication user", HttpStatus.UNAUTHORIZED),
+    INVALID_REQUEST("Invalid request", HttpStatus.BAD_REQUEST),
     ;
 
     private final String message;

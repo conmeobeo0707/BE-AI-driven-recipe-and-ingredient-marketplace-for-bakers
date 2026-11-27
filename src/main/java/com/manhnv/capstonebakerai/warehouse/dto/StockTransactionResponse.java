@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.warehouse.dto;
 
 import com.manhnv.capstonebakerai.warehouse.enums.StockTransactionRefType;
 import com.manhnv.capstonebakerai.warehouse.enums.StockTransactionType;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

@@ -11,6 +11,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
@@ -41,7 +42,14 @@ public class ShotstackServiceImpl implements ShotstackService {
         try {
             queued = shotstackRestClient.post().uri("/render")
                     .body(payload).retrieve().body(JsonNode.class);
+        } catch (RestClientResponseException e) {
+            // Shotstack's actual rejection reason (invalid API key, quota exceeded, malformed
+            // edit, ...) is in its response body — log it, since the client only gets a generic
+            // 502 (ApiResponse.error only ever carries getReason(), not the cause).
+            log.error("Shotstack /render rejected the request: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Shotstack render request failed", e);
         } catch (Exception e) {
+            log.error("Shotstack /render call failed", e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Shotstack render request failed", e);
         }
         String renderId = queued == null ? null : queued.path("response").path("id").asText(null);
@@ -79,9 +87,18 @@ public class ShotstackServiceImpl implements ShotstackService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Shotstack render webhook");
         }
         // Shotstack webhooks are unsigned: verify with the provider before publishing the result.
+        verifyAndPublish(webhook.getId());
+    }
+
+    @Override
+    public void pollAndPublish(String renderId) {
+        verifyAndPublish(renderId);
+    }
+
+    private void verifyAndPublish(String renderId) {
         JsonNode authoritative;
         try {
-            authoritative = shotstackRestClient.get().uri("/render/{id}", webhook.getId())
+            authoritative = shotstackRestClient.get().uri("/render/{id}", renderId)
                     .retrieve().body(JsonNode.class);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not verify Shotstack webhook", e);
@@ -92,7 +109,7 @@ public class ShotstackServiceImpl implements ShotstackService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Shotstack status response is incomplete");
         }
         // Synchronous delivery keeps callback acknowledgement after the recipe update succeeds.
-        eventPublisher.publishEvent(new ShotstackRenderVerifiedEvent(webhook.getId(), status,
+        eventPublisher.publishEvent(new ShotstackRenderVerifiedEvent(renderId, status,
                 details.hasNonNull("url") ? details.path("url").asText() : null,
                 details.hasNonNull("error") ? details.path("error").asText() : null));
     }

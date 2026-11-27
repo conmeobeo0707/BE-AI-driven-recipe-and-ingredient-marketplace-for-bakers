@@ -11,6 +11,7 @@ import java.util.UUID;
 
 public interface RecipeService {
     RecipeResponse getById(UUID id);
+    RecipeResponse getDetail(UUID id);
     RecipeResponse create(RecipeRequest request);
     RecipeResponse update(UUID id, RecipeRequest request);
     void delete(UUID id);

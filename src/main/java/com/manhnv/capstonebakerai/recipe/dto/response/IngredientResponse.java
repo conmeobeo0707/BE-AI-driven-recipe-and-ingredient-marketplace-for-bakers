@@ -1,8 +1,10 @@
 package com.manhnv.capstonebakerai.recipe.dto.response;
 
+import com.manhnv.capstonebakerai.recipe.ingredientalias.dto.IngredientAliasResponse;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 
-import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Setter
@@ -12,9 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class IngredientResponse {
     private UUID id;
-    private UUID recipeId;
     private String name;
-    private String unit;
-    private BigDecimal quantity;
-    private UUID catalogIngredientId;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private List<IngredientAliasResponse> aliases;
 }

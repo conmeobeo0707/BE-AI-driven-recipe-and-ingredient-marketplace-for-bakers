@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record RecipeSuggestionRequest(
-        @NotEmpty @Size(max = 20) List<@NotNull UUID> catalogIngredientIds,
+        @NotEmpty @Size(max = 20) List<@NotNull UUID> ingredientIds,
         @Min(1) @Max(5) Integer limit
 ) {
 }

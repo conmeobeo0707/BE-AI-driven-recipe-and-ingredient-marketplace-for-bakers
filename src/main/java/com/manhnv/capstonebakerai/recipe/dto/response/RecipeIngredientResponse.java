@@ -15,6 +15,8 @@ public class RecipeIngredientResponse {
     private UUID recipeId;
     private UUID ingredientId;
     private String ingredientName;
+    private String rawName;
+    private String note;
     private BigDecimal quantity;
     private String unit;
 }

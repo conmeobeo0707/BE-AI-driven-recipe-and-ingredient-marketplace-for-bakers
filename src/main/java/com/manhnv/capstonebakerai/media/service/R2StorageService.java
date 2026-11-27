@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -17,6 +18,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.net.URL;
 import java.time.Duration;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -58,6 +60,33 @@ public class R2StorageService {
             }
             throw exception;
         }
+    }
+
+    public long contentLength(R2BucketType bucketType, String objectKey) {
+        return r2Client.headObject(HeadObjectRequest.builder()
+                        .bucket(bucketName(bucketType))
+                        .key(objectKey)
+                        .build())
+                .contentLength();
+    }
+
+    public byte[] download(R2BucketType bucketType, String objectKey) {
+        return r2Client.getObjectAsBytes(GetObjectRequest.builder()
+                        .bucket(bucketName(bucketType))
+                        .key(objectKey)
+                        .build())
+                .asByteArray();
+    }
+
+    public Optional<String> publicObjectKey(String url) {
+        String baseUrl = properties.publicUrl();
+        if (url == null || baseUrl == null || baseUrl.isBlank()) {
+            return Optional.empty();
+        }
+        String base = baseUrl.replaceAll("/+$", "") + "/";
+        return url.startsWith(base) && url.length() > base.length()
+                ? Optional.of(url.substring(base.length()))
+                : Optional.empty();
     }
 
     public URL createUploadUrl(R2BucketType bucketType, String objectKey, String contentType) {

@@ -21,6 +21,9 @@ public class RecipeVideoRender {
     @Column(name = "recipe_id", nullable = false)
     private UUID recipeId;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "render_id", nullable = false, unique = true)
     private String renderId;
 

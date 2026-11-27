@@ -219,9 +219,16 @@ public class ProductServiceImpl implements ProductService {
     public List<UnitPriceHistoryResponse> getUnitPriceHistory(UUID productId, UUID unitId) {
         if (units.findByUnitIdAndProductId(unitId, productId).isEmpty())
             throw new AppException(ProductErrorCode.NOT_FOUND, "Unit was not found for this product");
-        return priceHistory.findByUnitIdOrderByCreatedAtDesc(unitId).stream()
-                .map(priceHistoryEntry -> new UnitPriceHistoryResponse(priceHistoryEntry.getUnitHistoryId(), priceHistoryEntry.getUnitId(), priceHistoryEntry.getUpdatedBy(),
-                        priceHistoryEntry.getSellingPrice(), priceHistoryEntry.getCreatedAt())).toList();
+        List<UnitPriceHistory> entries = priceHistory.findByUnitIdOrderByCreatedAtDesc(unitId);
+        Map<UUID, UserSummaryResponse> updaters = userSummaryService.getSummaries(
+                entries.stream().map(UnitPriceHistory::getUpdatedBy).filter(Objects::nonNull).distinct().toList());
+        return entries.stream()
+                .map(priceHistoryEntry -> {
+                    UUID updatedBy = priceHistoryEntry.getUpdatedBy();
+                    UserSummaryResponse updater = updatedBy == null ? null : updaters.getOrDefault(updatedBy, new UserSummaryResponse(updatedBy, null, null));
+                    return new UnitPriceHistoryResponse(priceHistoryEntry.getUnitHistoryId(), priceHistoryEntry.getUnitId(), updater,
+                            priceHistoryEntry.getSellingPrice(), priceHistoryEntry.getCreatedAt());
+                }).toList();
     }
 
     @Override

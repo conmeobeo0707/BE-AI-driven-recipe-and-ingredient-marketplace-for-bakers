@@ -54,10 +54,12 @@ public class RecommendationDataLoader {
         signals.addAll(ratings(customerId));
         signals.addAll(views(customerId, Instant.now().minus(CUSTOMER_HISTORY), MAX_CUSTOMER_VIEWS));
         signals.sort(Comparator.comparing(Signal::at));
-        SkillLevel skillLevel = entityManager.createQuery(
+        // A customer may not have declared a skill level; findFirst() would throw on that null.
+        List<SkillLevel> skillLevels = entityManager.createQuery(
                         "select c.skillLevel from Customer c where c.id = :id", SkillLevel.class)
                 .setParameter("id", customerId)
-                .getResultStream().findFirst().orElse(null);
+                .getResultList();
+        SkillLevel skillLevel = skillLevels.isEmpty() ? null : skillLevels.get(0);
         return new CustomerData(customerId, skillLevel,
                 activeHobbies(customerId).getOrDefault(customerId, Set.of()), signals);
     }
@@ -82,12 +84,11 @@ public class RecommendationDataLoader {
     }
 
     private List<RecipeItem> publishedRecipes() {
-        // Only ingredients linked to an active catalog entry count towards taste.
         Map<UUID, Map<UUID, String>> ingredients = new HashMap<>();
         for (Object[] row : entityManager.createQuery("""
-                select ri.recipe.id, c.id, c.canonicalName
-                from RecipeIngredient ri join ri.ingredient i join i.catalogIngredient c
-                where ri.recipe.recipeStatus = :status and c.active = true
+                select ri.recipe.id, i.id, i.name
+                from RecipeIngredient ri join ri.ingredient i
+                where ri.recipe.recipeStatus = :status
                 """, Object[].class)
                 .setParameter("status", RecipeStatus.PUBLISHED)
                 .getResultList()) {

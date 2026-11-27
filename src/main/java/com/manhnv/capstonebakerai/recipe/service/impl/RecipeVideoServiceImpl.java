@@ -8,17 +8,22 @@ import com.manhnv.capstonebakerai.media.enums.R2BucketType;
 import com.manhnv.capstonebakerai.media.event.ShotstackRenderVerifiedEvent;
 import com.manhnv.capstonebakerai.media.repository.MediaRepository;
 import com.manhnv.capstonebakerai.media.service.R2StorageService;
+import com.manhnv.capstonebakerai.notification.enums.NotificationRefType;
+import com.manhnv.capstonebakerai.notification.service.NotificationService;
 import com.manhnv.capstonebakerai.media.service.ShotstackService;
 import com.manhnv.capstonebakerai.recipe.dto.request.CreateRecipeVideoRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeVideoRenderResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStep;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeStepImage;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeVideoRender;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStepType;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeMediaHelper;
+import org.springframework.transaction.annotation.Transactional;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeVideoRenderRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeVideoService;
@@ -71,6 +76,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
     private final VideoThemeSelector themeSelector;
     private final VideoSlides slides;
     private final VideoPhotoEmbedder photoEmbedder;
+    private final NotificationService notificationService;
 
     @Value("${app.shotstack.tts-model:elevenlabs-turbo-v2.5}")
     private String ttsModel;
@@ -99,8 +105,27 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 recipe.steps().stream().map(StepSnapshot::instruction).toList());
         String renderId = shotstackService.createRender(buildEdit(buildScenes(recipe, design)));
         RecipeVideoRender saved = renderRepository.save(RecipeVideoRender.builder()
-                .recipeId(recipeId).renderId(renderId).status(PROCESSING).build());
+                .recipeId(recipeId).userId(SecurityUtils.getCurrentUserId()).renderId(renderId).status(PROCESSING).build());
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public RecipeVideoRenderResponse cancelProcessingRender(UUID recipeId) {
+        Recipe entity = recipeRepository.findById(recipeId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
+        requireOwnerOrAdmin(entity);
+
+        RecipeVideoRender render = renderRepository.findByRecipeIdAndStatus(recipeId, PROCESSING)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No render in progress for this recipe"));
+
+        render.setStatus(FAILED);
+        render.setErrorMessage("Cancelled by user");
+        render.setCompletedAt(Instant.now());
+        renderRepository.save(render);
+        // If Shotstack's webhook for this render still arrives later, handleRenderResult's own
+        // `if (!PROCESSING.equals(render.getStatus())) return;` guard makes it a no-op.
+        return toResponse(render);
     }
 
     @Override
@@ -118,6 +143,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
             render.setErrorMessage(truncate(result.errorMessage(), 2000));
             render.setCompletedAt(Instant.now());
             renderRepository.save(render);
+            notifyRender(render, false);
             return;
         }
         if (!status.equalsIgnoreCase("done") || result.videoUrl() == null) {
@@ -138,6 +164,27 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
                 log.error("Failed to clean up rendered video {} from R2", key, cleanupError);
             }
             throw e;
+        }
+        notifyRender(render, true);
+    }
+
+    /** Best-effort, called only on the PROCESSING -> DONE/FAILED transition, so it fires once per render. */
+    private void notifyRender(RecipeVideoRender render, boolean success) {
+        if (render.getUserId() == null) return;
+        try {
+            String name = recipeRepository.findById(render.getRecipeId())
+                    .map(Recipe::getTitle).filter(t -> !t.isBlank()).orElse("Công thức");
+            if (success) {
+                notificationService.create(render.getUserId(), "Video AI đã sẵn sàng",
+                        "Video của công thức \"" + name + "\" đã được tạo xong.",
+                        NotificationRefType.RECIPE_VIDEO, render.getRecipeId());
+            } else {
+                notificationService.create(render.getUserId(), "Tạo video AI thất bại",
+                        "Không thể tạo video cho công thức \"" + name + "\". Vui lòng thử lại.",
+                        NotificationRefType.RECIPE_VIDEO, render.getRecipeId());
+            }
+        } catch (RuntimeException e) {
+            log.error("Failed to send video notification for render {}", render.getRenderId(), e);
         }
     }
 
@@ -184,26 +231,26 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
 
     private RecipeSnapshot snapshot(Recipe recipe) {
         List<VideoSlides.Row> ingredients = nullToEmpty(recipe.getIngredients()).stream()
-                .filter(link -> link.getIngredient() != null)
-                .map(link -> new VideoSlides.Row(link.getIngredient().getName(),
-                        amount(link.getQuantity(), link.getIngredient().getUnit()).trim()))
+                .filter(link -> displayName(link) != null)
+                .map(link -> new VideoSlides.Row(displayName(link),
+                        amount(link.getQuantity(), link.getUnit()).trim()))
                 .toList();
         List<VideoSlides.Row> tools = nullToEmpty(recipe.getTools()).stream()
-                .filter(link -> link.getTool() != null)
-                .map(link -> new VideoSlides.Row(link.getTool().getName(),
+                .filter(link -> displayName(link) != null)
+                .map(link -> new VideoSlides.Row(displayName(link),
                         link.getQuantity() == null ? "" : "×" + link.getQuantity().stripTrailingZeros().toPlainString()))
                 .toList();
         List<StepSnapshot> steps = nullToEmpty(recipe.getSteps()).stream()
                 .sorted(Comparator.comparing(RecipeStep::getStepNumber, Comparator.nullsLast(Integer::compareTo)))
                 .map(step -> {
                     List<String> stepIngredients = nullToEmpty(step.getIngredients()).stream()
-                            .filter(link -> link.getIngredient() != null)
-                            .map(link -> (link.getIngredient().getName() + " "
-                                    + amount(link.getQuantity(), link.getIngredient().getUnit())).trim())
+                            .filter(link -> displayName(link.getRecipeIngredient()) != null)
+                            .map(link -> (displayName(link.getRecipeIngredient()) + " "
+                                    + amount(link.getQuantity(), link.getRecipeIngredient().getUnit())).trim())
                             .toList();
                     List<String> stepTools = nullToEmpty(step.getTools()).stream()
-                            .filter(link -> link.getTool() != null)
-                            .map(link -> link.getTool().getName())
+                            .map(link -> displayName(link.getRecipeTool()))
+                            .filter(java.util.Objects::nonNull)
                             .toList();
                     List<String> stepPhotos = photoUrls(nullToEmpty(step.getImages()).stream()
                             .sorted(Comparator.comparing(RecipeStepImage::getSortOrder, Comparator.nullsLast(Integer::compareTo)))
@@ -251,7 +298,7 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         }
         if (!recipe.description().isEmpty()) intro.append(endSentence(recipe.description()));
         String introNarration = intro.toString();
-        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_BUDGET_CHARS);
+        VideoPhotoEmbedder.Budget photoBudget = new VideoPhotoEmbedder.Budget(VideoPhotoEmbedder.RENDER_PHOTO_BUDGET);
         List<String> introPhotos = photoEmbedder.embed(recipe.photos(),
                 VideoSlides.INTRO_PHOTO_SIZE, VideoSlides.INTRO_PHOTO_SIZE, photoBudget);
         scenes.add(new Scene(slides.intro(theme, recipe.category(), recipe.title(), recipe.description(),
@@ -363,6 +410,24 @@ public class RecipeVideoServiceImpl implements RecipeVideoService {
         edit.put("timeline", timeline);
         edit.put("output", Map.of("format", "mp4", "resolution", "1080", "aspectRatio", "16:9"));
         return edit;
+    }
+
+    private static String displayName(RecipeIngredient link) {
+        if (link == null) {
+            return null;
+        }
+        return link.getIngredient() != null ? link.getIngredient().getName() : blankToNull(link.getRawName());
+    }
+
+    private static String displayName(RecipeTool link) {
+        if (link == null) {
+            return null;
+        }
+        return link.getTool() != null ? link.getTool().getName() : blankToNull(link.getRawName());
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static String amount(BigDecimal quantity, String unit) {

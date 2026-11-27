@@ -2,6 +2,7 @@ package com.manhnv.capstonebakerai.recipe.dto.response;
 
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.recipe.enums.RecipeStatus;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class RecipeResponse {
     private UUID id;
     private UUID userId;
+    private UserSummaryResponse user;
     private UUID categoryId;
     private String title;
     private String description;
@@ -36,7 +38,7 @@ public class RecipeResponse {
     private Long bookmarkCount;
     private Long ratingCount;
 
-    private List<ToolResponse> tools;
-    private List<IngredientResponse> ingredients;
+    private List<RecipeToolItemResponse> tools;
+    private List<RecipeIngredientItemResponse> ingredients;
     private List<RecipeStepResponse> steps;
 }

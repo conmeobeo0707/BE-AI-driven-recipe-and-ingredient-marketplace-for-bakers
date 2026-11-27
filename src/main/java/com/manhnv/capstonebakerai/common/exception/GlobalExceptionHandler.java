@@ -19,17 +19,34 @@ import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.server.ResponseStatusException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAppException(AppException exception) {
+    public ResponseEntity<ApiResponse<Object>> handleAppException(AppException exception) {
         ErrorCode errorCode = exception.getErrorCode();
 
         return ResponseEntity.status(errorCode.getHttpStatus())
-                .body(ApiResponse.error(exception.getMessage()));
+                .body(ApiResponse.error(errorCode.getCode(), exception.getMessage(), exception.getData()));
+    }
+
+    // Many services throw `ResponseStatusException` directly (400/404/409/...) instead of the
+    // custom `AppException`. Without this handler they fell through to `handleUncaught` below,
+    // which always answers 500 "Something went wrong." regardless of the exception's real status —
+    // turning every one of those into an opaque client-side 500.
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResponseStatusException(ResponseStatusException exception) {
+        // The client only ever sees `getReason()` (a short, safe message) — if there's an
+        // underlying cause (e.g. a wrapped call to an external API), log it so the real detail
+        // (a provider's actual error body, a network failure, ...) isn't lost server-side too.
+        if (exception.getCause() != null) {
+            log.warn("ResponseStatusException {} {}", exception.getStatusCode(), exception.getReason(), exception.getCause());
+        }
+        return ResponseEntity.status(exception.getStatusCode())
+                .body(ApiResponse.error(exception.getReason()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -14,6 +14,7 @@ import com.manhnv.capstonebakerai.quote.dto.request.RejectRequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RequestQuoteItemRequest;
 import com.manhnv.capstonebakerai.quote.dto.request.RequestQuoteRequest;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteResponse;
+import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteStaffSummaryResponse;
 import com.manhnv.capstonebakerai.quote.dto.response.RequestQuoteSummaryResponse;
 import com.manhnv.capstonebakerai.quote.entity.RequestQuote;
 import com.manhnv.capstonebakerai.quote.entity.RequestQuoteDetail;
@@ -24,8 +25,8 @@ import com.manhnv.capstonebakerai.quote.exception.RequestQuoteErrorCode;
 import com.manhnv.capstonebakerai.quote.mapper.QuoteLookup;
 import com.manhnv.capstonebakerai.quote.mapper.RequestQuoteMapper;
 import com.manhnv.capstonebakerai.quote.repository.RequestQuoteRepository;
-import com.manhnv.capstonebakerai.user.entity.User;
-import com.manhnv.capstonebakerai.user.repository.UserRepository;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Predicate;
@@ -53,7 +54,7 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
     ProductUnitRepository productUnitRepository;
     RequestQuoteMapper mapper;
     ApplicationEventPublisher eventPublisher;
-    UserRepository userRepository;
+    UserSummaryService userSummaryService;
 
 
     @Override
@@ -83,7 +84,7 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
     @Transactional(readOnly = true)
     public Page<RequestQuoteSummaryResponse> getMine(UUID userId, RequestQuoteStatus status, Pageable pageable) {
         Customer customer = findCustomerByUserId(userId);
-        return repository.findAll(spec(customer.getId(), status), pageable).map(mapper::toSummary);
+        return toSummaryPage(repository.findAll(spec(customer.getId(), status), pageable));
     }
 
     @Override
@@ -125,20 +126,7 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
     @Override
     @Transactional(readOnly = true)
     public Page<RequestQuoteSummaryResponse> getAll(RequestQuoteStatus status, Pageable pageable) {
-        Page<RequestQuote> quotes = repository.findAll(spec(null, status), pageable);
-
-        Set<UUID> staffIds = quotes.stream()
-                .map(RequestQuote::getHandledBy)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<UUID, String> names = staffIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(staffIds).stream().collect(Collectors.toMap(User::getUserId, User::getFullName));
-        return quotes.map(q -> {
-            RequestQuoteSummaryResponse dto = mapper.toSummary(q);
-            String name = q.getHandledBy() == null ? null : names.get(q.getHandledBy());
-            return new RequestQuoteSummaryResponse(dto.id(), dto.customerId(), dto.contactPhone(), dto.contactName(), dto.status(), dto.itemCount(), dto.handledBy(), name, dto.createdAt());
-        });
+        return toSummaryPage(repository.findAll(spec(null, status), pageable));
     }
 
     @Override
@@ -189,6 +177,16 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
         RequestQuote saved = repository.save(q);
         publishStatusChanged(saved, false);
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RequestQuoteStaffSummaryResponse getSummaryForStaff(UUID staffUserId) {
+        long totalRequests = repository.count();
+        long waitingClaim = repository.countByStatus(RequestQuoteStatus.PENDING);
+        long handledByMe = repository.countByHandledBy(staffUserId);
+        long ordered = repository.countByStatus(RequestQuoteStatus.ORDERED);
+        return new RequestQuoteStaffSummaryResponse(totalRequests, waitingClaim, handledByMe, ordered);
     }
 
     // ===== Helpers =====
@@ -245,7 +243,23 @@ public class RequestQuoteServiceImpl implements RequestQuoteService {
     private RequestQuoteResponse toResponse(RequestQuote q) {
         Map<UUID, ProductUnit> units = loadUnits(
                 q.getDetails().stream().map(RequestQuoteDetail::getProductUnitId).toList());
-        return mapper.toResponse(q, new QuoteLookup(units, loadProducts(units)));
+        RequestQuoteResponse base = mapper.toResponse(q, new QuoteLookup(units, loadProducts(units)));
+        UserSummaryResponse handler = userSummaryService.getSummary(q.getHandledBy());
+        return new RequestQuoteResponse(base.id(), base.customerId(), base.contactPhone(), base.contactName(),
+                base.content(), base.status(), handler, base.handledAt(), base.rejectReason(), base.resultNote(),
+                base.createdAt(), base.items());
+    }
+
+    private Page<RequestQuoteSummaryResponse> toSummaryPage(Page<RequestQuote> page) {
+        Map<UUID, UserSummaryResponse> handlers = userSummaryService.getSummaries(
+                page.getContent().stream().map(RequestQuote::getHandledBy).filter(Objects::nonNull).distinct().toList());
+        return page.map(q -> {
+            RequestQuoteSummaryResponse base = mapper.toSummary(q);
+            UUID handledBy = q.getHandledBy();
+            UserSummaryResponse handler = handledBy == null ? null : handlers.getOrDefault(handledBy, new UserSummaryResponse(handledBy, null, null));
+            return new RequestQuoteSummaryResponse(base.id(), base.customerId(), base.contactPhone(), base.contactName(),
+                    base.status(), base.itemCount(), handler, base.createdAt());
+        });
     }
 
     private Map<UUID, ProductUnit> loadUnits(List<UUID> unitIds) {

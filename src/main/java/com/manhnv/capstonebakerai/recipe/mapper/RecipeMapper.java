@@ -2,7 +2,13 @@ package com.manhnv.capstonebakerai.recipe.mapper;
 
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeResponse;
+import com.manhnv.capstonebakerai.recipe.dto.response.RecipeIngredientItemResponse;
+import com.manhnv.capstonebakerai.recipe.dto.response.RecipeToolItemResponse;
+import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
 import com.manhnv.capstonebakerai.recipe.entity.Recipe;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
+import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
+import com.manhnv.capstonebakerai.recipe.entity.Tool;
 
 import java.util.Collections;
 import java.util.stream.Collectors;
@@ -37,10 +43,10 @@ public class RecipeMapper {
                 .bookmarkCount(entity.getBookmarkCount())
                 .ratingCount(entity.getRatingCount())
                 .tools(entity.getTools() != null
-                        ? entity.getTools().stream().map(link -> com.manhnv.capstonebakerai.recipe.dto.response.ToolResponse.builder().id(link.getTool().getId()).name(link.getTool().getName()).recipeId(entity.getId()).quantity(link.getQuantity()).build()).collect(Collectors.toList())
+                        ? entity.getTools().stream().map(RecipeMapper::toToolResponse).collect(Collectors.toList())
                         : Collections.emptyList())
                 .ingredients(entity.getIngredients() != null
-                        ? entity.getIngredients().stream().map(link -> com.manhnv.capstonebakerai.recipe.dto.response.IngredientResponse.builder().id(link.getIngredient().getId()).recipeId(entity.getId()).name(link.getIngredient().getName()).unit(link.getIngredient().getUnit()).quantity(link.getQuantity()).build()).collect(Collectors.toList())
+                        ? entity.getIngredients().stream().map(RecipeMapper::toIngredientResponse).collect(Collectors.toList())
                         : Collections.emptyList())
                 .steps(entity.getSteps() != null
                         ? entity.getSteps().stream().map(RecipeStepMapper::toDTO).collect(Collectors.toList())
@@ -59,5 +65,30 @@ public class RecipeMapper {
         entity.setServings(request.getServings());
         entity.setRecipeStatus(request.getRecipeStatus());
         return entity;
+    }
+
+    private static RecipeToolItemResponse toToolResponse(RecipeTool link) {
+        Tool tool = link.getTool();
+        return RecipeToolItemResponse.builder()
+                .id(link.getId())
+                .toolId(tool == null ? null : tool.getId())
+                .toolName(tool == null ? link.getRawName() : tool.getName())
+                .rawName(link.getRawName())
+                .note(link.getNote())
+                .quantity(link.getQuantity())
+                .build();
+    }
+
+    private static RecipeIngredientItemResponse toIngredientResponse(RecipeIngredient link) {
+        Ingredient ingredient = link.getIngredient();
+        return RecipeIngredientItemResponse.builder()
+                .id(link.getId())
+                .ingredientId(ingredient == null ? null : ingredient.getId())
+                .ingredientName(ingredient == null ? link.getRawName() : ingredient.getName())
+                .rawName(link.getRawName())
+                .note(link.getNote())
+                .unit(link.getUnit())
+                .quantity(link.getQuantity())
+                .build();
     }
 }

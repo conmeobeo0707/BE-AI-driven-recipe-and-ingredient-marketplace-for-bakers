@@ -6,8 +6,10 @@ import com.manhnv.capstonebakerai.recipe.helper.RecipeStepDurationHelper;
 import com.manhnv.capstonebakerai.recipe.helper.RecipeStepResourceHelper;
 import com.manhnv.capstonebakerai.user.entity.User;
 import com.manhnv.capstonebakerai.user.repository.UserRepository;
+import com.manhnv.capstonebakerai.recipe.dto.request.IngredientEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeRequest;
 import com.manhnv.capstonebakerai.recipe.dto.request.RecipeStepEmbeddedRequest;
+import com.manhnv.capstonebakerai.recipe.dto.request.ToolEmbeddedRequest;
 import com.manhnv.capstonebakerai.recipe.dto.response.PageResponse;
 import com.manhnv.capstonebakerai.recipe.dto.response.RecipeResponse;
 import com.manhnv.capstonebakerai.recipe.entity.Ingredient;
@@ -18,6 +20,7 @@ import com.manhnv.capstonebakerai.recipe.entity.RecipeImage;
 import com.manhnv.capstonebakerai.media.entity.Media;
 import com.manhnv.capstonebakerai.recipe.entity.Tool;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeIngredient;
+import com.manhnv.capstonebakerai.recipe.ingredientalias.service.IngredientAliasService;
 import com.manhnv.capstonebakerai.recipe.entity.RecipeTool;
 import com.manhnv.capstonebakerai.recipe.enums.DifficultyEnum;
 import com.manhnv.capstonebakerai.media.enums.MediaType;
@@ -33,6 +36,8 @@ import com.manhnv.capstonebakerai.recipe.repository.ToolRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeIngredientRepository;
 import com.manhnv.capstonebakerai.recipe.repository.RecipeToolRepository;
 import com.manhnv.capstonebakerai.recipe.service.RecipeService;
+import com.manhnv.capstonebakerai.user.dto.UserSummaryResponse;
+import com.manhnv.capstonebakerai.user.service.UserSummaryService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.Predicate;
@@ -42,7 +47,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import vn.payos.exception.NotFoundException;
+import com.manhnv.capstonebakerai.common.exception.AppException;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeCatalogErrorCode;
+import com.manhnv.capstonebakerai.recipe.exception.RecipeErrorCode;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -56,6 +65,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final UserRepository userRepository;
     private final RecipeCategoryRepository categoryRepository;
     private final IngredientRepository ingredientRepository;
+    private final IngredientAliasService ingredientAliasService;
     private final ToolRepository toolRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final RecipeToolRepository recipeToolRepository;
@@ -65,6 +75,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeMediaHelper mediaHelper;
     private final RecipeStepResourceHelper stepResourceHelper;
     private final RecipeStepDurationHelper durationHelper;
+    private final UserSummaryService userSummaryService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -72,12 +83,54 @@ public class RecipeServiceImpl implements RecipeService {
     @Override
     @Transactional
     public RecipeResponse getById(UUID id) {
-        if (repository.incrementViewCount(id) == 0) {
-            throw new RuntimeException("Recipe not found");
-        }
         Recipe entity = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
-        return RecipeMapper.toDTO(entity);
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        ensureCanView(entity);
+        repository.incrementViewCount(id);
+        return enrich(RecipeMapper.toDTO(entity), entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RecipeResponse getDetail(UUID id) {
+        Recipe entity = repository.findById(id)
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        return enrich(RecipeMapper.toDTO(entity), entity);
+    }
+
+    private static final Set<String> INTERNAL_ROLES =
+            Set.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_STAFF", "ROLE_BAKER_STAFF");
+
+    private static boolean isOwner(Recipe recipe) {
+        return recipe.getUser() != null
+                && recipe.getUser().getUserId().equals(SecurityUtils.getCurrentUserId());
+    }
+
+    private static boolean isInternalStaff() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> INTERNAL_ROLES.contains(a.getAuthority()));
+    }
+
+    private static void ensureCanView(Recipe recipe) {
+        if (recipe.getRecipeStatus() == RecipeStatus.PERSONAL && !isOwner(recipe)) {
+            throw new AppException(RecipeErrorCode.RECIPE_NOT_FOUND);
+        }
+    }
+
+    private static void ensureCanModify(Recipe recipe) {
+        if (isOwner(recipe)) {
+            return;
+        }
+        if (recipe.getRecipeStatus() == RecipeStatus.PERSONAL || !isInternalStaff()) {
+            throw new AppException(RecipeErrorCode.RECIPE_ACCESS_DENIED);
+        }
+    }
+
+    private RecipeResponse enrich(RecipeResponse response, Recipe entity) {
+        UUID userId = entity.getUser() != null ? entity.getUser().getUserId() : null;
+        response.setUser(userSummaryService.getSummary(userId));
+        return response;
     }
 
     @Override
@@ -85,11 +138,11 @@ public class RecipeServiceImpl implements RecipeService {
     public RecipeResponse create(RecipeRequest request) {
         UUID currentUserId = SecurityUtils.getCurrentUserId();
         User user = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.USER_NOT_FOUND));
 
         RecipeCategory category = request.getCategoryId() == null ? null
                 : categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new NotFoundException("RecipeCategory not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND));
 
         mediaHelper.validateContinuousStepNumbers(nullToEmpty(request.getSteps()).stream()
                 .map(RecipeStepEmbeddedRequest::getStepNumber)
@@ -120,17 +173,9 @@ public class RecipeServiceImpl implements RecipeService {
             saveRecipeImages(savedRecipe, request.getImageIds(), mediaById, noCurrentlyAttachedMedia);
         }
 
-        if (request.getTools() != null) recipeToolRepository.saveAll(request.getTools().stream().map(r -> {
-            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
-            RecipeTool link = new RecipeTool(); link.setRecipe(savedRecipe); link.setTool(tool); link.setQuantity(r.getQuantity()); return link;
-        }).toList());
-
-        if (request.getIngredients() != null) {
-            recipeIngredientRepository.saveAll(request.getIngredients().stream().map(r -> {
-                Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
-                RecipeIngredient link = new RecipeIngredient(); link.setRecipe(savedRecipe); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); return link;
-            }).toList());
-        }
+        Map<UUID, RecipeTool> recipeToolsByToolId = byToolId(saveRecipeTools(savedRecipe, nullToEmpty(request.getTools())));
+        Map<UUID, RecipeIngredient> recipeIngredientsByIngredientId =
+                byIngredientId(saveRecipeIngredients(savedRecipe, nullToEmpty(request.getIngredients())));
 
         if (request.getSteps() != null) {
             List<RecipeStep> steps = request.getSteps().stream().map(stepRequest -> {
@@ -146,7 +191,8 @@ public class RecipeServiceImpl implements RecipeService {
             List<RecipeStep> savedSteps = recipeStepRepository.saveAll(steps);
             for (int i = 0; i < savedSteps.size(); i++) {
                 RecipeStepEmbeddedRequest stepRequest = request.getSteps().get(i);
-                stepResourceHelper.replaceResources(savedSteps.get(i), stepRequest.getIngredients(), stepRequest.getTools());
+                stepResourceHelper.replaceEmbeddedResources(savedSteps.get(i), stepRequest.getIngredients(),
+                        stepRequest.getTools(), recipeIngredientsByIngredientId, recipeToolsByToolId);
                 List<UUID> imageIds = stepRequest.getImageIds();
                 if (imageIds != null) mediaHelper.saveStepImages(savedSteps.get(i), imageIds, mediaById, noCurrentlyAttachedMedia);
             }
@@ -156,17 +202,23 @@ public class RecipeServiceImpl implements RecipeService {
         entityManager.clear();
 
         Recipe detail = repository.findById(recipeId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
 
 
-        return RecipeMapper.toDTO(detail);
+        return enrich(RecipeMapper.toDTO(detail), detail);
     }
 
     @Override
     @Transactional
     public RecipeResponse update(UUID recipeId, RecipeRequest request) {
         Recipe existing = repository.findById(recipeId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        ensureCanModify(existing);
+        if (request.getRecipeStatus() == RecipeStatus.PERSONAL
+                && existing.getRecipeStatus() != RecipeStatus.PERSONAL
+                && !isOwner(existing)) {
+            throw new AppException(RecipeErrorCode.PERSONAL_STATUS_LOCKED);
+        }
 
         List<RecipeStepEmbeddedRequest> steps = nullToEmpty(request.getSteps());
         List<UUID> imageIds = nullToEmpty(request.getImageIds());
@@ -196,7 +248,7 @@ public class RecipeServiceImpl implements RecipeService {
 
         RecipeCategory category = request.getCategoryId() == null ? null
                 : categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("RecipeCategory not found"));
+                .orElseThrow(() -> new AppException(RecipeCatalogErrorCode.CATEGORY_NOT_FOUND));
         existing.setRecipeCategory(category);
 
         existing.setTitle(request.getTitle());
@@ -218,29 +270,22 @@ public class RecipeServiceImpl implements RecipeService {
         recipeImageRepository.flush();
         saveRecipeImages(existing, imageIds, mediaById, currentlyAttachedMediaIds);
 
-        // ---- Tools ----
-        recipeToolRepository.deleteByRecipe_Id(recipeId);
-        recipeToolRepository.flush();
-        recipeToolRepository.saveAll(tools.stream().map(r -> {
-            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new NotFoundException("Tool not found"));
-            RecipeTool link = new RecipeTool(); link.setRecipe(existing); link.setTool(tool); link.setQuantity(r.getQuantity()); return link;
-        }).toList());
-
-        // ---- Ingredients ----
-        recipeIngredientRepository.deleteByRecipe_Id(recipeId);
-        recipeIngredientRepository.flush();
-        recipeIngredientRepository.saveAll(ingredients.stream().map(r -> {
-            Ingredient ingredient = ingredientRepository.findById(r.getIngredientId()).orElseThrow(() -> new NotFoundException("Ingredient not found"));
-            RecipeIngredient link = new RecipeIngredient(); link.setRecipe(existing); link.setIngredient(ingredient); link.setQuantity(r.getQuantity()); return link;
-        }).toList());
-
-        // ---- Steps ----
         if (!existingSteps.isEmpty()) {
             recipeStepImageRepository.deleteByRecipeStepIds(existingSteps.stream().map(RecipeStep::getId).toList());
             recipeStepImageRepository.flush();
             recipeStepRepository.deleteAll(existingSteps);
             recipeStepRepository.flush();
         }
+
+        recipeToolRepository.deleteByRecipe_Id(recipeId);
+        recipeToolRepository.flush();
+        Map<UUID, RecipeTool> recipeToolsByToolId = byToolId(saveRecipeTools(existing, tools));
+
+        recipeIngredientRepository.deleteByRecipe_Id(recipeId);
+        recipeIngredientRepository.flush();
+        Map<UUID, RecipeIngredient> recipeIngredientsByIngredientId =
+                byIngredientId(saveRecipeIngredients(existing, ingredients));
+
         if (!steps.isEmpty()) {
             List<RecipeStep> newSteps = steps.stream().map(stepRequest -> {
                 RecipeStep newStep = new RecipeStep();
@@ -256,7 +301,8 @@ public class RecipeServiceImpl implements RecipeService {
             List<RecipeStep> savedSteps = recipeStepRepository.saveAll(newSteps);
             for (int i = 0; i < savedSteps.size(); i++) {
                 RecipeStepEmbeddedRequest stepRequest = steps.get(i);
-                stepResourceHelper.replaceResources(savedSteps.get(i), stepRequest.getIngredients(), stepRequest.getTools());
+                stepResourceHelper.replaceEmbeddedResources(savedSteps.get(i), stepRequest.getIngredients(),
+                        stepRequest.getTools(), recipeIngredientsByIngredientId, recipeToolsByToolId);
                 List<UUID> stepImageIds = nullToEmpty(stepRequest.getImageIds());
                 mediaHelper.saveStepImages(savedSteps.get(i), stepImageIds, mediaById, currentlyAttachedMediaIds);
             }
@@ -281,20 +327,21 @@ public class RecipeServiceImpl implements RecipeService {
         mediaHelper.deleteMediaAfterCommit(detachedMediaIds);
 
         Recipe detail = repository.findById(recipeId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
 
 
-        return RecipeMapper.toDTO(detail);
+        return enrich(RecipeMapper.toDTO(detail), detail);
     }
 
     @Override
     @Transactional
     public void delete(UUID id) {
         Recipe recipe = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+                .orElseThrow(() -> new AppException(RecipeErrorCode.RECIPE_NOT_FOUND));
+        ensureCanModify(recipe);
 
         if (recipe.getRecipeStatus() == RecipeStatus.HIDDEN) {
-            throw new RuntimeException("Recipe is already hidden");
+            throw new AppException(RecipeErrorCode.RECIPE_ALREADY_HIDDEN);
         }
 
         recipe.setRecipeStatus(RecipeStatus.HIDDEN);
@@ -340,12 +387,80 @@ public class RecipeServiceImpl implements RecipeService {
 
         Page<Recipe> page = repository.findAll(spec, pageable);
 
+        List<Recipe> recipes = page.getContent();
+        Map<UUID, UserSummaryResponse> summariesByUserId = userSummaryService.getSummaries(recipes.stream()
+                .map(r -> r.getUser() != null ? r.getUser().getUserId() : null)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet()));
+
+        List<RecipeResponse> content = recipes.stream().map(r -> {
+            RecipeResponse dto = RecipeMapper.toDTO(r);
+            dto.setUser(r.getUser() != null ? summariesByUserId.get(r.getUser().getUserId()) : null);
+            return dto;
+        }).toList();
+
         return PageResponse.<RecipeResponse>builder()
-                .content(page.getContent().stream().map(RecipeMapper::toDTO).toList())
+                .content(content)
                 .totalElements(page.getTotalElements())
                 .totalPages(page.getTotalPages())
                 .currentPage(page.getNumber())
                 .build();
+    }
+
+    private List<RecipeTool> saveRecipeTools(Recipe recipe, List<ToolEmbeddedRequest> requests) {
+        return recipeToolRepository.saveAll(requests.stream().map(r -> {
+            Tool tool = toolRepository.findById(r.getToolId()).orElseThrow(() -> new AppException(RecipeCatalogErrorCode.TOOL_NOT_FOUND));
+            return RecipeTool.builder()
+                    .recipe(recipe)
+                    .tool(tool)
+                    .rawName(tool.getName())
+                    .quantity(r.getQuantity())
+                    .note(r.getNote())
+                    .build();
+        }).toList());
+    }
+
+    private List<RecipeIngredient> saveRecipeIngredients(Recipe recipe, List<IngredientEmbeddedRequest> requests) {
+        return recipeIngredientRepository.saveAll(requests.stream().map(r -> {
+            Ingredient ingredient = ingredientRepository.findById(r.getIngredientId())
+                    .orElseThrow(() -> new AppException(com.manhnv.capstonebakerai.recipe.ingredientalias.exception.IngredientAliasErrorCode.INGREDIENT_NOT_FOUND));
+            if (r.getAliases() != null && !r.getAliases().isEmpty()) {
+                ingredientAliasService.addAll(ingredient, r.getAliases());
+            }
+            return RecipeIngredient.builder()
+                    .recipe(recipe)
+                    .ingredient(ingredient)
+                    .rawName(ingredient.getName())
+                    .quantity(r.getQuantity())
+                    .unit(requireUnit(r))
+                    .note(r.getNote())
+                    .build();
+        }).toList());
+    }
+
+    private static Map<UUID, RecipeTool> byToolId(List<RecipeTool> links) {
+        Map<UUID, RecipeTool> map = new HashMap<>();
+        for (RecipeTool link : nullToEmpty(links)) {
+            map.put(link.getTool().getId(), link);
+        }
+        return map;
+    }
+
+    private static Map<UUID, RecipeIngredient> byIngredientId(List<RecipeIngredient> links) {
+        Map<UUID, RecipeIngredient> map = new HashMap<>();
+        for (RecipeIngredient link : nullToEmpty(links)) {
+            map.put(link.getIngredient().getId(), link);
+        }
+        return map;
+    }
+
+    private static String requireUnit(com.manhnv.capstonebakerai.recipe.dto.request.IngredientEmbeddedRequest request) {
+        if (request.getUnit() == null || request.getUnit().isBlank()) {
+            throw new com.manhnv.capstonebakerai.common.exception.AppException(
+                    com.manhnv.capstonebakerai.common.exception.CommonErrorCode.INVALID_REQUEST,
+                    "unit is required for every recipe ingredient");
+        }
+        return request.getUnit().trim();
     }
 
     private void saveRecipeImages(Recipe recipe, List<UUID> mediaIds, Map<UUID, Media> mediaById,

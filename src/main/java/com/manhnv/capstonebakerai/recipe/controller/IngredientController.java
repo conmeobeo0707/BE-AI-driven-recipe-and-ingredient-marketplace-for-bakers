@@ -47,13 +47,13 @@ public class IngredientController {
         return ResponseEntity.ok(ApiResponse.success(ingredientService.getById(ingredientId)));
     }
 
-    @Operation(summary = "Tạo ingredient mới", description = "Request body: name và unit đều bắt buộc.")
+    @Operation(summary = "Tạo ingredient mới", description = "Request body: name bắt buộc; unit nằm ở recipe ingredient.")
     @PostMapping
     public ResponseEntity<ApiResponse<IngredientResponse>> create(@Valid @RequestBody IngredientRequest request) {
         return ResponseEntity.ok(ApiResponse.success(ingredientService.create(request)));
     }
 
-    @Operation(summary = "Cập nhật ingredient", description = "Request body: name và unit đều bắt buộc. Đây là cập nhật toàn bộ, không phải partial update.")
+    @Operation(summary = "Cập nhật ingredient", description = "Request body: name bắt buộc; unit nằm ở recipe ingredient. Đây là cập nhật toàn bộ, không phải partial update.")
     @PutMapping("/{ingredientId}")
     public ResponseEntity<ApiResponse<IngredientResponse>> update(@PathVariable UUID ingredientId,
                                                                   @Valid @RequestBody IngredientRequest request) {

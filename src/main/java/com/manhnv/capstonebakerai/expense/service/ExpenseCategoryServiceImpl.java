@@ -46,10 +46,11 @@ public class ExpenseCategoryServiceImpl implements ExpenseCategoryService {
     @org.springframework.transaction.annotation.Transactional
     public ExpenseCategoryResponse update(UUID expenseCategoryId, ExpenseCategoryRequest request) {
         ExpenseCategory entity = findOrThrow(expenseCategoryId);
-        if (categoryRepository.existsByNameIgnoreCase(request.name())) {
+        String name = request.name().trim();
+        if (categoryRepository.existsByNameIgnoreCaseAndIdNot(name, expenseCategoryId)) {
             throw new AppException(ExpenseCategoryErrorCode.EXPENSE_CATEGORY_NAME_EXISTED);
         }
-        entity.setName(request.name().trim());
+        entity.setName(name);
         entity.setType(request.type());
         return mapper.toResponse(categoryRepository.save(entity));
     }
